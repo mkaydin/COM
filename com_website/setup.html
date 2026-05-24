@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Council of Minds - Setup</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700;900&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="styles.css" rel="stylesheet"/>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "obsidian": "#1a1a2e",
+          "background": "#141315",
+          "parchment": "#e8d5b7",
+          "runed-gold": "#ffd700",
+          "spectral-blue": "#87ceeb",
+          "ember-glow": "#ff6b6b",
+          "success": "#27ae60",
+          "error": "#c0392b"
+        },
+        fontFamily: {
+          "pixel-display": ["VT323", "monospace"],
+          "pixel-body": ["VT323", "monospace"]
+        }
+      }
+    }
+  };
+</script>
+<script src="api.js"></script>
+<style>
+  body { background-color: #1a1a2e; }
+  .pixel-text { font-family: "VT323", monospace; }
+</style>
+</head>
+<body class="bg-obsidian min-h-screen flex items-center justify-center p-4">
+<div class="w-full max-w-md" id="app">
+  <div class="text-center mb-8">
+    <h1 class="text-amber-400 text-3xl pixel-text mb-2">COUNCIL OF MINDS</h1>
+    <p class="text-parchment text-base pixel-text opacity-70">First-Run Configuration</p>
+  </div>
+
+  <div id="step-provider" class="bg-[#201f21] border border-[#353436] rounded p-6">
+    <h2 class="text-amber-400 text-xl pixel-text mb-4">Step 1: Choose LLM Provider</h2>
+    <p class="text-parchment text-sm pixel-text mb-4 opacity-70">Select the AI provider that powers the Council's agents.</p>
+
+    <div class="space-y-3 mb-6">
+      <label class="flex items-center gap-3 p-3 border border-[#353436] rounded cursor-pointer hover:border-amber-400 transition-colors" data-provider="openai">
+        <input type="radio" name="provider" value="openai" checked class="text-amber-400"/>
+        <div>
+          <span class="text-parchment pixel-text">OpenAI</span>
+          <span class="text-parchment text-xs opacity-50 block">GPT-4o, GPT-4o-mini</span>
+        </div>
+      </label>
+      <label class="flex items-center gap-3 p-3 border border-[#353436] rounded cursor-pointer hover:border-amber-400 transition-colors" data-provider="anthropic">
+        <input type="radio" name="provider" value="anthropic" class="text-amber-400"/>
+        <div>
+          <span class="text-parchment pixel-text">Anthropic</span>
+          <span class="text-parchment text-xs opacity-50 block">Claude 3.5 Sonnet, Claude 3 Opus</span>
+        </div>
+      </label>
+      <label class="flex items-center gap-3 p-3 border border-[#353436] rounded cursor-pointer hover:border-amber-400 transition-colors" data-provider="ollama">
+        <input type="radio" name="provider" value="ollama" class="text-amber-400"/>
+        <div>
+          <span class="text-parchment pixel-text">Ollama (Local)</span>
+          <span class="text-parchment text-xs opacity-50 block">Llama 3, Mistral, Phi-3 — runs offline</span>
+        </div>
+      </label>
+    </div>
+
+    <button id="btn-next" onclick="stepTwo()" class="w-full bg-amber-400 text-obsidian pixel-text text-lg py-3 rounded hover:bg-amber-300 transition-colors">Next</button>
+  </div>
+
+  <div id="step-apikey" class="bg-[#201f21] border border-[#353436] rounded p-6 hidden">
+    <h2 class="text-amber-400 text-xl pixel-text mb-4">Step 2: API Key</h2>
+    <p class="text-parchment text-sm pixel-text mb-4 opacity-70">Enter your API key. It will be stored encrypted on this device.</p>
+
+    <label class="text-parchment text-sm pixel-text mb-1 block">API Key</label>
+    <input id="apikey-input" type="password" class="w-full bg-obsidian border border-[#353436] text-parchment pixel-text p-3 rounded mb-2" placeholder="sk-..."/>
+    <p class="text-parchment text-xs pixel-text opacity-50 mb-4" id="provider-note">Provider: OpenAI</p>
+
+    <label class="text-parchment text-sm pixel-text mb-1 block">Model</label>
+    <input id="model-input" type="text" class="w-full bg-obsidian border border-[#353436] text-parchment pixel-text p-3 rounded mb-6" value="gpt-4o" placeholder="e.g. gpt-4o"/>
+
+    <div class="flex gap-3">
+      <button onclick="stepOne()" class="flex-1 border border-[#353436] text-parchment pixel-text py-3 rounded hover:border-amber-400 transition-colors">Back</button>
+      <button onclick="testConnection()" class="flex-1 bg-amber-400 text-obsidian pixel-text py-3 rounded hover:bg-amber-300 transition-colors">Test & Save</button>
+    </div>
+  </div>
+
+  <div id="step-status" class="bg-[#201f21] border border-[#353436] rounded p-6 hidden">
+    <h2 class="text-amber-400 text-xl pixel-text mb-4">Checking Setup...</h2>
+    <div id="status-message" class="text-parchment pixel-text mb-4">Testing connection...</div>
+    <div id="status-spinner" class="flex justify-center mb-4">
+      <div class="animate-spin rounded-full h-8 w-8 border-2 border-amber-400 border-t-transparent"></div>
+    </div>
+    <button id="btn-enter" onclick="enterCouncil()" class="w-full bg-success text-white pixel-text text-lg py-3 rounded hover:opacity-90 transition-opacity hidden">Enter the Council</button>
+    <button onclick="stepTwo()" class="w-full border border-[#353436] text-parchment pixel-text py-3 rounded mt-3 hidden" id="btn-retry">Retry</button>
+  </div>
+
+  <p class="text-center text-parchment text-xs pixel-text opacity-40 mt-8">Council of Minds v1.0 · All configuration stays local</p>
+</div>
+
+<script>
+  let selectedProvider = 'openai';
+  let defaultModels = { openai: 'gpt-4o', anthropic: 'claude-3-5-sonnet-20241022', ollama: 'llama3:8b' };
+
+  document.querySelectorAll('input[name="provider"]').forEach(r => {
+    r.addEventListener('change', () => {
+      selectedProvider = r.value;
+      document.getElementById('model-input').value = defaultModels[r.value];
+      document.getElementById('provider-note').textContent = 'Provider: ' + {openai:'OpenAI',anthropic:'Anthropic',ollama:'Ollama'}[r.value];
+    });
+  });
+
+  function stepOne() {
+    document.getElementById('step-provider').classList.remove('hidden');
+    document.getElementById('step-apikey').classList.add('hidden');
+    document.getElementById('step-status').classList.add('hidden');
+  }
+
+  function stepTwo() {
+    document.getElementById('step-provider').classList.add('hidden');
+    document.getElementById('step-apikey').classList.remove('hidden');
+    document.getElementById('step-status').classList.add('hidden');
+    document.getElementById('provider-note').textContent = 'Provider: ' + {openai:'OpenAI',anthropic:'Anthropic',ollama:'Ollama'}[selectedProvider];
+  }
+
+  async function testConnection() {
+    document.getElementById('step-apikey').classList.add('hidden');
+    document.getElementById('step-status').classList.remove('hidden');
+    document.getElementById('status-spinner').classList.remove('hidden');
+    document.getElementById('status-message').textContent = 'Testing connection to ' + selectedProvider + '...';
+    document.getElementById('btn-enter').classList.add('hidden');
+    document.getElementById('btn-retry').classList.add('hidden');
+
+    const apiKey = document.getElementById('apikey-input').value;
+    const model = document.getElementById('model-input').value || defaultModels[selectedProvider];
+
+    try {
+      await window.electronAPI.saveBackendConfig({
+        llmProvider: selectedProvider,
+        llmApiKey: apiKey,
+        llmModel: model
+      });
+
+      await new Promise(r => setTimeout(r, 2000));
+
+      const ready = await window.electronAPI.isBackendReady();
+
+      if (ready) {
+        document.getElementById('status-spinner').classList.add('hidden');
+        document.getElementById('status-message').innerHTML = '<span class="text-success">Connection successful!</span><br/><span class="opacity-70">Provider: ' + selectedProvider + '<br/>Model: ' + model + '</span>';
+        document.getElementById('btn-enter').classList.remove('hidden');
+      } else {
+        throw new Error('Backend did not become ready');
+      }
+    } catch (e) {
+      document.getElementById('status-spinner').classList.add('hidden');
+      document.getElementById('status-message').innerHTML = '<span class="text-error">Connection failed</span><br/><span class="opacity-70">' + e.message + '</span>';
+      document.getElementById('btn-retry').classList.remove('hidden');
+    }
+  }
+
+  function enterCouncil() {
+    window.location.href = 'council_landing_page.html';
+  }
+</script>
+</body></html>

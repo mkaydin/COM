@@ -1,0 +1,50 @@
+{
+  "name": "com-council-of-minds",
+  "version": "1.0.0",
+  "description": "Multi-agent AI deliberation system — Council of Minds",
+  "main": "main.js",
+  "scripts": {
+    "start": "NODE_ENV=dev electron .",
+    "start:prod": "electron .",
+    "build:linux": "electron-builder --linux",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:all": "electron-builder --linux --mac --win"
+  },
+  "build": {
+    "appId": "ai.council.minds",
+    "productName": "Council of Minds",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "../com_website/**/*"
+    ],
+    "extraResources": [
+      { "from": "../backend", "to": "backend" }
+    ],
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Office",
+      "executableArgs": ["--ozone-platform=wayland"],
+      "icon": "icons/icon.png"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "icon": "icons/icon.icns"
+    },
+    "win": {
+      "target": ["nsis"],
+      "icon": "icons/icon.ico"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "dependencies": {
+    "electron-store": "^10.0.0"
+  }
+}

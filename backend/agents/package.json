@@ -1,0 +1,11 @@
+{
+  "name": "com-scout-scraper",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Lightpanda + Puppeteer headless scraper for Scout agent",
+  "dependencies": {
+    "@lightpanda/browser": "^1.2.0",
+    "puppeteer-core": "^24.0.0"
+  }
+}

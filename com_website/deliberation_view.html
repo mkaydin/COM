@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Deliberation Record - Origin of the Relic</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700;900&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="styles.css" rel="stylesheet"/>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "obsidian": "#1a1a2e","background": "#141315","surface": "#141315","surface-dim": "#141315",
+          "surface-container": "#201f21","surface-container-low": "#1c1b1d","surface-container-lowest": "#0e0e10",
+          "surface-container-high": "#2a2a2b","surface-container-highest": "#353436","surface-variant": "#353436",
+          "surface-bright": "#3a393b","surface-tint": "#c6c4df","parchment": "#e8d5b7","on-surface": "#e5e1e3",
+          "on-surface-variant": "#c8c5cd","on-background": "#e5e1e3","on-primary": "#2f2e43",
+          "on-primary-container": "#83829b","on-primary-fixed": "#1a1a2e","on-primary-fixed-variant": "#45455b",
+          "on-secondary": "#3a2f1a","on-secondary-container": "#c8b699","on-secondary-fixed": "#241a07",
+          "on-secondary-fixed-variant": "#51452f","on-tertiary": "#393012","on-tertiary-container": "#493f20",
+          "on-tertiary-fixed": "#231b02","on-tertiary-fixed-variant": "#514627","on-error": "#690005",
+          "on-error-container": "#ffdad6","primary": "#c6c4df","primary-container": "#1a1a2e",
+          "primary-fixed": "#e2e0fc","primary-fixed-dim": "#c6c4df","secondary": "#d6c4a7",
+          "secondary-container": "#544731","secondary-fixed": "#f3e0c2","secondary-fixed-dim": "#d6c4a7",
+          "tertiary": "#d5c59d","tertiary-container": "#b9aa83","tertiary-fixed": "#f2e1b7",
+          "tertiary-fixed-dim": "#d5c59d","runed-gold": "#ffd700","spectral-blue": "#87ceeb",
+          "ember-glow": "#ff6b6b","mystic-purple": "#9b59b6","warning": "#f39c12","success": "#27ae60",
+          "error": "#c0392b","error-container": "#93000a","neutral-gray": "#7f8c8d","outline": "#929097",
+          "outline-variant": "#47464c","inverse-surface": "#e5e1e3","inverse-on-surface": "#313032",
+          "inverse-primary": "#5d5c74"
+        },
+        borderRadius: { DEFAULT: "0.125rem", lg: "0.25rem", xl: "0.5rem", full: "0.75rem" },
+        spacing: { xs: "4px", sm: "8px", md: "16px", lg: "24px", xl: "32px", xxl: "48px" },
+        fontFamily: {
+          "pixel-display": ["VT323", "monospace"],"pixel-heading": ["VT323", "monospace"],
+          "pixel-body": ["VT323", "monospace"],"pixel-small": ["VT323", "monospace"]
+        },
+        fontSize: {
+          "pixel-display": ["32px", { lineHeight: "1.2", letterSpacing: "1px", fontWeight: "700" }],
+          "pixel-heading": ["24px", { lineHeight: "1.3", letterSpacing: "0.5px", fontWeight: "700" }],
+          "pixel-body": ["16px", { lineHeight: "1.6", letterSpacing: "0.5px", fontWeight: "400" }],
+          "pixel-small": ["12px", { lineHeight: "1.5", letterSpacing: "0px", fontWeight: "400" }]
+        }
+      }
+    }
+  }
+</script>
+</head>
+<body class="bg-obsidian text-on-surface font-pixel-body min-h-screen flex flex-col">
+
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-4 h-16 bg-obsidian border-b-2 border-amber-400/30">
+  <div class="text-xl font-black text-amber-400 drop-shadow-[0_2px_0_rgba(0,0,0,1)] font-['Be_Vietnam_Pro'] tracking-tighter uppercase">COUNCIL OF MINDS</div>
+  <div class="flex gap-3">
+    <button class="hover:bg-amber-400/10 hover:text-amber-300 transition-colors duration-75 active:translate-y-0.5 text-amber-400 p-2 rounded"><span class="material-symbols-outlined">gavel</span></button>
+    <button class="hover:bg-amber-400/10 hover:text-amber-300 transition-colors duration-75 active:translate-y-0.5 text-amber-400 p-2 rounded"><span class="material-symbols-outlined">settings</span></button>
+  </div>
+</header>
+
+<div class="flex flex-1 pt-16">
+
+<nav class="hidden md:flex fixed left-0 top-16 bottom-0 w-64 flex-col pt-6 bg-obsidian border-r-2 border-slate-800 font-['Be_Vietnam_Pro'] uppercase text-xs font-medium tracking-widest">
+  <div class="px-4 mb-6">
+    <div class="flex items-center gap-3 mb-3">
+      <div class="w-10 h-10 bg-surface-container-highest rounded flex items-center justify-center pixel-border">
+        <span class="material-symbols-outlined text-runed-gold">description</span>
+      </div>
+      <div>
+        <div class="font-pixel-heading text-pixel-heading text-runed-gold leading-none">Record</div>
+        <div class="font-pixel-small text-pixel-small text-on-surface-variant">Deliberation View</div>
+      </div>
+    </div>
+    <a href="history.html" class="w-full mt-2 bg-runed-gold text-obsidian font-pixel-body text-pixel-body py-2 px-4 rounded border-2 border-transparent hover:bg-parchment transition-colors flex items-center justify-center gap-2 inline-flex">
+      <span class="material-symbols-outlined">arrow_back</span>Back to Archive
+    </a>
+  </div>
+  <div class="flex-1 overflow-y-auto">
+    <ul class="space-y-1">
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="council_landing_page.html"><span class="material-symbols-outlined">home</span>Home</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="council_chamber.html"><span class="material-symbols-outlined">castle</span>Chamber</a></li>
+      <li><a class="sidebar-link active text-amber-400 border-l-3 border-amber-400 flex items-center px-4 py-3 gap-3 bg-amber-400/5" href="history.html"><span class="material-symbols-outlined">history</span>Archive</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="runic_library.html"><span class="material-symbols-outlined">auto_stories</span>Runic Library</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="council_rules.html"><span class="material-symbols-outlined">menu_book</span>Council Rules</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="agent_profiles.html"><span class="material-symbols-outlined">people</span>Agent Profiles</a></li>
+    </ul>
+  </div>
+  <div class="mt-auto mb-4 border-t-2 border-slate-800 pt-4">
+    <a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="#"><span class="material-symbols-outlined">settings</span>Settings</a>
+  </div>
+</nav>
+
+<main class="flex-1 md:ml-64 w-full max-w-[900px] mx-auto flex flex-col gap-6 pb-8 px-4 pb-20 md:pb-8 pt-6">
+  <header class="flex flex-col gap-4 pb-4 border-b-[2px] border-neutral-gray/30">
+    <a class="inline-flex items-center gap-1 text-spectral-blue hover:text-white transition-colors w-fit text-pixel-body font-pixel-body" href="history.html">
+      <span class="material-symbols-outlined" style="font-size:16px;">arrow_back</span>Back to Archive
+    </a>
+    <div class="flex flex-col gap-1">
+      <h1 class="text-pixel-display font-pixel-display text-runed-gold tracking-widest uppercase shadow-[0_2px_0_rgba(0,0,0,1)]">Origin of the Relic</h1>
+      <div class="flex flex-wrap gap-4 text-neutral-gray text-pixel-small font-pixel-small">
+        <span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:14px;">calendar_today</span>Epoch 14, Cycle 2</span>
+        <span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:14px;">hourglass_empty</span>Duration: 42 Cycles</span>
+        <span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:14px;">groups</span>Agents: 5</span>
+      </div>
+    </div>
+  </header>
+
+  <section class="bg-obsidian border-[2px] border-parchment p-4 relative shadow-[4px_4px_0_rgba(232,213,183,0.1)]">
+    <div class="absolute -top-[10px] left-4 bg-obsidian px-2 text-parchment text-pixel-small font-pixel-small uppercase tracking-widest border-[2px] border-parchment">Initial Query</div>
+    <p class="text-pixel-heading font-pixel-heading text-parchment leading-relaxed pt-2">"Is the recently discovered chronal artifact a key to ultimate power or a catalyst for calamity?"</p>
+  </section>
+
+  <div class="flex flex-col gap-6">
+    <article class="bg-obsidian border-[2px] border-neutral-gray p-4 relative group hover:scale-[1.01] transition-transform duration-200">
+      <div class="flex items-start gap-4 mb-4">
+        <div class="w-16 h-16 shrink-0 border-[2px] border-neutral-gray bg-surface-container-low flex items-center justify-center relative overflow-hidden">
+          <span class="material-symbols-outlined text-[32px] text-neutral-gray">travel_explore</span>
+        </div>
+        <div class="flex-1">
+          <h3 class="text-pixel-heading font-pixel-heading text-neutral-gray uppercase">Scout</h3>
+          <div class="w-full bg-surface-container h-2 border border-neutral-gray/30 mt-1 relative"><div class="absolute top-0 left-0 h-full bg-neutral-gray w-[74%]"></div></div>
+          <span class="text-pixel-small font-pixel-small text-neutral-gray/70 mt-1 inline-block">Confidence: 74%</span>
+        </div>
+      </div>
+      <div class="bg-surface-container-low/50 p-3 border border-neutral-gray/20 text-on-surface text-pixel-body font-pixel-body">Recent forum discussions and technical papers show divided consensus on chronal artifacts. Multiple independent sources confirm Class-4 temporal phenomena are well-documented, but emerging theories suggest pre-calamity containment protocols were deliberately obscured. Source diversity: high. Verification: medium.</div>
+      <div class="mt-2 flex justify-between items-center">
+        <span class="flex items-center gap-1 text-neutral-gray/80 text-pixel-small font-pixel-small uppercase"><span class="material-symbols-outlined" style="font-size:14px;">travel_explore</span>Reconnaissance</span>
+        <button class="flex items-center gap-1 text-pixel-small text-neutral-gray hover:text-runed-gold hover:border-runed-gold border border-transparent hover:border-runed-gold/30 px-2 py-1 rounded transition-colors cursor-pointer" onclick="saveScoutToLibrary(this)" data-topic="Origin of the Relic" data-summary="Forum discussions and technical papers show divided consensus on chronal artifacts. Source diversity: high." data-urls="https://example.com/thread,https://github.com/example" data-original="Multiple independent sources confirm Class-4 temporal phenomena. Emerging theories suggest containment protocols were obscured." data-confidence="0.74" data-signals="Divided consensus on chronal artifacts (moderate), Class-4 phenomena well-documented (strong), Pre-calamity protocols possibly obscured (emerging)"><span class="material-symbols-outlined" style="font-size:14px;">library_add</span>Save to Library</button>
+      </div>
+    </article>
+
+    <article class="bg-obsidian border-[2px] border-warning p-4 relative group hover:scale-[1.01] transition-transform duration-200">
+      <div class="flex items-start gap-4 mb-4">
+        <div class="w-16 h-16 shrink-0 border-[2px] border-warning bg-surface-container-low flex items-center justify-center relative overflow-hidden">
+          <img alt="Historian" class="w-full h-full object-cover opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBPjsimktixm83U57eSuYfXQHVgf2aMVnLXTuzCLRzyTBT8eV5aR2hJo_DqEJ_WP9Z7r3vZ_1CitzD_wmtEDfzxokGatsnhe0h6fjHX6vt2YbEW0DFKBNsWmxGC_Iy6aNKlUNBPZY-4n7a--yvdfOK8Ct2qzhH8SB9Qy0-Pkzgr-AIYvQ2H1wQJwolazWmOyVegmFbe5gmad1Oy-yxYfZG_F1JkTOW7NWlFI7gq5jkw3aEU_xdqL_UHkKYusSLrxMs1-BpKBCRVtSs"/>
+        </div>
+        <div class="flex-1">
+          <h3 class="text-pixel-heading font-pixel-heading text-warning uppercase">Historian</h3>
+          <div class="w-full bg-surface-container h-2 border border-warning/30 mt-1 relative"><div class="absolute top-0 left-0 h-full bg-warning w-[85%]"></div></div>
+          <span class="text-pixel-small font-pixel-small text-warning/70 mt-1 inline-block">Confidence: 85%</span>
+        </div>
+      </div>
+      <div class="bg-surface-container-low/50 p-3 border border-warning/20 text-on-surface text-pixel-body font-pixel-body">The archives of the Pre-Calamity era speak of objects that bind time itself. If this is truly the 'Aegis of Seconds' described in the forbidden texts, its power was never meant to be wielded by mortal hands. The texts suggest it caused the shattering of the first continent.</div>
+      <div class="mt-2 flex justify-end"><span class="flex items-center gap-1 text-warning/80 text-pixel-small font-pixel-small uppercase"><span class="material-symbols-outlined" style="font-size:14px;">auto_stories</span>Evidence</span></div>
+    </article>
+
+    <article class="bg-obsidian border-[2px] border-spectral-blue p-4 relative ml-6 group hover:scale-[1.01] transition-transform duration-200">
+      <div class="flex items-start gap-4 mb-4">
+        <div class="w-16 h-16 shrink-0 border-[2px] border-spectral-blue bg-surface-container-low flex items-center justify-center relative overflow-hidden">
+          <img alt="Detective" class="w-full h-full object-cover opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCd5HMHi1T92s5Vcg3_iiWCo11DdPtsSmQTLiqRqrBXGVBObXDcdTw9ntAQrJHBaB45V_XHFD6Km91cQTss-h2_FMbfw4wZxTcAbttKKv2LuD7HXSMQMIRd9tS12Kz-Tp0IVdV9c-gPisiAKBVRrI0udRkliHMCtfxf2VWyW9mD7iM6T1TIqVcLilq-SZFPtytUvUDhm2TAszM7BcguVtX6M9Qz8I00Nv_vep0JIc7boZHrziMHdLZXAk5VX9ggRXQRRluKLPBl_0c"/>
+        </div>
+        <div class="flex-1">
+          <h3 class="text-pixel-heading font-pixel-heading text-spectral-blue uppercase">Detective</h3>
+          <div class="w-full bg-surface-container h-2 border border-spectral-blue/30 mt-1 relative"><div class="absolute top-0 left-0 h-full bg-spectral-blue w-[70%]"></div></div>
+          <span class="text-pixel-small font-pixel-small text-spectral-blue/70 mt-1 inline-block">Confidence: 70%</span>
+        </div>
+      </div>
+      <div class="bg-surface-container-low/50 p-3 border border-spectral-blue/20 text-on-surface text-pixel-body font-pixel-body">Consider the placement pattern in the ruins where it was found. It wasn't discarded; it was sealed. Three concentric wards of stasis magic. You don't lock away a simple tool like that. The sealing pattern is a known containment matrix for volatile chronal energy.</div>
+      <div class="mt-2 flex justify-end"><span class="flex items-center gap-1 text-spectral-blue/80 text-pixel-small font-pixel-small uppercase"><span class="material-symbols-outlined" style="font-size:14px;">search</span>Inference</span></div>
+    </article>
+
+    <article class="bg-obsidian border-[2px] border-ember-glow p-4 relative group hover:scale-[1.01] transition-transform duration-200">
+      <div class="flex items-start gap-4 mb-4">
+        <div class="w-16 h-16 shrink-0 border-[2px] border-ember-glow bg-surface-container-low flex items-center justify-center relative overflow-hidden">
+          <img alt="Sage" class="w-full h-full object-cover opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBvadFcgtO8YQh4FRuRunfTwzIW-ontwY3qpT1cUIUWSzqAJbQbpP8mToxaHcaDaf2EogD9d2rdAdpYoosQOsOvV2fpBDcTHalY15FjpycMI8tYR32kjH2FPbazbpVdCbPYaubNG0sNjue2FeHR0UM6-C0MlcjmUFwYA15GHRFfLej1xXIxKAkmIb3faDNmd9-vbihtywLk2b80uYGh_5tbEi0XxhIUOP-8wgWUEa6kkNBfinPx4N0ZkRYA5NTr6fsg5LIKXkOlfOU"/>
+        </div>
+        <div class="flex-1">
+          <h3 class="text-pixel-heading font-pixel-heading text-ember-glow uppercase">Sage</h3>
+          <div class="w-full bg-surface-container h-2 border border-ember-glow/30 mt-1 relative"><div class="absolute top-0 left-0 h-full bg-ember-glow w-[92%]"></div></div>
+          <span class="text-pixel-small font-pixel-small text-ember-glow/70 mt-1 inline-block">Confidence: 92%</span>
+        </div>
+      </div>
+      <div class="bg-surface-container-low/50 p-3 border border-ember-glow/20 text-on-surface text-pixel-body font-pixel-body">The artifact itself is inert. It is a mirror. It amplifies the temporal intent of its wielder. To a builder, it offers endless hours to construct. To a conqueror, it offers the means to erase enemies before they strike. Calamity is not inherent to the object, but to the nature of those who covet it.</div>
+      <div class="mt-2 flex justify-end"><span class="flex items-center gap-1 text-ember-glow/80 text-pixel-small font-pixel-small uppercase"><span class="material-symbols-outlined" style="font-size:14px;">psychology</span>Intuition</span></div>
+    </article>
+
+    <article class="bg-obsidian border-[2px] border-mystic-purple p-4 relative mt-4 shadow-[0_0_15px_rgba(155,89,182,0.2)]">
+      <div class="absolute -top-[10px] left-4 bg-obsidian px-2 text-mystic-purple text-pixel-small font-pixel-small uppercase tracking-widest border-[2px] border-mystic-purple">Final Synthesis</div>
+      <div class="flex items-start gap-4 mb-4 mt-2">
+        <div class="w-16 h-16 shrink-0 border-[2px] border-mystic-purple bg-surface-container-low flex items-center justify-center relative overflow-hidden">
+          <div class="absolute inset-0 bg-mystic-purple/20 animate-pulse"></div>
+          <span class="material-symbols-outlined text-mystic-purple" style="font-size:32px;">gavel</span>
+        </div>
+        <div class="flex-1"><h3 class="text-pixel-heading font-pixel-heading text-mystic-purple uppercase">Moderator</h3></div>
+      </div>
+      <div class="bg-surface-container-low/50 p-3 border border-mystic-purple/20 text-on-surface text-pixel-body font-pixel-body">The Council concludes that the chronal artifact acts as a catalyst contingent upon intent. Scout confirms recent community consensus aligns with containment protocols. Historian verifies pre-calamity precedent. Detective's sealing pattern analysis is noted but unconfirmed. Sage's intent-driven model offers strategic framing. The artifact must remain sealed. Any attempt to harness it for 'ultimate power' will probabilistically result in a Class-Omega calamity.</div>
+    </article>
+  </div>
+
+  <div class="fixed bottom-24 right-6 md:bottom-6 flex flex-col gap-2 z-40">
+    <button class="bg-runed-gold text-obsidian border-[2px] border-runed-gold hover:bg-parchment hover:border-parchment transition-colors p-2 px-4 flex items-center gap-1 text-pixel-heading font-pixel-heading uppercase shadow-[2px_2px_0_rgba(0,0,0,1)]">
+      <span class="material-symbols-outlined" style="font-size:18px;">download</span>Export
+    </button>
+    <button class="bg-surface text-runed-gold border-[2px] border-runed-gold hover:bg-runed-gold/10 transition-colors p-2 px-4 flex items-center gap-1 text-pixel-heading font-pixel-heading uppercase shadow-[2px_2px_0_rgba(0,0,0,1)]">
+      <span class="material-symbols-outlined" style="font-size:18px;">share</span>Share
+    </button>
+  </div>
+</main>
+</div>
+
+<nav class="md:hidden fixed bottom-0 w-full z-50 flex justify-around items-center bg-obsidian border-t-2 border-amber-400/20 h-16">
+  <a class="bottom-nav-link text-slate-400 flex flex-col items-center justify-center p-2" href="council_landing_page.html"><span class="material-symbols-outlined text-[20px]">home</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Home</span></a>
+  <a class="bottom-nav-link text-slate-400 flex flex-col items-center justify-center p-2" href="council_chamber.html"><span class="material-symbols-outlined text-[20px]">castle</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Chamber</span></a>
+  <a class="bottom-nav-link active text-amber-400 flex flex-col items-center justify-center p-2 bg-amber-400/5 border-t-2 border-amber-400 -mt-[2px]" href="history.html"><span class="material-symbols-outlined text-[20px]">history</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Archive</span></a>
+  <a class="bottom-nav-link text-slate-400 flex flex-col items-center justify-center p-2" href="runic_library.html"><span class="material-symbols-outlined text-[20px]">auto_stories</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Library</span></a>
+  <a class="bottom-nav-link text-slate-400 flex flex-col items-center justify-center p-2" href="council_rules.html"><span class="material-symbols-outlined text-[20px]">menu_book</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Rules</span></a>
+  <a class="bottom-nav-link text-slate-400 flex flex-col items-center justify-center p-2" href="agent_profiles.html"><span class="material-symbols-outlined text-[20px]">people</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Agents</span></a>
+</nav>
+
+<script src="api.js"></script>
+<script src="ws.js"></script>
+<script>
+  async function saveScoutToLibrary(btn) {
+    const originalText = btn.textContent;
+    btn.textContent = ' Saving...';
+    btn.disabled = true;
+
+    try {
+      const data = {
+        topic: btn.dataset.topic,
+        summarized_text: btn.dataset.summary,
+        original_urls: btn.dataset.urls ? btn.dataset.urls.split(',') : [],
+        original_texts: btn.dataset.original || null,
+        confidence: parseFloat(btn.dataset.confidence) || null,
+        key_signals: btn.dataset.signals || null
+      };
+
+      if (window.COM && window.COM.saveScoutReport) {
+        await window.COM.saveScoutReport(data);
+      } else {
+        await fetch(`http://localhost:${window.electronAPI?.getBackendPort?.() || 8734}/api/documents/save-scout-report`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(data)
+        });
+      }
+
+      btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px;">check_circle</span>Saved';
+      btn.classList.add('text-success', 'border-success/50');
+      setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.classList.remove('text-success', 'border-success/50');
+        btn.disabled = false;
+      }, 3000);
+    } catch (e) {
+      btn.textContent = ' Save failed';
+      setTimeout(() => {
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }, 2000);
+    }
+  }
+</script>
+</body></html>

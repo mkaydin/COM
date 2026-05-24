@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+*.egg
+.venv/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Build artifacts
+desktop/dist/
+desktop/out/
+
+# Secrets
+.env
+*.env.local
+*.env.production
+!backend/.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Docker volumes
+docker/pgdata/
+docker/neo4jdata/
+docker/neo4jlogs/
+docker/chromadata/
+
+# Electron Store
+config.json
+
+# Temp
+/tmp/com-logs/

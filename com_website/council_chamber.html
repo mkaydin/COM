@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Council of Minds - The Chamber</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700;900&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="styles.css" rel="stylesheet"/>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "obsidian": "#1a1a2e","background": "#141315","surface": "#141315","surface-dim": "#141315",
+          "surface-container": "#201f21","surface-container-low": "#1c1b1d","surface-container-lowest": "#0e0e10",
+          "surface-container-high": "#2a2a2b","surface-container-highest": "#353436","surface-variant": "#353436",
+          "surface-bright": "#3a393b","surface-tint": "#c6c4df","parchment": "#e8d5b7","on-surface": "#e5e1e3",
+          "on-surface-variant": "#c8c5cd","on-background": "#e5e1e3","on-primary": "#2f2e43",
+          "on-primary-container": "#83829b","on-primary-fixed": "#1a1a2e","on-primary-fixed-variant": "#45455b",
+          "on-secondary": "#3a2f1a","on-secondary-container": "#c8b699","on-secondary-fixed": "#241a07",
+          "on-secondary-fixed-variant": "#51452f","on-tertiary": "#393012","on-tertiary-container": "#493f20",
+          "on-tertiary-fixed": "#231b02","on-tertiary-fixed-variant": "#514627","on-error": "#690005",
+          "on-error-container": "#ffdad6","primary": "#c6c4df","primary-container": "#1a1a2e",
+          "primary-fixed": "#e2e0fc","primary-fixed-dim": "#c6c4df","secondary": "#d6c4a7",
+          "secondary-container": "#544731","secondary-fixed": "#f3e0c2","secondary-fixed-dim": "#d6c4a7",
+          "tertiary": "#d5c59d","tertiary-container": "#b9aa83","tertiary-fixed": "#f2e1b7",
+          "tertiary-fixed-dim": "#d5c59d","runed-gold": "#ffd700","spectral-blue": "#87ceeb",
+          "ember-glow": "#ff6b6b","mystic-purple": "#9b59b6","warning": "#f39c12","success": "#27ae60",
+          "error": "#c0392b","error-container": "#93000a","neutral-gray": "#7f8c8d","outline": "#929097",
+          "outline-variant": "#47464c","inverse-surface": "#e5e1e3","inverse-on-surface": "#313032",
+          "inverse-primary": "#5d5c74"
+        },
+        borderRadius: { DEFAULT: "0.125rem", lg: "0.25rem", xl: "0.5rem", full: "0.75rem" },
+        spacing: { xs: "4px", sm: "8px", md: "16px", lg: "24px", xl: "32px", xxl: "48px" },
+        fontFamily: {
+          "pixel-display": ["VT323", "monospace"],"pixel-heading": ["VT323", "monospace"],
+          "pixel-body": ["VT323", "monospace"],"pixel-small": ["VT323", "monospace"]
+        },
+        fontSize: {
+          "pixel-display": ["32px", { lineHeight: "1.2", letterSpacing: "1px", fontWeight: "700" }],
+          "pixel-heading": ["24px", { lineHeight: "1.3", letterSpacing: "0.5px", fontWeight: "700" }],
+          "pixel-body": ["16px", { lineHeight: "1.6", letterSpacing: "0.5px", fontWeight: "400" }],
+          "pixel-small": ["12px", { lineHeight: "1.5", letterSpacing: "0px", fontWeight: "400" }]
+        }
+      }
+    }
+  }
+</script>
+<style>
+  .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: #1c1b1d; border-left: 2px solid #7f8c8d; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: #ffd700; border: 2px solid #1c1b1d; }
+</style>
+</head>
+<body class="bg-surface-dim text-on-surface font-pixel-body h-screen overflow-hidden flex flex-col">
+
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-4 h-16 bg-obsidian border-b-2 border-amber-400/30">
+  <div class="text-xl font-black text-amber-400 drop-shadow-[0_2px_0_rgba(0,0,0,1)] font-['Be_Vietnam_Pro'] tracking-tighter uppercase">COUNCIL OF MINDS</div>
+  <div class="flex gap-3">
+    <button class="hover:bg-amber-400/10 hover:text-amber-300 transition-colors duration-75 active:translate-y-0.5 text-amber-400 p-2 rounded"><span class="material-symbols-outlined">gavel</span></button>
+    <button class="hover:bg-amber-400/10 hover:text-amber-300 transition-colors duration-75 active:translate-y-0.5 text-amber-400 p-2 rounded"><span class="material-symbols-outlined">settings</span></button>
+  </div>
+</header>
+
+<div class="flex flex-1 pt-16">
+
+<nav class="hidden md:flex fixed left-0 top-16 bottom-0 w-64 flex-col pt-6 bg-obsidian border-r-2 border-slate-800 font-['Be_Vietnam_Pro'] uppercase text-xs font-medium tracking-widest">
+  <div class="px-4 mb-6">
+    <div class="flex items-center gap-3 mb-3">
+      <div class="w-10 h-10 bg-surface-container-highest rounded flex items-center justify-center pixel-border">
+        <span class="material-symbols-outlined text-runed-gold">account_balance</span>
+      </div>
+      <div>
+        <div class="font-pixel-heading text-pixel-heading text-runed-gold leading-none">The Meclis</div>
+        <div class="font-pixel-small text-pixel-small text-on-surface-variant">Deliberation in Progress</div>
+      </div>
+    </div>
+    <button class="w-full mt-2 bg-runed-gold text-obsidian font-pixel-body text-pixel-body py-2 px-4 rounded border-2 border-transparent hover:bg-parchment transition-colors flex items-center justify-center gap-2">New Inquiry</button>
+  </div>
+  <div class="flex-1 overflow-y-auto">
+    <ul class="space-y-1">
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="council_landing_page.html"><span class="material-symbols-outlined">home</span>Home</a></li>
+      <li><a class="sidebar-link active text-amber-400 border-l-3 border-amber-400 flex items-center px-4 py-3 gap-3 bg-amber-400/5" href="council_chamber.html"><span class="material-symbols-outlined">castle</span>Chamber</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="history.html"><span class="material-symbols-outlined">history</span>Archive</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="runic_library.html"><span class="material-symbols-outlined">auto_stories</span>Runic Library</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="council_rules.html"><span class="material-symbols-outlined">menu_book</span>Council Rules</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="agent_profiles.html"><span class="material-symbols-outlined">people</span>Agent Profiles</a></li>
+    </ul>
+  </div>
+  <div class="mt-auto mb-4 border-t-2 border-slate-800 pt-4">
+    <a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="#"><span class="material-symbols-outlined">settings</span>Settings</a>
+  </div>
+</nav>
+
+<main class="ml-0 md:ml-64 mt-0 h-[calc(100vh-64px)] relative bg-surface-container-low flex flex-col flex-1">
+  <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-surface-variant/20 via-surface-container-lowest to-black opacity-90 z-0 pointer-events-none"></div>
+  <div class="absolute inset-0 bg-cover bg-center opacity-10 mix-blend-overlay z-0 pointer-events-none" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuA5NWHsBko6oqcyITA4uxJTAKI1abKjvYnh9iIZEjbE_4KSRbnJlGiTyzIP5e5stpaK-W5sq69XU7DCLNZe0A2RGjLHE7EJF2Gu_m4nSzKr7S7QkMTuUIbSJbct1j1i_AzN3jTiG9yaE2C1WnAoB0kGb5DyjJVb_5xpjyWfJYyn7s07mvLfwbO8f892GWK2KzyK87ZVR408Lne4YAOdsScPC42AZPyNPR4LER2JPs3A33CgociEt9V-W58gklOUUt3i16ctO9Xh678');"></div>
+
+  <div class="absolute top-6 left-6 z-20 bg-obsidian border-2 border-neutral-gray p-3 shadow-[4px_4px_0_#0e0e10]">
+    <h3 class="text-surface-tint font-pixel-small text-pixel-small uppercase mb-1 border-b border-surface-variant pb-1">Session Data</h3>
+    <ul class="font-pixel-body text-pixel-body text-parchment space-y-1">
+      <li><span class="text-neutral-gray">Topic:</span> Origin of the Relic</li>
+      <li><span class="text-neutral-gray">Round:</span> 1 of 3</li>
+      <li class="text-runed-gold animate-pulse">Deliberating...</li>
+    </ul>
+  </div>
+
+  <div class="relative z-10 w-full max-w-5xl mx-auto mt-12 mb-6 px-4">
+    <div class="flex justify-center items-end h-[220px] gap-1 sm:gap-2 md:gap-6">
+      <div class="flex flex-col items-center gap-2 transform translate-y-12 transition-transform hover:scale-105 group cursor-pointer">
+        <div class="w-16 h-16 md:w-24 md:h-24 border-2 border-neutral-gray bg-surface-container-highest relative shadow-[4px_4px_0_#0e0e10]">
+          <div class="w-full h-full bg-obsidian flex items-center justify-center"><span class="material-symbols-outlined text-[40px] text-neutral-gray">travel_explore</span></div>
+        </div>
+        <div class="bg-obsidian border-2 border-neutral-gray text-neutral-gray font-pixel-small text-pixel-small px-2 py-1 uppercase shadow-[2px_2px_0_#0e0e10]">Scout</div>
+      </div>
+      <div class="flex flex-col items-center gap-2 transform translate-y-4 transition-transform hover:scale-105 group cursor-pointer">
+        <div class="w-20 h-20 md:w-28 md:h-28 border-2 border-runed-gold bg-surface-container-highest relative shadow-[4px_4px_0_#0e0e10]">
+          <img alt="Historian" class="w-full h-full object-cover grayscale opacity-80 mix-blend-luminosity" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAavDo2GUg3ZdTMkXQa89MXgk_AcnguzKS-s6cplw4Dryt0Azt58Zp6dwrYPl0Q9RTl8DLsiiVsdx6Kwqkpu9zJ9ngfsYTQmIjg_lNRl_4xxbhkB46sDuFkO0TGzkYf-IRGz1_y1Fy2GCCHiACdabcA7FTzkfC8t0jmyQykAWCGsPlgoEP48Y4mlOb-jFVFGnR8XgDqkEy7YDMFlAVHxdrF2uMm_RIb71LbmjpU_5uKjSJN9EBZCVQc07I_RDeQc7ikyMmnX565T9E"/>
+        </div>
+        <div class="bg-obsidian border-2 border-runed-gold text-runed-gold font-pixel-small text-pixel-small px-2 py-1 uppercase shadow-[2px_2px_0_#0e0e10]">Historian</div>
+      </div>
+      <div class="flex flex-col items-center gap-2 transform translate-y-4 transition-transform hover:scale-105 group cursor-pointer">
+        <div class="w-20 h-20 md:w-28 md:h-28 border-2 border-spectral-blue bg-surface-container-highest relative shadow-[4px_4px_0_#0e0e10]">
+          <img alt="Detective" class="w-full h-full object-cover grayscale opacity-80 mix-blend-luminosity" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD-PJnee_aeLvSiiUL-tZyVMPOF3EWtqMmnlPS9nIg0xgujv7s4eLBoNHyK26LViYsrTA3HC2ZdqkHslRuHuNoreau0IXfPL79Ck1pNhy7d_bp1iUL_cpA9VOI8Q0FFxklh0VwroTYgHozXrbCCG8Un3jB0Ehp2rlHkmPeC7qzQgE2NSmoZEH7LL5ls5lDSYL6uz_divlzNwlIBLZn1wUT68QtXCe1tWucnD6BQsW5aC7W9xBN3aW3bSrCRJ3uokDyOp2m46kiiUoA"/>
+        </div>
+        <div class="bg-obsidian border-2 border-spectral-blue text-spectral-blue font-pixel-small text-pixel-small px-2 py-1 uppercase shadow-[2px_2px_0_#0e0e10]">Detective</div>
+      </div>
+      <div class="flex flex-col items-center gap-2 transform -translate-y-2 scale-110 relative z-20">
+        <div class="w-24 h-24 md:w-32 md:h-32 border-2 border-ember-glow bg-surface-container-highest relative shadow-[0_0_20px_rgba(255,107,107,0.4)]">
+          <img alt="Sage" class="w-full h-full object-cover grayscale opacity-90 mix-blend-luminosity" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCqtqlGXurPdORYJ9b-4HTbp7S6eDhmrRofEElbHPnSeAGcwzlVNphIa4p7IB0vxZ4_6PGNYcHLJ3z-thW76RhN7ccIfla269ZyQHMbzBrOdlpXE1M8u0p8icJI-3pejbe_lwjCTmFLxvmYsqxd52z5tFeDgCSAAf7RHszcfhkFjcTx-ZOHOBGVwrVeVuP0NUhPkO5vuDr3JladXBH3NMLJ59vlSP7eaXbLykeX42AhLDo1JWGiuX9QaXWjNNQeedgINF1jOQuXoB4"/>
+          <div class="absolute inset-[-4px] border-2 border-ember-glow opacity-50 animate-pulse pointer-events-none"></div>
+        </div>
+        <div class="bg-ember-glow text-obsidian border-2 border-ember-glow font-pixel-small text-pixel-small px-3 py-1 uppercase font-bold shadow-[2px_2px_0_#0e0e10]">The Sage</div>
+      </div>
+      <div class="flex flex-col items-center gap-2 transform translate-y-12 transition-transform hover:scale-105 group cursor-pointer">
+        <div class="w-20 h-20 md:w-28 md:h-28 border-2 border-mystic-purple bg-surface-container-highest relative shadow-[4px_4px_0_#0e0e10]">
+          <img alt="Moderator" class="w-full h-full object-cover grayscale opacity-80 mix-blend-luminosity" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBWfz0yTaQCEwVpfyGZsoegREs3AfQ9znxC8N8iK17sbthPsFFhtb2oGQ0G1hyKKuf9XVPDR2O3pdLReTL08bxlXfNnmq_u6ueJdet-Fq4GfRfWKzYcbwIwBAKHqyk5z0OZLjpYBvf2aYjyxDRlnR84I2kQW8nXArd8oymMBaO1DCpDOOg-vqo33gh_3XRD8LkX21ga4g5bMcuqJjbiENZgNq9EQv338Hjo60YqsSn7KyhmmbXqI6maDjZYwWJmNzs_QMUFzJxVVUg"/>
+        </div>
+        <div class="bg-obsidian border-2 border-mystic-purple text-mystic-purple font-pixel-small text-pixel-small px-2 py-1 uppercase shadow-[2px_2px_0_#0e0e10]">Moderator</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="relative z-10 w-full max-w-3xl mx-auto px-4 flex-1 flex flex-col justify-start">
+    <div class="bg-obsidian border-2 border-ember-glow p-4 md:p-6 relative shadow-[0_0_15px_rgba(255,107,107,0.15)] flex flex-col gap-4">
+      <div class="absolute top-0 left-0 w-2 h-2 bg-ember-glow"></div><div class="absolute top-0 right-0 w-2 h-2 bg-ember-glow"></div>
+      <div class="absolute bottom-0 left-0 w-2 h-2 bg-ember-glow"></div><div class="absolute bottom-0 right-0 w-2 h-2 bg-ember-glow"></div>
+      <div class="flex items-center gap-3 border-b-2 border-surface-variant pb-2">
+        <span class="material-symbols-outlined text-ember-glow">chat_bubble</span>
+        <span class="font-pixel-heading text-pixel-heading text-ember-glow uppercase">The Sage Speaks...</span>
+      </div>
+      <p class="font-pixel-body text-pixel-body text-parchment leading-relaxed min-h-[100px]">"The inscriptions on the artifact do not merely recount history; they dictate potential futures. The temporal distortion identified near the ruins aligns perfectly with standard Class-4 phenomena, yes. However, the presence of these specific isotopic signatures suggests the relic is not a remnant of the past, but a seed planted for the future. Proceed with extreme caution."</p>
+      <div class="mt-auto border-t-2 border-surface-variant pt-3 flex flex-wrap justify-between items-center gap-4 bg-surface-container-low/50 p-2 border border-surface-variant">
+        <div class="flex items-center gap-2 text-ember-glow font-pixel-small text-pixel-small uppercase bg-surface-container px-2 py-1 border border-neutral-gray">
+          <span class="material-symbols-outlined text-[16px]" style="font-variation-settings:'FILL'1;">psychology</span>Inference
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-surface-tint font-pixel-small text-pixel-small uppercase tracking-widest">Certainty</span>
+          <div class="w-32 md:w-48 h-3 bg-surface-container-highest border-2 border-neutral-gray flex p-[2px]"><div class="h-full bg-ember-glow w-[85%] relative"><div class="absolute top-0 left-0 w-full h-[1px] bg-white/20"></div></div></div>
+          <span class="text-ember-glow font-pixel-small text-pixel-small">85%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="absolute bottom-[104px] left-0 w-full px-4 z-20 pointer-events-none">
+    <div class="max-w-5xl mx-auto flex flex-col md:flex-row items-end md:items-center gap-4">
+      <div class="flex items-center gap-3 bg-obsidian border-2 border-mystic-purple p-2 shadow-[4px_4px_0_#0e0e10] pointer-events-auto">
+        <div class="w-10 h-10 border border-mystic-purple bg-surface-container-highest overflow-hidden"><img alt="Companion" class="w-full h-full object-cover grayscale opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBWfz0yTaQCEwVpfyGZsoegREs3AfQ9znxC8N8iK17sbthPsFFhtb2oGQ0G1hyKKuf9XVPDR2O3pdLReTL08bxlXfNnmq_u6ueJdet-Fq4GfRfWKzYcbwIwBAKHqyk5z0OZLjpYBvf2aYjyxDRlnR84I2kQW8nXArd8oymMBaO1DCpDOOg-vqo33gh_3XRD8LkX21ga4g5bMcuqJjbiENZgNq9EQv338Hjo60YqsSn7KyhmmbXqI6maDjZYwWJmNzs_QMUFzJxVVUg"/></div>
+        <div class="flex flex-col"><span class="text-mystic-purple font-pixel-small text-[10px] uppercase tracking-tighter">Companion's Guidance</span><span class="text-parchment font-pixel-body text-sm">The path is clouded...</span></div>
+      </div>
+      <div class="flex flex-wrap gap-2 pointer-events-auto">
+        <button class="bg-obsidian border border-neutral-gray text-parchment font-pixel-small text-pixel-small px-3 py-1 hover:bg-neutral-gray/10 transition-colors shadow-[2px_2px_0_#0e0e10] active:translate-y-[1px]">"Ask Scout to search for recent developments"</button>
+        <button class="bg-obsidian border border-runed-gold text-parchment font-pixel-small text-pixel-small px-3 py-1 hover:bg-runed-gold/10 transition-colors shadow-[2px_2px_0_#0e0e10] active:translate-y-[1px]">"Seek further evidence from the Historian"</button>
+        <button class="bg-obsidian border border-mystic-purple text-parchment font-pixel-small text-pixel-small px-3 py-1 hover:bg-mystic-purple/10 transition-colors shadow-[2px_2px_0_#0e0e10] active:translate-y-[1px]">"Ask the Detective about contradictions"</button>
+        <button class="bg-obsidian border border-runed-gold text-parchment font-pixel-small text-pixel-small px-3 py-1 hover:bg-runed-gold/10 transition-colors shadow-[2px_2px_0_#0e0e10] active:translate-y-[1px]">"Request the Sage's final synthesis"</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="absolute bottom-0 left-0 w-full bg-obsidian border-t-2 border-runed-gold p-4 flex items-end gap-4 shadow-[0_-10px_20px_rgba(0,0,0,0.8)] z-30">
+    <div class="flex-grow flex flex-col relative">
+      <div class="absolute -top-[28px] left-0 bg-runed-gold text-obsidian font-pixel-small text-pixel-small px-3 py-1 uppercase font-bold border-t-2 border-l-2 border-r-2 border-runed-gold shadow-[2px_0_0_#0e0e10]">Your Decree</div>
+      <textarea class="bg-surface-container-lowest border-2 border-neutral-gray focus:border-runed-gold focus:ring-0 text-parchment font-pixel-body text-pixel-body p-3 w-full h-16 resize-none outline-none custom-scrollbar placeholder:text-surface-tint/50 transition-colors shadow-[inset_2px_2px_5px_rgba(0,0,0,0.5)]" placeholder="Write your answer or decision..."></textarea>
+    </div>
+    <button class="bg-runed-gold text-obsidian border-2 border-runed-gold font-pixel-heading text-pixel-heading px-6 py-3 uppercase hover:bg-parchment hover:border-parchment transition-colors h-16 shadow-[4px_4px_0_#0e0e10] active:translate-y-[2px] active:translate-x-[2px] active:shadow-[2px_2px_0_#0e0e10] flex items-center justify-center min-w-[120px]">Submit</button>
+  </div>
+</main>
+</div>
+
+<nav class="md:hidden fixed bottom-0 w-full z-50 flex justify-around items-center bg-obsidian border-t-2 border-amber-400/20 h-16">
+  <a class="bottom-nav-link text-slate-400 flex flex-col items-center justify-center p-2" href="council_landing_page.html"><span class="material-symbols-outlined text-[20px]">home</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Home</span></a>
+  <a class="bottom-nav-link active text-amber-400 flex flex-col items-center justify-center p-2 bg-amber-400/5 border-t-2 border-amber-400 -mt-[2px]" href="council_chamber.html"><span class="material-symbols-outlined text-[20px]">castle</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Chamber</span></a>
+  <a class="bottom-nav-link text-slate-400 flex flex-col items-center justify-center p-2" href="history.html"><span class="material-symbols-outlined text-[20px]">history</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Archive</span></a>
+  <a class="bottom-nav-link text-slate-400 flex flex-col items-center justify-center p-2" href="runic_library.html"><span class="material-symbols-outlined text-[20px]">auto_stories</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Library</span></a>
+  <a class="bottom-nav-link text-slate-400 flex flex-col items-center justify-center p-2" href="council_rules.html"><span class="material-symbols-outlined text-[20px]">menu_book</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Rules</span></a>
+  <a class="bottom-nav-link text-slate-400 flex flex-col items-center justify-center p-2" href="agent_profiles.html"><span class="material-symbols-outlined text-[20px]">people</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Agents</span></a>
+</nav>
+
+<script src="api.js"></script>
+<script src="ws.js"></script>
+</body></html>

@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Council of Minds - Home</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700;900&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="styles.css" rel="stylesheet"/>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "obsidian": "#1a1a2e",
+          "background": "#141315",
+          "surface": "#141315",
+          "surface-dim": "#141315",
+          "surface-container": "#201f21",
+          "surface-container-low": "#1c1b1d",
+          "surface-container-lowest": "#0e0e10",
+          "surface-container-high": "#2a2a2b",
+          "surface-container-highest": "#353436",
+          "surface-variant": "#353436",
+          "surface-bright": "#3a393b",
+          "surface-tint": "#c6c4df",
+          "parchment": "#e8d5b7",
+          "on-surface": "#e5e1e3",
+          "on-surface-variant": "#c8c5cd",
+          "on-background": "#e5e1e3",
+          "on-primary": "#2f2e43",
+          "on-primary-container": "#83829b",
+          "on-primary-fixed": "#1a1a2e",
+          "on-primary-fixed-variant": "#45455b",
+          "on-secondary": "#3a2f1a",
+          "on-secondary-container": "#c8b699",
+          "on-secondary-fixed": "#241a07",
+          "on-secondary-fixed-variant": "#51452f",
+          "on-tertiary": "#393012",
+          "on-tertiary-container": "#493f20",
+          "on-tertiary-fixed": "#231b02",
+          "on-tertiary-fixed-variant": "#514627",
+          "on-error": "#690005",
+          "on-error-container": "#ffdad6",
+          "primary": "#c6c4df",
+          "primary-container": "#1a1a2e",
+          "primary-fixed": "#e2e0fc",
+          "primary-fixed-dim": "#c6c4df",
+          "secondary": "#d6c4a7",
+          "secondary-container": "#544731",
+          "secondary-fixed": "#f3e0c2",
+          "secondary-fixed-dim": "#d6c4a7",
+          "tertiary": "#d5c59d",
+          "tertiary-container": "#b9aa83",
+          "tertiary-fixed": "#f2e1b7",
+          "tertiary-fixed-dim": "#d5c59d",
+          "runed-gold": "#ffd700",
+          "spectral-blue": "#87ceeb",
+          "ember-glow": "#ff6b6b",
+          "mystic-purple": "#9b59b6",
+          "warning": "#f39c12",
+          "success": "#27ae60",
+          "error": "#c0392b",
+          "error-container": "#93000a",
+          "neutral-gray": "#7f8c8d",
+          "outline": "#929097",
+          "outline-variant": "#47464c",
+          "inverse-surface": "#e5e1e3",
+          "inverse-on-surface": "#313032",
+          "inverse-primary": "#5d5c74"
+        },
+        borderRadius: { DEFAULT: "0.125rem", lg: "0.25rem", xl: "0.5rem", full: "0.75rem" },
+        spacing: { xs: "4px", sm: "8px", md: "16px", lg: "24px", xl: "32px", xxl: "48px" },
+        fontFamily: {
+          "pixel-display": ["VT323", "monospace"],
+          "pixel-heading": ["VT323", "monospace"],
+          "pixel-body": ["VT323", "monospace"],
+          "pixel-small": ["VT323", "monospace"]
+        },
+        fontSize: {
+          "pixel-display": ["32px", { lineHeight: "1.2", letterSpacing: "1px", fontWeight: "700" }],
+          "pixel-heading": ["24px", { lineHeight: "1.3", letterSpacing: "0.5px", fontWeight: "700" }],
+          "pixel-body": ["16px", { lineHeight: "1.6", letterSpacing: "0.5px", fontWeight: "400" }],
+          "pixel-small": ["12px", { lineHeight: "1.5", letterSpacing: "0px", fontWeight: "400" }]
+        }
+      }
+    }
+  }
+</script>
+</head>
+<body class="bg-obsidian text-parchment font-pixel-body min-h-screen flex flex-col">
+
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-4 h-16 bg-obsidian border-b-2 border-amber-400/30">
+  <div class="text-xl font-black text-amber-400 drop-shadow-[0_2px_0_rgba(0,0,0,1)] font-['Be_Vietnam_Pro'] tracking-tighter uppercase">COUNCIL OF MINDS</div>
+  <div class="flex gap-3">
+    <button class="hover:bg-amber-400/10 hover:text-amber-300 transition-colors duration-75 active:translate-y-0.5 text-amber-400 p-2 rounded"><span class="material-symbols-outlined">gavel</span></button>
+    <button class="hover:bg-amber-400/10 hover:text-amber-300 transition-colors duration-75 active:translate-y-0.5 text-amber-400 p-2 rounded"><span class="material-symbols-outlined">settings</span></button>
+  </div>
+</header>
+
+<div class="flex flex-1 pt-16">
+
+<nav class="hidden md:flex fixed left-0 top-16 bottom-0 w-64 flex-col pt-6 bg-obsidian border-r-2 border-slate-800 font-['Be_Vietnam_Pro'] uppercase text-xs font-medium tracking-widest">
+  <div class="px-4 mb-6">
+    <div class="flex items-center gap-3 mb-3">
+      <div class="w-10 h-10 bg-surface-container-highest rounded flex items-center justify-center pixel-border">
+        <span class="material-symbols-outlined text-runed-gold">account_balance</span>
+      </div>
+      <div>
+        <div class="font-pixel-heading text-pixel-heading text-runed-gold leading-none">The Council</div>
+        <div class="font-pixel-small text-pixel-small text-on-surface-variant">Where Minds Deliberate</div>
+      </div>
+    </div>
+    <button class="w-full mt-2 bg-runed-gold text-obsidian font-pixel-body text-pixel-body py-2 px-4 rounded border-2 border-transparent hover:bg-parchment transition-colors flex items-center justify-center gap-2" onclick="window.location.href='council_chamber.html'">
+      <span class="material-symbols-outlined">arrow_forward</span>Enter Council
+    </button>
+  </div>
+  <div class="flex-1 overflow-y-auto">
+    <ul class="space-y-1">
+      <li><a class="sidebar-link active text-amber-400 border-l-3 border-amber-400 flex items-center px-4 py-3 gap-3 bg-amber-400/5" href="council_landing_page.html"><span class="material-symbols-outlined">home</span>Home</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="council_chamber.html"><span class="material-symbols-outlined">castle</span>Chamber</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="history.html"><span class="material-symbols-outlined">history</span>Archive</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="runic_library.html"><span class="material-symbols-outlined">auto_stories</span>Runic Library</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="council_rules.html"><span class="material-symbols-outlined">menu_book</span>Council Rules</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="agent_profiles.html"><span class="material-symbols-outlined">people</span>Agent Profiles</a></li>
+    </ul>
+  </div>
+  <div class="mt-auto mb-4 border-t-2 border-slate-800 pt-4">
+    <a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="#"><span class="material-symbols-outlined">settings</span>Settings</a>
+  </div>
+</nav>
+
+<main class="flex-1 md:ml-64 bg-background min-h-[calc(100vh-64px)] pb-20 md:pb-0">
+  <section class="w-full max-w-[1400px] mx-auto px-4 py-8 flex flex-col items-center text-center border-b-2 border-amber-900/20">
+    <h1 class="font-pixel-display text-pixel-display text-runed-gold mb-4 drop-shadow-[4px_4px_0px_rgba(0,0,0,1)] text-[48px]">Council of Minds</h1>
+    <p class="font-pixel-heading text-pixel-heading text-parchment mb-6 max-w-2xl text-[28px]">Where AI Minds Deliberate</p>
+    <button class="bg-runed-gold text-obsidian px-6 py-3 font-pixel-heading text-pixel-heading border-2 border-obsidian hover:bg-parchment hover:border-runed-gold transition-all active:scale-95 shadow-[4px_4px_0_0_rgba(255,215,0,0.3)]" onclick="window.location.href='council_chamber.html'">Enter the Council</button>
+  </section>
+
+  <section class="w-full max-w-[1400px] mx-auto px-4 py-8">
+    <h2 class="font-pixel-heading text-pixel-heading text-center text-parchment mb-8 border-b-2 border-runed-gold inline-block pb-2 mx-auto block w-fit">Meet the Council</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="bg-surface-container border-2 border-neutral-gray p-4 hover:scale-[1.02] transition-transform flex flex-col items-center text-center shadow-[4px_4px_0_0_rgba(127,140,141,0.2)]">
+        <div class="w-24 h-24 border-2 border-neutral-gray mb-2 bg-obsidian flex items-center justify-center"><span class="material-symbols-outlined text-[48px] text-neutral-gray">travel_explore</span></div>
+        <h3 class="font-pixel-heading text-pixel-heading text-neutral-gray">The Scout</h3>
+        <p class="font-pixel-small text-pixel-small text-on-surface-variant mt-1">Intelligence Operative</p>
+        <p class="font-pixel-body text-pixel-body text-parchment mt-2">Searches the web to detect emerging signals, track consensus, and deliver real-time external intelligence to the council.</p>
+      </div>
+      <div class="bg-surface-container border-2 border-runed-gold p-4 hover:scale-[1.02] transition-transform flex flex-col items-center text-center shadow-[4px_4px_0_0_rgba(255,215,0,0.2)]">
+        <div class="w-24 h-24 border-2 border-runed-gold mb-2 bg-obsidian flex items-center justify-center"><span class="material-symbols-outlined text-[48px] text-runed-gold">history_edu</span></div>
+        <h3 class="font-pixel-heading text-pixel-heading text-runed-gold">The Historian</h3>
+        <p class="font-pixel-small text-pixel-small text-on-surface-variant mt-1">Keeper of Lore</p>
+        <p class="font-pixel-body text-pixel-body text-parchment mt-2">Draws upon vast archives of past events to provide context and precedent to the current deliberation.</p>
+      </div>
+      <div class="bg-surface-container border-2 border-spectral-blue p-4 hover:scale-[1.02] transition-transform flex flex-col items-center text-center shadow-[4px_4px_0_0_rgba(135,206,235,0.2)]">
+        <div class="w-24 h-24 border-2 border-spectral-blue mb-2 bg-obsidian flex items-center justify-center"><span class="material-symbols-outlined text-[48px] text-spectral-blue">search</span></div>
+        <h3 class="font-pixel-heading text-pixel-heading text-spectral-blue">The Detective</h3>
+        <p class="font-pixel-small text-pixel-small text-on-surface-variant mt-1">Seeker of Facts</p>
+        <p class="font-pixel-body text-pixel-body text-parchment mt-2">Analyzes logic and hunts for inconsistencies in arguments, focusing purely on empirical evidence.</p>
+      </div>
+      <div class="bg-surface-container border-2 border-ember-glow p-4 hover:scale-[1.02] transition-transform flex flex-col items-center text-center shadow-[4px_4px_0_0_rgba(255,107,107,0.2)]">
+        <div class="w-24 h-24 border-2 border-ember-glow mb-2 bg-obsidian flex items-center justify-center"><span class="material-symbols-outlined text-[48px] text-ember-glow">local_fire_department</span></div>
+        <h3 class="font-pixel-heading text-pixel-heading text-ember-glow">The Sage</h3>
+        <p class="font-pixel-small text-pixel-small text-on-surface-variant mt-1">Voice of Intuition</p>
+        <p class="font-pixel-body text-pixel-body text-parchment mt-2">Provides philosophical insights and considers the ethical implications of the council's decisions.</p>
+      </div>
+      <div class="bg-surface-container border-2 border-mystic-purple p-4 hover:scale-[1.02] transition-transform flex flex-col items-center text-center shadow-[4px_4px_0_0_rgba(155,89,182,0.2)]">
+        <div class="w-24 h-24 border-2 border-mystic-purple mb-2 bg-obsidian flex items-center justify-center"><span class="material-symbols-outlined text-[48px] text-mystic-purple">gavel</span></div>
+        <h3 class="font-pixel-heading text-pixel-heading text-mystic-purple">The Moderator</h3>
+        <p class="font-pixel-small text-pixel-small text-on-surface-variant mt-1">Master of Rules</p>
+        <p class="font-pixel-body text-pixel-body text-parchment mt-2">Ensures civilized discourse, synthesizes arguments, and formally concludes the deliberation process.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="w-full max-w-[1000px] mx-auto px-4 py-8 mb-8">
+    <h2 class="font-pixel-heading text-pixel-heading text-center text-parchment mb-8 border-b-2 border-runed-gold inline-block pb-2 mx-auto block w-fit">The Deliberation Process</h2>
+    <div class="flex flex-col gap-6 border-l-2 border-amber-900/50 pl-6 ml-4">
+      <div class="relative">
+        <div class="absolute -left-[38px] top-0 w-8 h-8 bg-obsidian border-2 border-runed-gold flex items-center justify-center font-pixel-heading text-pixel-heading text-runed-gold">1</div>
+        <h3 class="font-pixel-heading text-pixel-heading text-runed-gold mb-1">The Inquiry</h3>
+        <p class="font-pixel-body text-pixel-body text-parchment bg-surface-container-low/50 p-3 border border-amber-900/20">A complex query or dilemma is presented to the grand chamber.</p>
+      </div>
+      <div class="relative">
+        <div class="absolute -left-[38px] top-0 w-8 h-8 bg-obsidian border-2 border-spectral-blue flex items-center justify-center font-pixel-heading text-pixel-heading text-spectral-blue">2</div>
+        <h3 class="font-pixel-heading text-pixel-heading text-spectral-blue mb-1">Agent Analysis</h3>
+        <p class="font-pixel-body text-pixel-body text-parchment bg-surface-container-low/50 p-3 border border-amber-900/20">Each specialized AI mind analyzes the query through their unique persona and reasoning framework.</p>
+      </div>
+      <div class="relative">
+        <div class="absolute -left-[38px] top-0 w-8 h-8 bg-obsidian border-2 border-ember-glow flex items-center justify-center font-pixel-heading text-pixel-heading text-ember-glow">3</div>
+        <h3 class="font-pixel-heading text-pixel-heading text-ember-glow mb-1">Active Debate</h3>
+        <p class="font-pixel-body text-pixel-body text-parchment bg-surface-container-low/50 p-3 border border-amber-900/20">The minds exchange arguments, cite evidence, and challenge each other's logical fallacies in real-time.</p>
+      </div>
+      <div class="relative">
+        <div class="absolute -left-[38px] top-0 w-8 h-8 bg-obsidian border-2 border-mystic-purple flex items-center justify-center font-pixel-heading text-pixel-heading text-mystic-purple">4</div>
+        <h3 class="font-pixel-heading text-pixel-heading text-mystic-purple mb-1">The Verdict</h3>
+        <p class="font-pixel-body text-pixel-body text-parchment bg-surface-container-low/50 p-3 border border-amber-900/20">The Moderator synthesizes the debate into a comprehensive, nuanced final resolution.</p>
+      </div>
+    </div>
+  </section>
+</main>
+</div>
+
+<nav class="md:hidden fixed bottom-0 w-full z-50 flex justify-around items-center bg-obsidian border-t-2 border-amber-400/20 h-16">
+  <a class="bottom-nav-link active text-amber-400 flex flex-col items-center justify-center p-2 bg-amber-400/5 border-t-2 border-amber-400 -mt-[2px]" href="council_landing_page.html"><span class="material-symbols-outlined text-[20px]">home</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Home</span></a>
+  <a class="bottom-nav-link text-slate-400 flex flex-col items-center justify-center p-2" href="council_chamber.html"><span class="material-symbols-outlined text-[20px]">castle</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Chamber</span></a>
+  <a class="bottom-nav-link text-slate-400 flex flex-col items-center justify-center p-2" href="history.html"><span class="material-symbols-outlined text-[20px]">history</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Archive</span></a>
+  <a class="bottom-nav-link text-slate-400 flex flex-col items-center justify-center p-2" href="runic_library.html"><span class="material-symbols-outlined text-[20px]">auto_stories</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Library</span></a>
+  <a class="bottom-nav-link text-slate-400 flex flex-col items-center justify-center p-2" href="council_rules.html"><span class="material-symbols-outlined text-[20px]">menu_book</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Rules</span></a>
+  <a class="bottom-nav-link text-slate-400 flex flex-col items-center justify-center p-2" href="agent_profiles.html"><span class="material-symbols-outlined text-[20px]">people</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Agents</span></a>
+</nav>
+
+<script src="api.js"></script>
+<script src="ws.js"></script>
+</body></html>
