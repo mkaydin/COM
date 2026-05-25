@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o"
     llm_api_key: str = ""
+    llm_api_base: str = ""
 
     postgres_url: str = "postgresql+asyncpg://council:council_dev@localhost:5432/council"
     neo4j_url: str = "bolt://localhost:7687"
@@ -27,4 +28,9 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def get_settings() -> Settings:
-    return Settings()
+    s = Settings()
+    if s.llm_api_base:
+        os.environ["OPENAI_API_BASE"] = s.llm_api_base
+    if s.llm_api_key:
+        os.environ["OPENAI_API_KEY"] = s.llm_api_key
+    return s

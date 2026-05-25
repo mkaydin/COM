@@ -11,6 +11,7 @@ const store = new Store({
     backendPort: { type: 'number', default: 8734 },
     llmProvider: { type: 'string', default: '' },
     llmApiKey: { type: 'string', default: '' },
+    llmApiBase: { type: 'string', default: '' },
     llmModel: { type: 'string', default: '' },
     configured: { type: 'boolean', default: false }
   }
@@ -43,6 +44,7 @@ function writeBackendEnv() {
     `LLM_PROVIDER=${store.get('llmProvider') || 'openai'}`,
     `LLM_MODEL=${store.get('llmModel') || 'gpt-4o'}`,
     `LLM_API_KEY=${store.get('llmApiKey') || ''}`,
+    `LLM_API_BASE=${store.get('llmApiBase') || ''}`,
     `POSTGRES_URL=postgresql+asyncpg://council:council_dev@localhost:5432/council`,
     `NEO4J_URL=bolt://localhost:7687`,
     `NEO4J_USER=neo4j`,
@@ -194,6 +196,7 @@ ipcMain.handle('backend:restart', () => {
 ipcMain.handle('backend:saveConfig', (_, config) => {
   if (config.llmProvider) store.set('llmProvider', config.llmProvider);
   if (config.llmApiKey) store.set('llmApiKey', config.llmApiKey);
+  if (config.llmApiBase) store.set('llmApiBase', config.llmApiBase);
   if (config.llmModel) store.set('llmModel', config.llmModel);
   store.set('configured', true);
   writeBackendEnv();

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel, Field
@@ -84,3 +84,49 @@ async def archive_session(session_id: UUID, db: AsyncSession = Depends(get_db)):
     session.status = "archived"
     await db.commit()
     logger.info("session_archived", session_id=str(session_id))
+
+
+class DeliberateStart(BaseModel):
+    query: str = Field(..., min_length=1, max_length=10000)
+
+
+@router.post("/{session_id}/deliberate", status_code=202)
+async def start_session_deliberation(
+    session_id: UUID,
+    body: DeliberateStart,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db)
+):
+    from api.deliberations import _run_deliberation
+
+    session_result = await db.execute(select(Session).where(Session.id == session_id))
+    session = session_result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    deliberation = Deliberation(
+        id=uuid4(),
+        session_id=session_id,
+        round=1,
+        user_query=body.query,
+        status="running",
+    )
+    db.add(deliberation)
+    await db.commit()
+    await db.refresh(deliberation)
+
+    background_tasks.add_task(
+        _run_deliberation,
+        deliberation.id,
+        body.query,
+        str(session_id),
+    )
+
+    session.updated_at = datetime.utcnow()
+    await db.commit()
+
+    return {
+        "deliberation_id": str(deliberation.id),
+        "session_id": str(session_id),
+        "status": "accepted",
+    }

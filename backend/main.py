@@ -6,6 +6,10 @@ from logging_config import setup_logging, get_logger
 from db.postgres import init_db
 from api.sessions import router as sessions_router
 from api.documents import router as documents_router
+from api.deliberations import router as deliberations_router
+from api.verdicts import router as verdicts_router
+from api.agents import router as agents_router
+from api.websocket import router as websocket_router
 
 setup_logging()
 logger = get_logger(__name__)
@@ -43,6 +47,10 @@ app.add_middleware(
 
 app.include_router(sessions_router)
 app.include_router(documents_router)
+app.include_router(deliberations_router)
+app.include_router(verdicts_router)
+app.include_router(agents_router)
+app.include_router(websocket_router)
 
 
 @app.get("/api/health")
