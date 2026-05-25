@@ -13,14 +13,14 @@ ls .gitignore start.py
 ## 2. Docker Services (start + verify)
 docker compose -f docker/docker-compose.yml up -d --wait
 docker compose -f docker/docker-compose.yml ps
-# Wait for health checks:
-curl -s http://localhost:5432 >/dev/null && echo "postgres reachable" || echo "postgres DOWN"
-redis-cli ping 2>/dev/null && echo "redis OK" || echo "redis DOWN"
-curl -s http://localhost:7474 >/dev/null && echo "neo4j reachable" || echo "neo4j DOWN"
-curl -s http://localhost:8000/api/v1/heartbeat && echo "chromadb OK" || echo "chromadb DOWN"
+# Verify each service:
+docker exec com-postgres pg_isready -U council -d council 2>/dev/null && echo "postgres OK" || echo "postgres DOWN"
+docker exec com-redis redis-cli ping 2>/dev/null && echo "redis OK" || echo "redis DOWN"
+curl -sf http://localhost:7474 >/dev/null && echo "neo4j OK" || echo "neo4j DOWN"
+curl -sf http://localhost:8000/api/v2/heartbeat >/dev/null && echo "chromadb OK" || echo "chromadb DOWN"
 
-## 3. Python Environment
-source .venv/bin/activate && pip list 2>/dev/null | grep -cE "fastapi|sqlalchemy|alembic|pgvector|pydantic"
+## 3. Python Environment (uv-managed venv — use uv pip, not pip)
+source .venv/bin/activate && uv pip list 2>/dev/null | grep -cE "fastapi|sqlalchemy|alembic|pgvector|pydantic"
 # Should return >= 5
 
 ## 4. Database Migration
@@ -28,7 +28,7 @@ source .venv/bin/activate && cd backend && alembic upgrade head
 # Should output: INFO  [alembic.runtime.migration] Running upgrade -> aeb264f6ae36, initial_schema
 
 ## 5. Backend API
-source .venv/bin/activate && cd backend && cp -n .env.example .env && uvicorn main:app --host 0.0.0.0 --port 8734 &
+cd backend && cp -n .env.example .env && source ../.venv/bin/activate && uvicorn main:app --host 0.0.0.0 --port 8734 &
 sleep 3
 curl -s http://localhost:8734/api/health | python -m json.tool
 curl -s http://localhost:8734/api/health/ready | python -m json.tool
