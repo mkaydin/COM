@@ -146,4 +146,4 @@ Copy `backend/.env.example` → `backend/.env` and fill in your provider key, mo
 
 ## License
 
-Provided as-is for personal and research use.
+Released under the [MIT License](LICENSE) — © 2026 mkaydin.
