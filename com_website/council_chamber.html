@@ -7,6 +7,8 @@
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700;900&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
 <link href="styles.css" rel="stylesheet"/>
 <script>
   tailwind.config = {
@@ -18,32 +20,17 @@
           "surface-container": "#201f21","surface-container-low": "#1c1b1d","surface-container-lowest": "#0e0e10",
           "surface-container-high": "#2a2a2b","surface-container-highest": "#353436","surface-variant": "#353436",
           "surface-bright": "#3a393b","surface-tint": "#c6c4df","parchment": "#e8d5b7","on-surface": "#e5e1e3",
-          "on-surface-variant": "#c8c5cd","on-background": "#e5e1e3","on-primary": "#2f2e43",
-          "on-primary-container": "#83829b","on-primary-fixed": "#1a1a2e","on-primary-fixed-variant": "#45455b",
-          "on-secondary": "#3a2f1a","on-secondary-container": "#c8b699","on-secondary-fixed": "#241a07",
-          "on-secondary-fixed-variant": "#51452f","on-tertiary": "#393012","on-tertiary-container": "#493f20",
-          "on-tertiary-fixed": "#231b02","on-tertiary-fixed-variant": "#514627","on-error": "#690005",
-          "on-error-container": "#ffdad6","primary": "#c6c4df","primary-container": "#1a1a2e",
-          "primary-fixed": "#e2e0fc","primary-fixed-dim": "#c6c4df","secondary": "#d6c4a7",
-          "secondary-container": "#544731","secondary-fixed": "#f3e0c2","secondary-fixed-dim": "#d6c4a7",
-          "tertiary": "#d5c59d","tertiary-container": "#b9aa83","tertiary-fixed": "#f2e1b7",
-          "tertiary-fixed-dim": "#d5c59d","runed-gold": "#ffd700","spectral-blue": "#87ceeb",
+          "on-surface-variant": "#c8c5cd","on-background": "#e5e1e3","runed-gold": "#ffd700","spectral-blue": "#87ceeb",
           "ember-glow": "#ff6b6b","mystic-purple": "#9b59b6","warning": "#f39c12","success": "#27ae60",
-          "error": "#c0392b","error-container": "#93000a","neutral-gray": "#7f8c8d","outline": "#929097",
-          "outline-variant": "#47464c","inverse-surface": "#e5e1e3","inverse-on-surface": "#313032",
-          "inverse-primary": "#5d5c74"
+          "error": "#c0392b","neutral-gray": "#7f8c8d","outline": "#929097",
+          "outline-variant": "#47464c"
         },
-        borderRadius: { DEFAULT: "0.125rem", lg: "0.25rem", xl: "0.5rem", full: "0.75rem" },
-        spacing: { xs: "4px", sm: "8px", md: "16px", lg: "24px", xl: "32px", xxl: "48px" },
-        fontFamily: {
-          "pixel-display": ["VT323", "monospace"],"pixel-heading": ["VT323", "monospace"],
-          "pixel-body": ["VT323", "monospace"],"pixel-small": ["VT323", "monospace"]
-        },
+        fontFamily: { "pixel-display": ["VT323", "monospace"], "pixel-heading": ["VT323", "monospace"], "pixel-body": ["VT323", "monospace"], "pixel-small": ["VT323", "monospace"] },
         fontSize: {
-          "pixel-display": ["32px", { lineHeight: "1.2", letterSpacing: "1px", fontWeight: "700" }],
-          "pixel-heading": ["24px", { lineHeight: "1.3", letterSpacing: "0.5px", fontWeight: "700" }],
-          "pixel-body": ["16px", { lineHeight: "1.6", letterSpacing: "0.5px", fontWeight: "400" }],
-          "pixel-small": ["12px", { lineHeight: "1.5", letterSpacing: "0px", fontWeight: "400" }]
+          "pixel-display": ["32px", { lineHeight: "1.2", fontWeight: "700" }],
+          "pixel-heading": ["24px", { lineHeight: "1.3", fontWeight: "700" }],
+          "pixel-body": ["18px", { lineHeight: "1.6", fontWeight: "400" }],
+          "pixel-small": ["14px", { lineHeight: "1.5", fontWeight: "400" }]
         }
       }
     }
@@ -51,17 +38,49 @@
 </script>
 <style>
   .custom-scrollbar::-webkit-scrollbar { width: 8px; }
-  .custom-scrollbar::-webkit-scrollbar-track { background: #1c1b1d; border-left: 2px solid #7f8c8d; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: #1c1b1d; }
   .custom-scrollbar::-webkit-scrollbar-thumb { background: #ffd700; border: 2px solid #1c1b1d; }
-</style>
+  .response-body { font-size: 22px; line-height: 1.7; white-space: pre-wrap; word-wrap: break-word; }
+  .response-detail { font-size: 20px; line-height: 1.6; }
+  .session-data { font-size: 20px; line-height: 1.7; }
+  .thinking-body { font-size: 18px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; }
+  .agent-icon:hover .agent-icon-box { filter: brightness(1.3); }
+  #thinking-panel { transition: transform 0.3s ease; }
+  .query-divider { border-top: 2px dashed #47464c; margin: 16px 0; padding-top: 8px; }
+  .agent-chip { font-size: 16px; padding: 4px 12px; border-radius: 4px; cursor: pointer; transition: all 0.2s; }
+  .agent-chip.selected { font-weight: bold; transform: scale(1.05); }
+  /* Markdown rendering for agent prose (Scholar/RAG etc.) */
+  .markdown-body { font-size: 20px; line-height: 1.7; word-wrap: break-word; color: #e8d5b7; }
+  .markdown-body > *:first-child { margin-top: 0; }
+  .markdown-body > *:last-child { margin-bottom: 0; }
+  .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 { color: #ffd700; font-weight: 700; line-height: 1.3; margin: 0.7em 0 0.35em; }
+  .markdown-body h1 { font-size: 1.4em; } .markdown-body h2 { font-size: 1.25em; } .markdown-body h3 { font-size: 1.1em; } .markdown-body h4 { font-size: 1em; }
+  .markdown-body p { margin: 0.5em 0; }
+  .markdown-body ul, .markdown-body ol { margin: 0.4em 0; padding-left: 1.5em; }
+  .markdown-body li { margin: 0.2em 0; }
+  .markdown-body strong { color: #fff7e6; font-weight: 700; }
+  .markdown-body em { font-style: italic; }
+  .markdown-body code { background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 3px; font-family: ui-monospace, "Cascadia Code", monospace; font-size: 0.88em; }
+  .markdown-body pre { background: #0e0e10; border: 1px solid #353436; padding: 0.6em 0.8em; border-radius: 4px; overflow-x: auto; margin: 0.6em 0; }
+  .markdown-body pre code { background: none; padding: 0; font-size: 0.85em; }
+  .markdown-body blockquote { border-left: 3px solid #7f8c8d; margin: 0.5em 0; padding: 0.1em 0 0.1em 0.8em; color: #c8c5cd; }
+  .markdown-body a { color: #87ceeb; text-decoration: underline; }
+  .markdown-body hr { border: none; border-top: 1px solid #353436; margin: 0.8em 0; }
+  .markdown-body table { border-collapse: collapse; margin: 0.6em 0; }
+  .markdown-body th, .markdown-body td { border: 1px solid #353436; padding: 4px 8px; }
+ </style>
 </head>
 <body class="bg-surface-dim text-on-surface font-pixel-body h-screen overflow-hidden flex flex-col">
 
 <header class="fixed top-0 w-full z-50 flex justify-between items-center px-4 h-16 bg-obsidian border-b-2 border-amber-400/30">
   <div class="text-xl font-black text-amber-400 drop-shadow-[0_2px_0_rgba(0,0,0,1)] font-['Be_Vietnam_Pro'] tracking-tighter uppercase">COUNCIL OF MINDS</div>
   <div class="flex gap-3">
-    <button class="hover:bg-amber-400/10 hover:text-amber-300 transition-colors duration-75 active:translate-y-0.5 text-amber-400 p-2 rounded"><span class="material-symbols-outlined">gavel</span></button>
-    <button class="hover:bg-amber-400/10 hover:text-amber-300 transition-colors duration-75 active:translate-y-0.5 text-amber-400 p-2 rounded"><span class="material-symbols-outlined">settings</span></button>
+    <button class="hover:bg-amber-400/10 hover:text-amber-300 transition-colors text-amber-400 p-2 rounded"><span class="material-symbols-outlined">gavel</span></button>
+    <select id="provider-selector" class="bg-obsidian border border-amber-400/30 text-amber-400 font-pixel-small text-pixel-small px-2 py-1 rounded outline-none cursor-pointer hover:bg-amber-400/10">
+      <!-- GLM option deactivated -->
+      <option value="lm_studio">LM Studio (Local)</option>
+    </select>
+    <button class="hover:bg-amber-400/10 hover:text-amber-300 transition-colors text-amber-400 p-2 rounded"><span class="material-symbols-outlined">settings</span></button>
   </div>
 </header>
 
@@ -70,15 +89,13 @@
 <nav class="hidden md:flex fixed left-0 top-16 bottom-0 w-64 flex-col pt-6 bg-obsidian border-r-2 border-slate-800 font-['Be_Vietnam_Pro'] uppercase text-xs font-medium tracking-widest">
   <div class="px-4 mb-6">
     <div class="flex items-center gap-3 mb-3">
-      <div class="w-10 h-10 bg-surface-container-highest rounded flex items-center justify-center pixel-border">
-        <span class="material-symbols-outlined text-runed-gold">account_balance</span>
-      </div>
+      <div class="w-10 h-10 bg-surface-container-highest rounded flex items-center justify-center pixel-border"><span class="material-symbols-outlined text-runed-gold">account_balance</span></div>
       <div>
-        <div class="font-pixel-heading text-pixel-heading text-runed-gold leading-none">The Meclis</div>
+        <div class="font-pixel-heading text-pixel-heading text-runed-gold leading-none">The Council</div>
         <div class="font-pixel-small text-pixel-small text-on-surface-variant">Deliberation in Progress</div>
       </div>
     </div>
-    <button class="w-full mt-2 bg-runed-gold text-obsidian font-pixel-body text-pixel-body py-2 px-4 rounded border-2 border-transparent hover:bg-parchment transition-colors flex items-center justify-center gap-2">New Inquiry</button>
+    <button id="new-inquiry-btn" class="w-full mt-2 bg-runed-gold text-obsidian font-pixel-body text-pixel-body py-2 px-4 rounded border-2 border-transparent hover:bg-parchment transition-colors flex items-center justify-center gap-2">New Inquiry</button>
   </div>
   <div class="flex-1 overflow-y-auto">
     <ul class="space-y-1">
@@ -86,107 +103,103 @@
       <li><a class="sidebar-link active text-amber-400 border-l-3 border-amber-400 flex items-center px-4 py-3 gap-3 bg-amber-400/5" href="council_chamber.html"><span class="material-symbols-outlined">castle</span>Chamber</a></li>
       <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="history.html"><span class="material-symbols-outlined">history</span>Archive</a></li>
       <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="runic_library.html"><span class="material-symbols-outlined">auto_stories</span>Runic Library</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="divination.html"><span class="material-symbols-outlined">auto_awesome</span>Divination</a></li>
       <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="council_rules.html"><span class="material-symbols-outlined">menu_book</span>Council Rules</a></li>
       <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="agent_profiles.html"><span class="material-symbols-outlined">people</span>Agent Profiles</a></li>
     </ul>
   </div>
-  <div class="mt-auto mb-4 border-t-2 border-slate-800 pt-4">
-    <a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="#"><span class="material-symbols-outlined">settings</span>Settings</a>
-  </div>
+  <div class="mt-auto mb-4 border-t-2 border-slate-800 pt-4"><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="#"><span class="material-symbols-outlined">settings</span>Settings</a></div>
 </nav>
 
 <main class="ml-0 md:ml-64 mt-0 h-[calc(100vh-64px)] relative bg-surface-container-low flex flex-col flex-1">
   <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-surface-variant/20 via-surface-container-lowest to-black opacity-90 z-0 pointer-events-none"></div>
-  <div class="absolute inset-0 bg-cover bg-center opacity-10 mix-blend-overlay z-0 pointer-events-none" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuA5NWHsBko6oqcyITA4uxJTAKI1abKjvYnh9iIZEjbE_4KSRbnJlGiTyzIP5e5stpaK-W5sq69XU7DCLNZe0A2RGjLHE7EJF2Gu_m4nSzKr7S7QkMTuUIbSJbct1j1i_AzN3jTiG9yaE2C1WnAoB0kGb5DyjJVb_5xpjyWfJYyn7s07mvLfwbO8f892GWK2KzyK87ZVR408Lne4YAOdsScPC42AZPyNPR4LER2JPs3A33CgociEt9V-W58gklOUUt3i16ctO9Xh678');"></div>
 
-  <div class="absolute top-6 left-6 z-20 bg-obsidian border-2 border-neutral-gray p-3 shadow-[4px_4px_0_#0e0e10]">
-    <h3 class="text-surface-tint font-pixel-small text-pixel-small uppercase mb-1 border-b border-surface-variant pb-1">Session Data</h3>
-    <ul class="font-pixel-body text-pixel-body text-parchment space-y-1">
-      <li><span class="text-neutral-gray">Topic:</span> Origin of the Relic</li>
-      <li><span class="text-neutral-gray">Round:</span> 1 of 3</li>
-      <li class="text-runed-gold animate-pulse">Deliberating...</li>
-    </ul>
-  </div>
-
-  <div class="relative z-10 w-full max-w-5xl mx-auto mt-12 mb-6 px-4">
-    <div class="flex justify-center items-end h-[220px] gap-1 sm:gap-2 md:gap-6">
-      <div class="flex flex-col items-center gap-2 transform translate-y-12 transition-transform hover:scale-105 group cursor-pointer">
-        <div class="w-16 h-16 md:w-24 md:h-24 border-2 border-neutral-gray bg-surface-container-highest relative shadow-[4px_4px_0_#0e0e10]">
-          <div class="w-full h-full bg-obsidian flex items-center justify-center"><span class="material-symbols-outlined text-[40px] text-neutral-gray">travel_explore</span></div>
-        </div>
-        <div class="bg-obsidian border-2 border-neutral-gray text-neutral-gray font-pixel-small text-pixel-small px-2 py-1 uppercase shadow-[2px_2px_0_#0e0e10]">Scout</div>
+  <!-- AGENT ICONS — equal sizes, clickable -->
+  <div class="relative z-10 w-full max-w-3xl mx-auto mt-4 mb-2 px-4">
+    <div id="agent-arc" class="flex justify-center items-center gap-3 md:gap-5 flex-wrap">
+      <div id="arc-oracle" class="agent-icon flex flex-col items-center gap-2 cursor-pointer transition-transform hover:scale-105" onclick="onAgentIconClick('oracle')">
+        <div class="agent-icon-box w-20 h-20 border-2 border-runed-gold bg-surface-container-highest relative shadow-[4px_4px_0_#0e0e10]"><div class="w-full h-full flex items-center justify-center"><span class="material-symbols-outlined text-[36px] text-runed-gold">auto_awesome</span></div></div>
+        <div class="bg-obsidian border-2 border-runed-gold text-runed-gold font-pixel-small text-pixel-small px-2 py-1 uppercase shadow-[2px_2px_0_#0e0e10]">Oracle</div>
       </div>
-      <div class="flex flex-col items-center gap-2 transform translate-y-4 transition-transform hover:scale-105 group cursor-pointer">
-        <div class="w-20 h-20 md:w-28 md:h-28 border-2 border-runed-gold bg-surface-container-highest relative shadow-[4px_4px_0_#0e0e10]">
-          <img alt="Historian" class="w-full h-full object-cover grayscale opacity-80 mix-blend-luminosity" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAavDo2GUg3ZdTMkXQa89MXgk_AcnguzKS-s6cplw4Dryt0Azt58Zp6dwrYPl0Q9RTl8DLsiiVsdx6Kwqkpu9zJ9ngfsYTQmIjg_lNRl_4xxbhkB46sDuFkO0TGzkYf-IRGz1_y1Fy2GCCHiACdabcA7FTzkfC8t0jmyQykAWCGsPlgoEP48Y4mlOb-jFVFGnR8XgDqkEy7YDMFlAVHxdrF2uMm_RIb71LbmjpU_5uKjSJN9EBZCVQc07I_RDeQc7ikyMmnX565T9E"/>
-        </div>
-        <div class="bg-obsidian border-2 border-runed-gold text-runed-gold font-pixel-small text-pixel-small px-2 py-1 uppercase shadow-[2px_2px_0_#0e0e10]">Historian</div>
+      <div id="arc-rag" class="agent-icon flex flex-col items-center gap-2 cursor-pointer transition-transform hover:scale-105" onclick="onAgentIconClick('rag')">
+        <div class="agent-icon-box w-20 h-20 border-2 border-success bg-surface-container-highest relative shadow-[4px_4px_0_#0e0e10]"><div class="w-full h-full flex items-center justify-center"><span class="material-symbols-outlined text-[36px] text-success">library_books</span></div></div>
+        <div class="bg-obsidian border-2 border-success text-success font-pixel-small text-pixel-small px-2 py-1 uppercase shadow-[2px_2px_0_#0e0e10]">Scholar</div>
       </div>
-      <div class="flex flex-col items-center gap-2 transform translate-y-4 transition-transform hover:scale-105 group cursor-pointer">
-        <div class="w-20 h-20 md:w-28 md:h-28 border-2 border-spectral-blue bg-surface-container-highest relative shadow-[4px_4px_0_#0e0e10]">
-          <img alt="Detective" class="w-full h-full object-cover grayscale opacity-80 mix-blend-luminosity" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD-PJnee_aeLvSiiUL-tZyVMPOF3EWtqMmnlPS9nIg0xgujv7s4eLBoNHyK26LViYsrTA3HC2ZdqkHslRuHuNoreau0IXfPL79Ck1pNhy7d_bp1iUL_cpA9VOI8Q0FFxklh0VwroTYgHozXrbCCG8Un3jB0Ehp2rlHkmPeC7qzQgE2NSmoZEH7LL5ls5lDSYL6uz_divlzNwlIBLZn1wUT68QtXCe1tWucnD6BQsW5aC7W9xBN3aW3bSrCRJ3uokDyOp2m46kiiUoA"/>
-        </div>
-        <div class="bg-obsidian border-2 border-spectral-blue text-spectral-blue font-pixel-small text-pixel-small px-2 py-1 uppercase shadow-[2px_2px_0_#0e0e10]">Detective</div>
+      <div id="arc-sage" class="agent-icon flex flex-col items-center gap-2 cursor-pointer transition-transform hover:scale-105" onclick="onAgentIconClick('sage')">
+        <div class="agent-icon-box w-20 h-20 border-2 border-ember-glow bg-surface-container-highest relative shadow-[4px_4px_0_#0e0e10]"><div class="w-full h-full flex items-center justify-center"><span class="material-symbols-outlined text-[36px] text-ember-glow">local_fire_department</span></div></div>
+        <div class="bg-obsidian border-2 border-ember-glow text-ember-glow font-pixel-small text-pixel-small px-2 py-1 uppercase shadow-[2px_2px_0_#0e0e10]">Sage</div>
       </div>
-      <div class="flex flex-col items-center gap-2 transform -translate-y-2 scale-110 relative z-20">
-        <div class="w-24 h-24 md:w-32 md:h-32 border-2 border-ember-glow bg-surface-container-highest relative shadow-[0_0_20px_rgba(255,107,107,0.4)]">
-          <img alt="Sage" class="w-full h-full object-cover grayscale opacity-90 mix-blend-luminosity" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCqtqlGXurPdORYJ9b-4HTbp7S6eDhmrRofEElbHPnSeAGcwzlVNphIa4p7IB0vxZ4_6PGNYcHLJ3z-thW76RhN7ccIfla269ZyQHMbzBrOdlpXE1M8u0p8icJI-3pejbe_lwjCTmFLxvmYsqxd52z5tFeDgCSAAf7RHszcfhkFjcTx-ZOHOBGVwrVeVuP0NUhPkO5vuDr3JladXBH3NMLJ59vlSP7eaXbLykeX42AhLDo1JWGiuX9QaXWjNNQeedgINF1jOQuXoB4"/>
-          <div class="absolute inset-[-4px] border-2 border-ember-glow opacity-50 animate-pulse pointer-events-none"></div>
-        </div>
-        <div class="bg-ember-glow text-obsidian border-2 border-ember-glow font-pixel-small text-pixel-small px-3 py-1 uppercase font-bold shadow-[2px_2px_0_#0e0e10]">The Sage</div>
-      </div>
-      <div class="flex flex-col items-center gap-2 transform translate-y-12 transition-transform hover:scale-105 group cursor-pointer">
-        <div class="w-20 h-20 md:w-28 md:h-28 border-2 border-mystic-purple bg-surface-container-highest relative shadow-[4px_4px_0_#0e0e10]">
-          <img alt="Moderator" class="w-full h-full object-cover grayscale opacity-80 mix-blend-luminosity" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBWfz0yTaQCEwVpfyGZsoegREs3AfQ9znxC8N8iK17sbthPsFFhtb2oGQ0G1hyKKuf9XVPDR2O3pdLReTL08bxlXfNnmq_u6ueJdet-Fq4GfRfWKzYcbwIwBAKHqyk5z0OZLjpYBvf2aYjyxDRlnR84I2kQW8nXArd8oymMBaO1DCpDOOg-vqo33gh_3XRD8LkX21ga4g5bMcuqJjbiENZgNq9EQv338Hjo60YqsSn7KyhmmbXqI6maDjZYwWJmNzs_QMUFzJxVVUg"/>
-        </div>
+      <div id="arc-moderator" class="agent-icon flex flex-col items-center gap-2 cursor-pointer transition-transform hover:scale-105" onclick="onAgentIconClick('moderator')">
+        <div class="agent-icon-box w-20 h-20 border-2 border-mystic-purple bg-surface-container-highest relative shadow-[4px_4px_0_#0e0e10]"><div class="w-full h-full flex items-center justify-center"><span class="material-symbols-outlined text-[36px] text-mystic-purple">gavel</span></div></div>
         <div class="bg-obsidian border-2 border-mystic-purple text-mystic-purple font-pixel-small text-pixel-small px-2 py-1 uppercase shadow-[2px_2px_0_#0e0e10]">Moderator</div>
       </div>
     </div>
-  </div>
 
-  <div class="relative z-10 w-full max-w-3xl mx-auto px-4 flex-1 flex flex-col justify-start">
-    <div class="bg-obsidian border-2 border-ember-glow p-4 md:p-6 relative shadow-[0_0_15px_rgba(255,107,107,0.15)] flex flex-col gap-4">
-      <div class="absolute top-0 left-0 w-2 h-2 bg-ember-glow"></div><div class="absolute top-0 right-0 w-2 h-2 bg-ember-glow"></div>
-      <div class="absolute bottom-0 left-0 w-2 h-2 bg-ember-glow"></div><div class="absolute bottom-0 right-0 w-2 h-2 bg-ember-glow"></div>
-      <div class="flex items-center gap-3 border-b-2 border-surface-variant pb-2">
-        <span class="material-symbols-outlined text-ember-glow">chat_bubble</span>
-        <span class="font-pixel-heading text-pixel-heading text-ember-glow uppercase">The Sage Speaks...</span>
-      </div>
-      <p class="font-pixel-body text-pixel-body text-parchment leading-relaxed min-h-[100px]">"The inscriptions on the artifact do not merely recount history; they dictate potential futures. The temporal distortion identified near the ruins aligns perfectly with standard Class-4 phenomena, yes. However, the presence of these specific isotopic signatures suggests the relic is not a remnant of the past, but a seed planted for the future. Proceed with extreme caution."</p>
-      <div class="mt-auto border-t-2 border-surface-variant pt-3 flex flex-wrap justify-between items-center gap-4 bg-surface-container-low/50 p-2 border border-surface-variant">
-        <div class="flex items-center gap-2 text-ember-glow font-pixel-small text-pixel-small uppercase bg-surface-container px-2 py-1 border border-neutral-gray">
-          <span class="material-symbols-outlined text-[16px]" style="font-variation-settings:'FILL'1;">psychology</span>Inference
-        </div>
-        <div class="flex items-center gap-3">
-          <span class="text-surface-tint font-pixel-small text-pixel-small uppercase tracking-widest">Certainty</span>
-          <div class="w-32 md:w-48 h-3 bg-surface-container-highest border-2 border-neutral-gray flex p-[2px]"><div class="h-full bg-ember-glow w-[85%] relative"><div class="absolute top-0 left-0 w-full h-[1px] bg-white/20"></div></div></div>
-          <span class="text-ember-glow font-pixel-small text-pixel-small">85%</span>
-        </div>
+    <!-- AGENT SELECTOR for next query (item 5) -->
+    <div class="flex justify-center gap-2 mt-3 flex-wrap">
+      <span class="text-neutral-gray font-pixel-small text-pixel-small uppercase self-center">Direct next query to:</span>
+      <div id="agent-selector" class="flex gap-2 flex-wrap">
+        <button class="agent-chip selected bg-obsidian border-2 border-runed-gold text-runed-gold" data-agent="all" onclick="selectAgent('all')">All</button>
+        <button class="agent-chip bg-obsidian border border-runed-gold/50 text-runed-gold/50" data-agent="oracle" onclick="selectAgent('oracle')">Oracle</button>
+        <button class="agent-chip bg-obsidian border border-success/50 text-success/50" data-agent="rag" onclick="selectAgent('rag')">Scholar</button>
+        <button class="agent-chip bg-obsidian border border-ember-glow/50 text-ember-glow/50" data-agent="sage" onclick="selectAgent('sage')">Sage</button>
       </div>
     </div>
   </div>
 
-  <div class="absolute bottom-[104px] left-0 w-full px-4 z-20 pointer-events-none">
-    <div class="max-w-5xl mx-auto flex flex-col md:flex-row items-end md:items-center gap-4">
-      <div class="flex items-center gap-3 bg-obsidian border-2 border-mystic-purple p-2 shadow-[4px_4px_0_#0e0e10] pointer-events-auto">
-        <div class="w-10 h-10 border border-mystic-purple bg-surface-container-highest overflow-hidden"><img alt="Companion" class="w-full h-full object-cover grayscale opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBWfz0yTaQCEwVpfyGZsoegREs3AfQ9znxC8N8iK17sbthPsFFhtb2oGQ0G1hyKKuf9XVPDR2O3pdLReTL08bxlXfNnmq_u6ueJdet-Fq4GfRfWKzYcbwIwBAKHqyk5z0OZLjpYBvf2aYjyxDRlnR84I2kQW8nXArd8oymMBaO1DCpDOOg-vqo33gh_3XRD8LkX21ga4g5bMcuqJjbiENZgNq9EQv338Hjo60YqsSn7KyhmmbXqI6maDjZYwWJmNzs_QMUFzJxVVUg"/></div>
-        <div class="flex flex-col"><span class="text-mystic-purple font-pixel-small text-[10px] uppercase tracking-tighter">Companion's Guidance</span><span class="text-parchment font-pixel-body text-sm">The path is clouded...</span></div>
-      </div>
-      <div class="flex flex-wrap gap-2 pointer-events-auto">
-        <button class="bg-obsidian border border-neutral-gray text-parchment font-pixel-small text-pixel-small px-3 py-1 hover:bg-neutral-gray/10 transition-colors shadow-[2px_2px_0_#0e0e10] active:translate-y-[1px]">"Ask Scout to search for recent developments"</button>
-        <button class="bg-obsidian border border-runed-gold text-parchment font-pixel-small text-pixel-small px-3 py-1 hover:bg-runed-gold/10 transition-colors shadow-[2px_2px_0_#0e0e10] active:translate-y-[1px]">"Seek further evidence from the Historian"</button>
-        <button class="bg-obsidian border border-mystic-purple text-parchment font-pixel-small text-pixel-small px-3 py-1 hover:bg-mystic-purple/10 transition-colors shadow-[2px_2px_0_#0e0e10] active:translate-y-[1px]">"Ask the Detective about contradictions"</button>
-        <button class="bg-obsidian border border-runed-gold text-parchment font-pixel-small text-pixel-small px-3 py-1 hover:bg-runed-gold/10 transition-colors shadow-[2px_2px_0_#0e0e10] active:translate-y-[1px]">"Request the Sage's final synthesis"</button>
+  <div id="reconnection-banner" class="hidden fixed top-16 left-0 w-full z-40 bg-error text-white font-pixel-body text-pixel-body text-center py-2 animate-pulse">Connection lost. Reconnecting...</div>
+
+  <!-- RESPONSE AREA — scrollable, right padding for thinking panel -->
+  <div id="scroll-container" class="relative z-10 flex-1 overflow-y-auto custom-scrollbar">
+    <div id="response-area" class="w-full max-w-3xl mx-auto px-4 pb-[180px] pt-2 transition-all">
+      <div id="response-placeholder" class="bg-obsidian border-2 border-neutral-gray p-6 text-center">
+        <span class="material-symbols-outlined text-[48px] text-neutral-gray mx-auto block mb-2">forum</span>
+        <p class="font-pixel-heading text-pixel-heading text-neutral-gray">Submit an inquiry to begin deliberation</p>
+        <p class="font-pixel-body text-pixel-body text-on-surface-variant mt-1">The council awaits your question.</p>
       </div>
     </div>
   </div>
 
-  <div class="absolute bottom-0 left-0 w-full bg-obsidian border-t-2 border-runed-gold p-4 flex items-end gap-4 shadow-[0_-10px_20px_rgba(0,0,0,0.8)] z-30">
-    <div class="flex-grow flex flex-col relative">
-      <div class="absolute -top-[28px] left-0 bg-runed-gold text-obsidian font-pixel-small text-pixel-small px-3 py-1 uppercase font-bold border-t-2 border-l-2 border-r-2 border-runed-gold shadow-[2px_0_0_#0e0e10]">Your Decree</div>
-      <textarea class="bg-surface-container-lowest border-2 border-neutral-gray focus:border-runed-gold focus:ring-0 text-parchment font-pixel-body text-pixel-body p-3 w-full h-16 resize-none outline-none custom-scrollbar placeholder:text-surface-tint/50 transition-colors shadow-[inset_2px_2px_5px_rgba(0,0,0,0.5)]" placeholder="Write your answer or decision..."></textarea>
+  <!-- THINKING PANEL — right side, slides in on icon click (item 7) -->
+  <div id="thinking-panel" class="fixed top-16 right-0 bottom-[104px] w-96 bg-obsidian border-l-2 border-amber-400/30 z-30 overflow-y-auto custom-scrollbar" style="transform: translateX(100%);">
+    <div class="sticky top-0 bg-obsidian border-b-2 border-amber-400/30 p-3 flex items-center justify-between z-10">
+      <div class="flex items-center gap-2">
+        <span id="thinking-icon" class="material-symbols-outlined text-runed-gold">psychology</span>
+        <span id="thinking-title" class="font-pixel-heading text-pixel-heading text-runed-gold uppercase">Thinking Process</span>
+      </div>
+      <button onclick="closeThinking()" class="text-neutral-gray hover:text-error transition-colors"><span class="material-symbols-outlined">close</span></button>
     </div>
-    <button class="bg-runed-gold text-obsidian border-2 border-runed-gold font-pixel-heading text-pixel-heading px-6 py-3 uppercase hover:bg-parchment hover:border-parchment transition-colors h-16 shadow-[4px_4px_0_#0e0e10] active:translate-y-[2px] active:translate-x-[2px] active:shadow-[2px_2px_0_#0e0e10] flex items-center justify-center min-w-[120px]">Submit</button>
+    <div id="thinking-content" class="p-4"></div>
+  </div>
+
+    </div>
+  </div>
+
+  <!-- MERGED INPUT + SESSION BAR -->
+  <div class="absolute bottom-0 left-0 w-full bg-obsidian border-t-2 border-runed-gold z-30 shadow-[0_-10px_20px_rgba(0,0,0,0.8)]">
+    <!-- Session info strip -->
+    <div class="flex items-center gap-4 px-4 pt-2 pb-1 border-b border-surface-variant/50">
+      <div class="flex items-center gap-2">
+        <span class="material-symbols-outlined text-runed-gold text-[16px]">topic</span>
+        <span class="font-pixel-small text-pixel-small text-neutral-gray uppercase">Topic:</span>
+        <span id="session-topic" class="font-pixel-small text-pixel-small text-parchment max-w-[300px] truncate">Awaiting inquiry...</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="material-symbols-outlined text-runed-gold text-[16px]">format_list_numbered</span>
+        <span class="font-pixel-small text-pixel-small text-neutral-gray uppercase">Round:</span>
+        <span id="session-round" class="font-pixel-small text-pixel-small text-parchment">0</span>
+      </div>
+      <div class="flex items-center gap-2 ml-auto">
+        <span id="session-status-text" class="font-pixel-small text-pixel-small text-runed-gold">Ready</span>
+      </div>
+    </div>
+    <!-- Query entry -->
+    <div class="flex items-end gap-4 p-4">
+      <div class="flex-grow flex flex-col relative">
+        <textarea id="deliberation-input" class="bg-surface-container-lowest border-2 border-neutral-gray focus:border-runed-gold focus:ring-0 text-parchment font-pixel-body text-pixel-body p-3 w-full h-16 resize-none outline-none custom-scrollbar placeholder:text-surface-tint/50 transition-colors shadow-[inset_2px_2px_5px_rgba(0,0,0,0.5)]" placeholder="Write your inquiry or follow-up question..."></textarea>
+      </div>
+      <button id="deliberation-submit" class="bg-runed-gold text-obsidian border-2 border-runed-gold font-pixel-heading text-pixel-heading px-6 py-3 uppercase hover:bg-parchment hover:border-parchment transition-colors h-16 shadow-[4px_4px_0_#0e0e10] active:translate-y-[2px] active:shadow-[2px_2px_0_#0e0e10] flex items-center justify-center min-w-[120px]">Submit</button>
+    </div>
   </div>
 </main>
 </div>
@@ -196,10 +209,465 @@
   <a class="bottom-nav-link active text-amber-400 flex flex-col items-center justify-center p-2 bg-amber-400/5 border-t-2 border-amber-400 -mt-[2px]" href="council_chamber.html"><span class="material-symbols-outlined text-[20px]">castle</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Chamber</span></a>
   <a class="bottom-nav-link text-slate-400 flex flex-col items-center justify-center p-2" href="history.html"><span class="material-symbols-outlined text-[20px]">history</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Archive</span></a>
   <a class="bottom-nav-link text-slate-400 flex flex-col items-center justify-center p-2" href="runic_library.html"><span class="material-symbols-outlined text-[20px]">auto_stories</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Library</span></a>
-  <a class="bottom-nav-link text-slate-400 flex flex-col items-center justify-center p-2" href="council_rules.html"><span class="material-symbols-outlined text-[20px]">menu_book</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Rules</span></a>
   <a class="bottom-nav-link text-slate-400 flex flex-col items-center justify-center p-2" href="agent_profiles.html"><span class="material-symbols-outlined text-[20px]">people</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Agents</span></a>
 </nav>
 
 <script src="api.js"></script>
 <script src="ws.js"></script>
+<script>
+// --- State ---
+let selectedAgent = 'all';
+const agentResponses = {};
+let queryCount = 0;
+let currentDeliberationId = null;
+const AGENT_COLORS = {
+  oracle: { border: 'runed-gold', text: 'runed-gold', icon: 'auto_awesome' },
+  rag: { border: 'success', text: 'success', icon: 'library_books' },
+  sage: { border: 'ember-glow', text: 'ember-glow', icon: 'local_fire_department' },
+  moderator: { border: 'mystic-purple', text: 'mystic-purple', icon: 'gavel' },
+};
+const AGENT_LABELS = { oracle: 'Oracle', rag: 'Scholar', sage: 'Sage', moderator: 'Moderator' };
+
+// --- Provider switching ---
+async function switchProvider(provider) {
+  try {
+    await window.COM.switchProvider(provider);
+    const statusEl = document.getElementById('session-status-text');
+    if (statusEl) { statusEl.textContent = `Switched to ${provider}`; statusEl.className = 'text-success'; }
+  } catch (e) { console.error('Provider switch failed:', e); }
+}
+
+// Auto-load active provider on page load
+(async () => {
+  try {
+    const data = await window.COM.getProviders();
+    document.getElementById('provider-selector').value = data.active;
+  } catch {}
+})();
+
+// --- Item 5: Agent selector ---
+function selectAgent(agent) {
+  selectedAgent = agent;
+  document.querySelectorAll('.agent-chip').forEach(btn => {
+    const a = btn.dataset.agent;
+    const c = AGENT_COLORS[a] || { border: 'runed-gold', text: 'runed-gold' };
+    if (a === agent) { btn.classList.add('selected'); btn.className = `agent-chip selected bg-obsidian border-2 border-${c.border} text-${c.text}`; }
+    else { btn.classList.remove('selected'); btn.className = `agent-chip bg-obsidian border border-${c.border}/50 text-${c.text}/50`; }
+  });
+}
+
+// --- Item 7: Thinking panel ---
+function onAgentIconClick(agent) {
+  // First scroll to the response card
+  const card = document.getElementById(`card-${agent}`);
+  if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); card.style.boxShadow = '0 0 20px rgba(255,215,0,0.4)'; setTimeout(() => card.style.boxShadow = '', 800); }
+
+  // Open thinking panel with reasoning
+  openThinkingPanel(agent);
+}
+
+function openThinkingPanel(agent) {
+  const panel = document.getElementById('thinking-panel');
+  const title = document.getElementById('thinking-title');
+  const icon = document.getElementById('thinking-icon');
+  const content = document.getElementById('thinking-content');
+  const data = agentResponses[agent];
+  const c = AGENT_COLORS[agent] || AGENT_COLORS.moderator;
+
+  title.textContent = `${AGENT_LABELS[agent] || agent} — Thinking`;
+  icon.className = `material-symbols-outlined text-${c.text}`;
+  icon.textContent = c.icon;
+
+  if (!data) { content.innerHTML = '<p class="thinking-body text-neutral-gray">No response data available yet.</p>'; }
+  else {
+    let html = '';
+
+    // Show reasoning chain-of-thought if available
+    const reasoning = data._reasoning || '';
+    if (reasoning && reasoning.length > 10) {
+      html += `<div class="mb-4"><span class="text-${c.text} font-pixel-small text-pixel-small uppercase block mb-1">Chain of Thought:</span><div class="thinking-body text-on-surface-variant bg-surface-container p-2 border border-surface-variant max-h-[400px] overflow-y-auto custom-scrollbar">${escapeHtml(reasoning)}</div></div>`;
+    }
+
+    // Show structured reasoning details
+    html += `<div class="mb-3"><span class="text-${c.text} font-pixel-small text-pixel-small uppercase">Reasoning Type:</span> <span class="thinking-body text-parchment">${escapeHtml(data.reasoning_type || 'N/A')}</span></div>`;
+    html += `<div class="mb-3"><span class="text-${c.text} font-pixel-small text-pixel-small uppercase">Confidence:</span> <span class="thinking-body text-parchment">${Math.round((data.confidence || 0) * 100)}%</span></div>`;
+
+    // Agent-specific details
+    if (agent === 'oracle') {
+      if (data.claims?.length) html += `<div class="mb-2"><span class="text-${c.text} uppercase font-pixel-small text-pixel-small block">OKF Claims:</span>${data.claims.map(cl => `<div class="thinking-body text-parchment">- ${escapeHtml(cl.text)} (${cl.evidence_type||'documented'})</div>`).join('')}</div>`;
+      if (data._okf_concepts?.length) html += `<div class="mb-2"><span class="text-${c.text} uppercase font-pixel-small text-pixel-small block">Grounded In (concepts):</span>${data._okf_concepts.map(id => `<div class="thinking-body text-parchment">- ${escapeHtml(id)}</div>`).join('')}</div>`;
+      if (data.uncertainties?.length) html += `<div class="mb-2"><span class="text-${c.text} uppercase font-pixel-small text-pixel-small block">Uncertainties:</span>${data.uncertainties.map(u => `<div class="thinking-body text-parchment">- ${escapeHtml(u)}</div>`).join('')}</div>`;
+    } else if (agent === 'rag') {
+      if (data.citations?.length) html += `<div class="mb-2"><span class="text-${c.text} uppercase font-pixel-small text-pixel-small block">Citations (${data.citations.length}):</span>${data.citations.map(ci => `<div class="thinking-body text-parchment">- [${escapeHtml(ci.trust_tier||'?')}] ${escapeHtml(ci.title||'')}</div>`).join('')}</div>`;
+      if (data._rag_stats) { const s=data._rag_stats; html += `<div class="mb-2"><span class="text-${c.text} uppercase font-pixel-small text-pixel-small block">Retrieval:</span><div class="thinking-body text-parchment">- OKF: ${s.okf_count||0} | Wiki: ${s.wiki_count||0} | RAG: ${s.raw_count||0}</div>${s.gap_detected?'<div class="thinking-body text-warning">- Gap detected (promotion candidate)</div>':''}</div>`; }
+      if (data.gaps?.length) html += `<div class="mb-2"><span class="text-${c.text} uppercase font-pixel-small text-pixel-small block">Gaps:</span>${data.gaps.map(g => `<div class="thinking-body text-parchment">- ${escapeHtml(g)}</div>`).join('')}</div>`;
+    } else if (agent === 'sage') {
+      if (data.analogies?.length) html += `<div class="mb-2"><span class="text-${c.text} uppercase font-pixel-small text-pixel-small block">Analogies:</span>${data.analogies.map(a => `<div class="thinking-body text-parchment">- ${escapeHtml(a.domain)}: ${escapeHtml(a.concept)}</div>`).join('')}</div>`;
+      if (data.wiki_citations?.length) html += `<div class="mb-2"><span class="text-${c.text} uppercase font-pixel-small text-pixel-small block">Wiki:</span>${data.wiki_citations.map(w => `<div class="thinking-body text-parchment">- ${escapeHtml(w)}</div>`).join('')}</div>`;
+    } else if (agent === 'moderator') {
+      if (data.conflicts?.length) html += `<div class="mb-2"><span class="text-error uppercase font-pixel-small text-pixel-small block">Conflicts:</span>${data.conflicts.map(cf => `<div class="thinking-body text-parchment">- ${escapeHtml(cf.topic)} (${cf.status})</div>`).join('')}</div>`;
+      if (data.decision_space?.length) html += `<div class="mb-2"><span class="text-runed-gold uppercase font-pixel-small text-pixel-small block">Decisions:</span>${data.decision_space.map(d => `<div class="thinking-body text-parchment">- ${escapeHtml(d.label)}: ${escapeHtml(d.action)}</div>`).join('')}</div>`;
+    }
+
+    content.innerHTML = html || '<p class="thinking-body text-neutral-gray">No detailed data available.</p>';
+  }
+
+  panel.style.transform = 'translateX(0)';
+}
+
+function closeThinking() {
+  document.getElementById('thinking-panel').style.transform = 'translateX(100%)';
+}
+
+
+
+function escapeHtml(text) { const div = document.createElement('div'); div.textContent = text || ''; return div.innerHTML; }
+
+function renderMarkdown(text) {
+  const src = text == null ? '' : String(text);
+  if (!src) return '';
+  try {
+    const html = window.marked ? marked.parse(src) : escapeHtml(src);
+    return window.DOMPurify ? DOMPurify.sanitize(html) : html;
+  } catch (e) {
+    return escapeHtml(src);
+  }
+}
+
+// --- Item 5: Persist chamber state across page navigation ---
+function saveChamberState() {
+  try {
+    const area = document.getElementById('response-area');
+    sessionStorage.setItem('com_chamber_html', area.innerHTML);
+    sessionStorage.setItem('com_chamber_agents', JSON.stringify(agentResponses));
+    sessionStorage.setItem('com_chamber_queryCount', String(queryCount));
+    sessionStorage.setItem('com_chamber_delib_id', currentDeliberationId || '');
+    sessionStorage.setItem('com_chamber_topic', document.getElementById('session-topic').textContent);
+    sessionStorage.setItem('com_chamber_round', document.getElementById('session-round').textContent);
+    sessionStorage.setItem('com_chamber_status', document.getElementById('session-status-text').textContent);
+    sessionStorage.setItem('com_chamber_status_class', document.getElementById('session-status-text').className);
+    sessionStorage.setItem('com_chamber_has_state', '1');
+  } catch(e) { console.warn('saveChamberState failed:', e); }
+}
+
+function restoreChamberState() {
+  if (sessionStorage.getItem('com_chamber_has_state') !== '1') return false;
+  try {
+    const html = sessionStorage.getItem('com_chamber_html');
+    if (!html) return false;
+    const area = document.getElementById('response-area');
+    area.innerHTML = html;
+    const saved = JSON.parse(sessionStorage.getItem('com_chamber_agents') || '{}');
+    Object.keys(saved).forEach(k => agentResponses[k] = saved[k]);
+    queryCount = parseInt(sessionStorage.getItem('com_chamber_queryCount') || '0');
+    currentDeliberationId = sessionStorage.getItem('com_chamber_delib_id') || null;
+    document.getElementById('session-topic').textContent = sessionStorage.getItem('com_chamber_topic') || 'Awaiting inquiry...';
+    document.getElementById('session-round').textContent = sessionStorage.getItem('com_chamber_round') || '0';
+    const st = document.getElementById('session-status-text');
+    st.textContent = sessionStorage.getItem('com_chamber_status') || 'Ready';
+    st.className = sessionStorage.getItem('com_chamber_status_class') || 'text-runed-gold';
+    return true;
+  } catch(e) { console.warn('restoreChamberState failed:', e); return false; }
+}
+
+function clearChamberState() {
+  sessionStorage.removeItem('com_chamber_html');
+  sessionStorage.removeItem('com_chamber_agents');
+  sessionStorage.removeItem('com_chamber_queryCount');
+  sessionStorage.removeItem('com_chamber_delib_id');
+  sessionStorage.removeItem('com_chamber_topic');
+  sessionStorage.removeItem('com_chamber_round');
+  sessionStorage.removeItem('com_chamber_status');
+  sessionStorage.removeItem('com_chamber_status_class');
+  sessionStorage.removeItem('com_chamber_has_state');
+}
+
+// --- Main app ---
+(async function() {
+  let ws = null;
+  const scrollContainer = document.getElementById('scroll-container');
+  const statusTopic = document.getElementById('session-topic');
+  const statusRound = document.getElementById('session-round');
+  const statusText = document.getElementById('session-status-text');
+  const banner = document.getElementById('reconnection-banner');
+
+  // Item 5: Restore saved state before connecting
+  const restored = restoreChamberState();
+
+  let sessionId = sessionStorage.getItem('com_session_id');
+  if (!sessionId) {
+    try { const s = await window.COM.createSession('New Deliberation'); sessionId = s.id; sessionStorage.setItem('com_session_id', sessionId); }
+    catch (e) { console.error('Failed to create session:', e); }
+  }
+
+  function connectWS() {
+    if (ws) ws.close();
+    ws = new WebSocket(`ws://localhost:8734/ws/sessions/${sessionId}/stream`);
+    ws.onopen = () => { statusText.textContent = 'Connected'; statusText.className = 'text-success'; banner.classList.add('hidden'); };
+    ws.onmessage = (e) => {
+      let msg;
+      try { msg = JSON.parse(e.data); } catch (err) { console.warn('Ignored non-JSON WebSocket frame:', e.data); return; }
+      handleMessage(msg);
+    };
+    ws.onclose = () => { statusText.textContent = 'Disconnected. Reconnecting...'; statusText.className = 'text-error'; banner.classList.remove('hidden'); setTimeout(connectWS, 2000); };
+  }
+  connectWS();
+
+  // --- Restore a past deliberation (from Archive "Continue") so the user can chat further ---
+  const continueId = sessionStorage.getItem('com_continue_deliberation_id');
+  if (continueId) {
+    sessionStorage.removeItem('com_continue_deliberation_id');
+    try {
+      const d = await window.COM.getDeliberation(continueId);
+      queryCount = d.round || 1;
+      currentDeliberationId = d.id;
+      statusTopic.textContent = (d.query || '').slice(0, 60);
+      statusRound.textContent = String(queryCount);
+
+      const area = document.getElementById('response-area');
+      area.innerHTML = '';
+      if (d.query) {
+        const qd = document.createElement('div');
+        qd.className = 'query-divider';
+        qd.innerHTML = `<span class="text-neutral-gray font-pixel-small text-pixel-small uppercase">Original Inquiry</span><br><span class="text-parchment response-body">${escapeHtml(d.query)}</span>`;
+        area.appendChild(qd);
+      }
+      (d.responses || []).forEach(r => {
+        if (r.agent === 'moderator') {
+          agentResponses['moderator'] = r.response;
+          renderModeratorSummary(r.response);
+        } else if (['oracle', 'rag', 'sage'].includes(r.agent)) {
+          agentResponses[r.agent] = r.response;
+          renderAgentCard(r.agent, r.response);
+        }
+      });
+      statusText.textContent = 'Loaded — ask a follow-up';
+      statusText.className = 'text-runed-gold';
+      saveChamberState();
+    } catch (e) {
+      console.warn('Failed to restore deliberation:', e);
+      statusText.textContent = 'Ready';
+      statusText.className = 'text-runed-gold';
+    }
+  }
+
+  function handleMessage(msg) {
+    switch (msg.type) {
+      case 'deliberation_started':
+        currentDeliberationId = msg.deliberation_id;
+        queryCount++;
+        statusTopic.textContent = msg.query.slice(0, 60);
+        statusText.textContent = 'Deliberating...';
+        statusText.className = 'text-runed-gold animate-pulse';
+        if (queryCount > 1) {
+          // Add divider for follow-up queries (item 3)
+          const div = document.createElement('div');
+          div.className = 'query-divider';
+          div.innerHTML = `<span class="text-neutral-gray font-pixel-small text-pixel-small uppercase">Follow-up Query #${queryCount}</span><br><span class="text-parchment response-body">${escapeHtml(msg.query)}</span>`;
+          document.getElementById('response-area').appendChild(div);
+        } else {
+          document.getElementById('response-area').innerHTML = '';
+          Object.keys(agentResponses).forEach(k => delete agentResponses[k]);
+        }
+        renderSkeletonCards();
+        saveChamberState();
+        break;
+
+      case 'agent_update':
+        if (msg.status === 'thinking') {
+          const el = document.getElementById(`arc-${msg.agent}`); if (el) el.classList.add('animate-pulse');
+          updateSkeletonCard(msg.agent, 'thinking');
+        } else if (msg.status === 'done') {
+          const el = document.getElementById(`arc-${msg.agent}`); if (el) el.classList.remove('animate-pulse');
+          agentResponses[msg.agent] = msg.response;
+          removeSkeletonCard(msg.agent);
+          renderAgentCard(msg.agent, msg.response);
+          saveChamberState();
+        } else if (msg.status === 'failed') {
+          agentResponses[msg.agent] = null; removeSkeletonCard(msg.agent); renderErrorCard(msg.agent, msg.message || 'Failed');
+        } else if (msg.status === 'progress') { updateSkeletonCard(msg.agent, 'progress', msg.message); }
+        break;
+
+      case 'router_update': statusRound.textContent = String(queryCount); break;
+
+      case 'moderator_summary':
+        agentResponses['moderator'] = msg.content;
+        renderModeratorSummary(msg.content, msg.post_critique);
+        saveChamberState();
+        if (msg.post_critique) {
+          statusText.textContent = msg.should_critique ? `Critique round continuing...` : 'Synthesis updated after critique';
+          statusText.className = msg.should_critique ? 'text-warning' : 'text-success';
+        } else if (msg.should_critique) {
+          statusText.textContent = `Critique round (${msg.unresolved_conflicts?.length || 0} conflicts)...`;
+        }
+        break;
+
+      case 'critique_round': renderCritiqueRound(msg.round, msg.critiques); break;
+
+
+      case 'deliberation_complete':
+        // Item 3: Don't auto-show verdict, allow continuous chat
+        statusText.textContent = 'Complete — ask follow-up or deliver verdict';
+        statusText.className = 'text-success';
+        renderVerdictButtons();
+        // Item 4: clear the query text now that agents have responded
+        document.getElementById('deliberation-input').value = '';
+        saveChamberState();
+        if (window.electronAPI?.showNotification) window.electronAPI.showNotification({ title: 'Deliberation Complete', body: 'The council has responded. Continue chatting or deliver your verdict.' });
+        break;
+
+      case 'error': statusText.textContent = 'Error: ' + msg.message; statusText.className = 'text-error'; break;
+    }
+  }
+
+  function renderSkeletonCards() {
+    const area = document.getElementById('response-area');
+    ['oracle','rag','sage'].forEach(agent => {
+      const c = AGENT_COLORS[agent];
+      if (document.getElementById(`skeleton-${agent}`)) return;
+      const card = document.createElement('div');
+      card.className = `bg-obsidian border-2 border-${c.border} p-4 mb-3 relative opacity-70`; card.id = `skeleton-${agent}`;
+      card.innerHTML = `<div class="flex items-center gap-2 border-b border-surface-variant pb-2 mb-2"><span class="material-symbols-outlined text-${c.text}">${c.icon}</span><span class="font-pixel-heading text-pixel-heading text-${c.text} uppercase">${AGENT_LABELS[agent]}</span><span class="ml-auto text-${c.text}/60 text-pixel-small" id="skel-status-${agent}">summoning...</span></div><div class="space-y-2 animate-pulse"><div class="h-4 bg-surface-container-highest rounded w-full"></div><div class="h-4 bg-surface-container-highest rounded w-3/4"></div><div class="h-4 bg-surface-container-highest rounded w-5/6"></div></div>`;
+      area.appendChild(card);
+    });
+  }
+  function updateSkeletonCard(a,s,m) { const e=document.getElementById(`skel-status-${a}`); if(e) e.textContent=s==='thinking'?'thinking...':(m||'working...'); }
+  function removeSkeletonCard(a) { const e=document.getElementById(`skeleton-${a}`); if(e) e.remove(); }
+
+  function renderErrorCard(agent, message) {
+    const area = document.getElementById('response-area');
+    const card = document.createElement('div'); card.className='bg-obsidian border-2 border-error p-4 mb-3'; card.id=`card-${agent}`;
+    card.innerHTML=`<div class="flex items-center gap-2 border-b border-error/30 pb-2 mb-2"><span class="material-symbols-outlined text-error">error</span><span class="font-pixel-heading text-pixel-heading text-error uppercase">${AGENT_LABELS[agent]}</span></div><p class="response-body text-parchment">${escapeHtml(message)}</p>`;
+    area.appendChild(card); scrollContainer.scrollTop = scrollContainer.scrollHeight;
+  }
+
+  function renderAgentCard(agent, data) {
+    const area = document.getElementById('response-area');
+    const c = AGENT_COLORS[agent] || AGENT_COLORS.sage;
+    const pct = Math.round((data.confidence||0)*100);
+    let body = '';
+
+    if (agent==='oracle') {
+      body += `<p class="response-body text-parchment mb-3">${escapeHtml(data.verdict||'')}</p>`;
+      if (data.claims?.length) body += `<div class="response-detail mb-3"><span class="text-${c.text} uppercase font-bold block mb-1">Claims (from OKF bundle):</span>${data.claims.map(cl=>`<div class="mb-1"><span class="text-${c.text}">*</span> <strong>${escapeHtml(cl.text)}</strong> <em class="text-neutral-gray">(${cl.evidence_type||'documented'})</em>${cl.sources?.length?` <span class="text-neutral-gray text-pixel-small">[${cl.sources.map(s=>escapeHtml(s)).join(', ')}]</span>`:''}</div>`).join('')}</div>`;
+      if (data.uncertainties?.length) body += `<div class="response-detail mb-3 text-neutral-gray"><span class="uppercase font-bold block mb-1">Uncertainties:</span>${data.uncertainties.map(u=>`* ${escapeHtml(u)}`).join('<br>')}</div>`;
+      if (data.insufficient_data) body += `<div class="response-detail mb-3 text-warning"><em>Insufficient data in the knowledge bundle for full coverage.</em></div>`;
+    } else if (agent==='rag') {
+      body += `<div class="markdown-body mb-3">${renderMarkdown(data.answer||'')}</div>`;
+      if (data.citations?.length) body += `<div class="response-detail mb-3"><span class="text-${c.text} uppercase font-bold block mb-1">Sources (${data.citations.length}):</span>${data.citations.map(ci=>{const tier=ci.trust_tier||'unknown';const tierColor={'peer_reviewed':'success','preprint':'success','web_primary':'spectral-blue','web_secondary':'neutral-gray','ai_summary':'warning','curated':'runed-gold'}[tier]||'neutral-gray';return `<div class="mb-1"><span class="border border-${tierColor}/40 text-${tierColor} px-1 text-[10px] uppercase rounded">${escapeHtml(tier)}</span> <strong>${escapeHtml(ci.title||'Unknown')}</strong>${ci.source_url?` <a href="${escapeHtml(ci.source_url)}" target="_blank" class="text-spectral-blue underline text-pixel-small">link</a>`:''}</div>`;}).join('')}</div>`;
+      if (data.trust_summary) body += `<div class="response-detail mb-2 text-neutral-gray"><em>${escapeHtml(data.trust_summary)}</em></div>`;
+      if (data.gaps?.length) body += `<div class="response-detail mb-3 text-warning"><span class="uppercase font-bold block mb-1">Knowledge Gaps:</span>${data.gaps.map(g=>`* ${escapeHtml(g)}`).join('<br>')}</div>`;
+      if (data.insufficient_data) body += `<div class="response-detail mb-3 text-warning"><em>No relevant knowledge found in the retrieval systems.</em></div>`;
+    } else if (agent==='sage') {
+      body += `<p class="response-body text-parchment mb-3">${escapeHtml(data.synthesis||'')}</p>`;
+      if (data.analogies?.length) body += `<div class="response-detail mb-3"><span class="text-${c.text} uppercase font-bold block mb-1">Analogies:</span>${data.analogies.map(a=>`<div>* <strong class="text-${c.text}">${escapeHtml(a.domain)}</strong>: ${escapeHtml(a.concept)} &rarr; ${escapeHtml(a.application)}</div>`).join('')}</div>`;
+      if (data.ethical_dimensions?.length) body += `<div class="response-detail mb-3 text-parchment"><span class="uppercase font-bold block mb-1">Ethics:</span>${data.ethical_dimensions.map(e=>`* ${escapeHtml(e)}`).join('<br>')}</div>`;
+    } else { body = `<pre class="response-body text-parchment overflow-x-auto">${escapeHtml(JSON.stringify(data,null,2))}</pre>`; }
+
+    const card = document.createElement('div');
+    card.className = `bg-obsidian border-2 border-${c.border} p-4 mb-3 shadow-[0_0_10px_rgba(0,0,0,0.3)]`; card.id = `card-${agent}`;
+    card.innerHTML = `<div class="flex items-center gap-2 border-b border-surface-variant pb-2 mb-3"><span class="material-symbols-outlined text-${c.text}">${c.icon}</span><span class="font-pixel-heading text-pixel-heading text-${c.text} uppercase">${AGENT_LABELS[agent]}</span><span class="text-pixel-small font-pixel-small text-${c.text}/60 ml-auto">${data.reasoning_type||''}</span></div>${body}<div class="flex items-center gap-3 border-t border-surface-variant pt-2 mt-3"><span class="text-surface-tint font-pixel-small text-pixel-small uppercase">Confidence</span><div class="flex-1 h-3 bg-surface-container-highest border-2 border-neutral-gray flex p-[2px]"><div class="h-full bg-${c.text} transition-all duration-500" style="width:${pct}%"></div></div><span class="text-${c.text} font-pixel-small text-pixel-small">${pct}%</span></div>`;
+    area.appendChild(card); scrollContainer.scrollTop = scrollContainer.scrollHeight;
+  }
+
+  function renderModeratorSummary(data, postCritique) {
+    const area = document.getElementById('response-area');
+    const align = (data.alignment || 'medium').toLowerCase();
+    const alignMeta = { high: {c:'success', t:'High alignment'}, medium: {c:'warning', t:'Medium alignment'}, low: {c:'error', t:'Low alignment'} }[align] || {c:'warning', t:'Medium alignment'};
+    const spread = data.comparison?.signals?.confidence_spread;
+    const title = postCritique ? 'Moderator Synthesis — Updated (post-critique)' : 'Moderator Synthesis';
+    const titleIcon = postCritique ? 'autorenew' : 'gavel';
+    let html = '';
+    if (data.conflicts?.length) { html += '<div class="mt-2 space-y-2">'; data.conflicts.forEach(c=>{
+      const factual = (c.severity||'').toLowerCase()==='factual';
+      const sevColor = factual ? 'error' : 'warning';
+      const sevLabel = factual ? 'Factual' : 'Nuance';
+      html+=`<div class="bg-${sevColor}/10 border border-${sevColor}/30 p-2 response-detail text-parchment"><span class="text-${sevColor}">Conflict:</span> ${escapeHtml(c.topic)} <span class="border border-${sevColor}/40 text-${sevColor} px-1 text-[10px] uppercase rounded">${sevLabel}</span> <span class="text-on-surface-variant">(${escapeHtml(c.status)})</span></div>`;
+    }); html+='</div>'; }
+    if (data.agreements?.length) { html += '<div class="mt-2 space-y-1">'; data.agreements.forEach(a=>{html+=`<div class="bg-success/10 border border-success/30 p-2 response-detail text-parchment"><span class="text-success">Agreement:</span> ${escapeHtml(a.topic)} <span class="text-neutral-gray">(${a.agents?.join(', ')||''})</span></div>`;}); html+='</div>'; }
+    if (data.decision_space?.length) { html += '<div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">'; data.decision_space.forEach(d=>{html+=`<div class="bg-surface-container-low border border-neutral-gray p-2 text-center"><div class="font-pixel-heading text-pixel-small text-runed-gold uppercase">${escapeHtml(d.label)}</div><div class="response-detail text-parchment mt-1">${escapeHtml(d.action)}</div><div class="font-pixel-small text-pixel-small text-neutral-gray">Risk: ${escapeHtml(d.risk)}</div></div>`;}); html+='</div>'; }
+    const card = document.createElement('div');
+    card.className='bg-obsidian border-2 border-mystic-purple p-4 mb-3 shadow-[0_0_15px_rgba(155,89,182,0.15)]'; card.id='card-moderator';
+    card.innerHTML=`<div class="flex items-center gap-2 border-b border-surface-variant pb-2 mb-2"><span class="material-symbols-outlined text-mystic-purple">${titleIcon}</span><span class="font-pixel-heading text-pixel-heading text-mystic-purple uppercase">${title}</span><span class="ml-auto flex items-center gap-1 border border-${alignMeta.c}/40 text-${alignMeta.c} px-2 py-0.5 text-[11px] uppercase rounded"><span class="material-symbols-outlined" style="font-size:14px">${align==='high'?'check_circle':(align==='low'?'error':'balance')}</span>${alignMeta.t}${spread!=null?` · Δ${Math.round(spread*100)}%`:''}</span></div>${html}`;
+    area.appendChild(card); scrollContainer.scrollTop = scrollContainer.scrollHeight;
+  }
+
+  function renderCritiqueRound(round, critiques) {
+    const area = document.getElementById('response-area');
+    const card = document.createElement('div'); card.className='bg-surface-container-low border border-warning/50 p-3 mb-3';
+    const stanceColor = { hold: 'warning', revise: 'spectral-blue', concede: 'success' };
+    let inner = `<div class="flex items-center gap-2 mb-2"><span class="material-symbols-outlined text-warning">sync_problem</span><span class="font-pixel-heading text-pixel-small text-warning uppercase">Critique Round ${round}</span></div>`;
+    const list = critiques || [];
+    if (!list.length) {
+      inner += `<p class="response-detail text-neutral-gray">No critique exchanges.</p>`;
+    } else {
+      list.forEach(c => {
+        const resolved = c.resolved;
+        const tag = resolved ? '<span class="text-success">(resolved)</span>' : '<span class="text-warning">(still unresolved)</span>';
+        inner += `<div class="mb-2 border-l-2 border-warning/40 pl-2"><div class="font-pixel-small text-pixel-small uppercase text-neutral-gray mb-1">${escapeHtml(c.topic||'')} ${tag}</div>`;
+        (c.critiques||[]).forEach(cr => {
+          const sc = stanceColor[cr.stance] || 'warning';
+          const revised = cr.revised ? ` &rarr; <span class="text-parchment">${escapeHtml(cr.revised)}</span>` : '';
+          inner += `<div class="response-detail text-parchment mt-1"><span class="border border-${sc}/40 text-${sc} px-1 text-[10px] uppercase rounded mr-1">${escapeHtml(cr.stance||'hold')}</span><strong>${escapeHtml(cr.from)}:</strong> ${escapeHtml(cr.text||'')}${revised}</div>`;
+        });
+        if (c.note) inner += `<div class="font-pixel-small text-pixel-small text-neutral-gray mt-1">${escapeHtml(c.note)}</div>`;
+        inner += `</div>`;
+      });
+    }
+    card.innerHTML = inner;
+    area.appendChild(card); scrollContainer.scrollTop = scrollContainer.scrollHeight;
+  }
+
+  function renderVerdictButtons() {
+    const area = document.getElementById('response-area');
+    const existing = document.getElementById('verdict-card'); if (existing) existing.remove();
+    const card = document.createElement('div'); card.className='bg-surface-container border-2 border-runed-gold p-4 mb-3'; card.id='verdict-card';
+    card.innerHTML=`<div class="flex items-center gap-2 mb-3"><span class="material-symbols-outlined text-runed-gold">how_to_vote</span><span class="font-pixel-heading text-pixel-heading text-runed-gold uppercase">Deliver Verdict (optional)</span></div><div class="flex flex-wrap gap-2" id="verdict-buttons"></div>`;
+    area.appendChild(card);
+    const bc = card.querySelector('#verdict-buttons');
+    ['oracle','rag','sage'].forEach(a=>{if(!agentResponses[a])return;const c=AGENT_COLORS[a];const b=document.createElement('button');b.className=`bg-obsidian border-2 border-${c.border} text-${c.text} response-detail px-4 py-2 hover:bg-${c.border}/10 transition-colors`;b.textContent=`Accept ${AGENT_LABELS[a]}`;b.onclick=()=>submitVerdict(a,'accepted');bc.appendChild(b);});
+    const ob=document.createElement('button');ob.className='bg-obsidian border-2 border-runed-gold text-runed-gold response-detail px-4 py-2 hover:bg-runed-gold/10 transition-colors';ob.textContent='Use My Own Answer';ob.onclick=()=>{const i=document.getElementById('deliberation-input');if(i.value.trim())submitVerdict(null,'overridden',i.value);};bc.appendChild(ob);
+    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+  }
+
+  function submitVerdict(chosenAgent, verdictType, override) {
+    if (!ws || ws.readyState!==WebSocket.OPEN || !currentDeliberationId) return;
+    const p = { type:'verdict', deliberation_id:currentDeliberationId, verdict_type:verdictType };
+    if (chosenAgent) p.chosen_agent = chosenAgent;
+    if (override) p.user_override = override;
+    ws.send(JSON.stringify(p));
+    statusText.textContent = `Verdict: ${verdictType}`; statusText.className='text-success';
+  }
+
+  // Submit handler — item 3: continuous chat, item 5: target agent
+  // Item 4: keep query text in input until agents respond
+  document.getElementById('deliberation-submit').onclick = () => {
+    const input = document.getElementById('deliberation-input');
+    const query = input.value.trim();
+    if (!query || !ws || ws.readyState!==WebSocket.OPEN) return;
+    const payload = { type:'query', content:query };
+    const provider = document.getElementById('provider-selector').value;
+    payload.provider = provider;
+    if (selectedAgent !== 'all') payload.target_agent = selectedAgent;
+    ws.send(JSON.stringify(payload));
+    // Don't clear input — keep query visible until agents respond
+  };
+
+  document.getElementById('deliberation-input').addEventListener('keydown', (e) => {
+    if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('deliberation-submit').click(); }
+  });
+
+  document.getElementById('new-inquiry-btn').onclick = () => {
+    clearChamberState();
+    document.getElementById('response-area').innerHTML = `<div class="bg-obsidian border-2 border-neutral-gray p-6 text-center"><span class="material-symbols-outlined text-[48px] text-neutral-gray mx-auto block mb-2">forum</span><p class="font-pixel-heading text-pixel-heading text-neutral-gray">Submit an inquiry to begin deliberation</p><p class="font-pixel-body text-pixel-body text-on-surface-variant mt-1">The council awaits your question.</p></div>`;
+    Object.keys(agentResponses).forEach(k=>delete agentResponses[k]);
+    currentDeliberationId = null; queryCount = 0;
+    statusText.textContent='Ready'; statusText.className='text-runed-gold';
+    statusTopic.textContent='Awaiting inquiry...'; statusRound.textContent='0';
+    closeThinking();
+    document.getElementById('deliberation-input').value = '';
+    document.getElementById('deliberation-input').focus();
+  };
+})();
+</script>
 </body></html>

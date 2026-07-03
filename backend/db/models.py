@@ -118,3 +118,94 @@ class Document(Base):
     __table_args__ = (
         Index("idx_documents_embedding", "embedding", postgresql_using="ivfflat", postgresql_ops={"embedding": "vector_cosine_ops"}),
     )
+
+
+class RagChunk(Base):
+    """RAG chunk store — the raw/growing knowledge layer.
+
+    Stores structure-aware chunks with proper 384-dim embeddings (all-MiniLM-L6-v2)
+    and the full metadata schema from the RAG architecture spec (§3):
+    source_type, trust_tier, content_hash, supersedes, promoted_to_okf, etc.
+    """
+    __tablename__ = "rag_chunks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    # Content
+    chunk_text = Column(Text, nullable=False)
+    embedding = Column(Vector(384), nullable=True)
+
+    # Structure-aware chunking metadata
+    section = Column(String(512), nullable=True)
+    chunk_index = Column(Integer, nullable=False, default=0)
+    parent_chunk_id = Column(UUID(as_uuid=True), nullable=True)
+    parent_section_text = Column(Text, nullable=True)
+
+    # Source metadata (RAG spec §3)
+    source_type = Column(String(64), nullable=False, default="user_upload")
+    source_url = Column(Text, nullable=True)
+    title = Column(String(512), nullable=False, default="Untitled")
+    authors = Column(JSONB, nullable=True)
+    publish_date = Column(DateTime(timezone=True), nullable=True)
+
+    # Dedupe / versioning
+    content_hash = Column(String(64), nullable=False, index=True)
+    supersedes = Column(UUID(as_uuid=True), nullable=True)
+    superseded_by = Column(UUID(as_uuid=True), nullable=True)
+
+    # Trust + promotion
+    trust_tier = Column(String(32), nullable=False, default="web_secondary")
+    tags = Column(JSONB, nullable=True)
+    promoted_to_okf = Column(Boolean, nullable=False, default=False)
+    okf_concept_ref = Column(String(512), nullable=True)
+
+    # Original doc link (for provenance back to Runic Library)
+    source_doc_id = Column(UUID(as_uuid=True), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    last_seen = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("idx_rag_chunks_embedding", "embedding", postgresql_using="ivfflat", postgresql_ops={"embedding": "vector_cosine_ops"}),
+        Index("idx_rag_chunks_hash", "content_hash"),
+        Index("idx_rag_chunks_trust", "trust_tier"),
+    )
+
+
+class PromotionCandidate(Base):
+    """Promotion queue — the seam where raw RAG chunks graduate to curated OKF
+    concepts after review (spec §2.6, §4.5, §5).
+
+    A candidate is created when:
+      - Gap detection fires (same query hits vector fallback 3+ times, spec §4.5).
+      - A chunk is summarized during deliberation.
+      - Manually queued by the user.
+
+    Status flow: pending → approved (wrote OKF concept) | rejected (discarded).
+    """
+    __tablename__ = "rag_promotion_candidates"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    # The chunk being considered for promotion
+    chunk_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+
+    # Why it was queued
+    reason = Column(String(64), nullable=False, default="manual")
+    # Options: "gap_detection", "summarized", "manual"
+    trigger_query = Column(Text, nullable=True)
+
+    # Pre-generated summary (the candidate OKF concept body)
+    summary = Column(Text, nullable=True)
+
+    # Review state
+    status = Column(String(32), nullable=False, default="pending")
+    # Options: "pending", "approved", "rejected"
+    okf_concept_ref = Column(String(512), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("idx_promotion_status", "status"),
+    )

@@ -1,20 +1,40 @@
 (() => {
-  const port = window.electronAPI?.getBackendPort?.() || 8734;
-  window.COM_API_BASE = `http://localhost:${port}`;
+  window.COM_API_BASE = 'http://localhost:8734';
+
+  if (window.electronAPI?.getBackendPort) {
+    Promise.resolve(window.electronAPI.getBackendPort()).then(port => {
+      if (typeof port === 'number' && port > 0) {
+        window.COM_API_BASE = `http://localhost:${port}`;
+      }
+    }).catch(() => {});
+  }
 
   window.COM = {
     async api(path, opts = {}) {
       const url = `${window.COM_API_BASE}${path}`;
-      const res = await fetch(url, {
-        headers: { 'Content-Type': 'application/json', ...opts.headers },
-        ...opts
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`${res.status}: ${text}`);
+      let res;
+      try {
+        res = await fetch(url, {
+          headers: { 'Content-Type': 'application/json', ...opts.headers },
+          ...opts
+        });
+      } catch (netErr) {
+        throw new Error(`Cannot reach backend at ${window.COM_API_BASE} — is the server running? (${netErr.message || netErr})`);
       }
+      const raw = await res.text().catch(() => '');
+      // No-content responses: nothing to parse (prevents "Unexpected end of JSON input")
+      if (res.status === 204 || res.status === 205 || res.status === 304) return null;
+      if (!res.ok) {
+        let detail = raw;
+        try { const j = JSON.parse(raw); detail = j.detail || j.message || raw; } catch {}
+        throw new Error(`${res.status}: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+      }
+      if (!raw) return null;
       const contentType = res.headers.get('content-type') || '';
-      return contentType.includes('application/json') ? res.json() : res.text();
+      if (contentType.includes('application/json')) {
+        try { return JSON.parse(raw); } catch { return raw; }
+      }
+      return raw;
     },
 
     createSession: (title, topic) =>
@@ -23,12 +43,16 @@
         body: JSON.stringify({ title, topic })
       }),
 
-    listSessions: () => window.COM.api('/api/sessions'),
+    listSessions: (offset = 0, limit = 50) =>
+      window.COM.api(`/api/sessions?offset=${offset}&limit=${limit}`),
 
     getSession: (id) => window.COM.api(`/api/sessions/${id}`),
 
     archiveSession: (id) =>
       window.COM.api(`/api/sessions/${id}`, { method: 'DELETE' }),
+
+    listDeliberations: (sessionId) =>
+      window.COM.api(`/api/sessions/${sessionId}/deliberations`),
 
     startDeliberation: (sessionId, query) =>
       window.COM.api(`/api/sessions/${sessionId}/deliberate`, {
@@ -68,6 +92,8 @@
 
     listDocuments: () => window.COM.api('/api/documents'),
 
+    getDocument: (id) => window.COM.api(`/api/documents/${id}`),
+
     deleteDocument: (id) =>
       window.COM.api(`/api/documents/${id}`, { method: 'DELETE' }),
 
@@ -84,5 +110,26 @@
     health: () => window.COM.api('/api/health'),
 
     isReady: () => window.COM.api('/api/health/ready'),
+
+    getProviders: () => window.COM.api('/api/providers'),
+
+    switchProvider: (provider) =>
+      window.COM.api('/api/providers/switch', {
+        method: 'POST',
+        body: JSON.stringify({ provider }),
+      }),
+
+    divination: (query, provider = 'glm') =>
+      fetch(`${window.COM_API_BASE}/api/divination/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, provider }),
+      }).then(r => r.ok ? r.json() : Promise.reject(r)),
+
+    saveDivination: (data) =>
+      window.COM.api('/api/divination/save', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
   };
 })();

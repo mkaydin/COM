@@ -3,6 +3,7 @@ from config import get_settings
 from logging_config import get_logger
 from agents.schemas import QueryClassification
 from agents.prompts import ROUTER_SYSTEM_PROMPT
+from agents.json_utils import extract_json
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -10,25 +11,27 @@ settings = get_settings()
 
 async def router_node(state: dict) -> dict:
     query = state.get("user_query", "")
+    provider = state.get("provider", "lm_studio")
     logger.info("router_classifying", query=query[:100])
 
+    if provider == "lm_studio":
+        from agents.prompts import LOCAL_ROUTER_PROMPT
+        system_content = LOCAL_ROUTER_PROMPT
+        max_tok = 512
+    else:
+        system_content = ROUTER_SYSTEM_PROMPT
+        max_tok = 4096
+
     messages = [
-        {"role": "system", "content": ROUTER_SYSTEM_PROMPT},
+        {"role": "system", "content": system_content},
         {"role": "user", "content": f"Classify this query:\n\n{query}"}
     ]
 
     try:
-        response = completion(
-            model=settings.llm_model,
-            messages=messages,
-            temperature=0.2,
-            max_tokens=256,
-        )
+        from config import llm_complete
+        response = await llm_complete(messages, temperature=0.2, max_tokens=max_tok, provider=provider)
         raw = response.choices[0].message.content
-
-        import json, re
-        json_match = re.search(r'\{[\s\S]*\}', raw)
-        data = json.loads(json_match.group(0)) if json_match else {}
+        data = extract_json(raw)
         classification = QueryClassification(**data)
     except Exception as e:
         logger.error("router_failed", error=str(e))

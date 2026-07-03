@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from uuid import UUID, uuid4
+from datetime import datetime
 
 from db.postgres import get_db
 from db.models import Document
@@ -17,7 +18,7 @@ class DocumentResponse(BaseModel):
     id: UUID
     title: str
     source_type: Optional[str]
-    created_at: str
+    created_at: datetime
     model_config = {"from_attributes": True}
 
 
@@ -37,7 +38,7 @@ async def list_documents(
     limit: int = 50,
     db: AsyncSession = Depends(get_db)
 ):
-    query = select(Document).order_by(Document.created_at.desc()).limit(limit)
+    query = select(Document).where(~Document.source_type.endswith('_chunk')).order_by(Document.created_at.desc()).limit(limit)
     if source_type:
         query = query.where(Document.source_type == source_type)
     result = await db.execute(query)
@@ -55,6 +56,22 @@ async def search_documents(q: str = "", db: AsyncSession = Depends(get_db)):
     return result.scalars().all()
 
 
+@router.get("/{document_id}")
+async def get_document(document_id: UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Document).where(Document.id == document_id))
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {
+        "id": str(doc.id),
+        "title": doc.title,
+        "content": doc.content,
+        "source_type": doc.source_type,
+        "created_at": str(doc.created_at),
+        "metadata": doc.metadata_json,
+    }
+
+
 @router.delete("/{document_id}", status_code=204)
 async def delete_document(document_id: UUID, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Document).where(Document.id == document_id))
@@ -68,26 +85,75 @@ async def delete_document(document_id: UUID, db: AsyncSession = Depends(get_db))
 
 @router.post("/upload", status_code=201)
 async def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db)
 ):
-    """Upload a file for RAG ingestion. Supports multiple files via repeated 'file' fields."""
-    content = await file.read()
-    text = content.decode("utf-8", errors="replace")
+    """Upload a file for ingestion. Triggers RAG + GraphRAG pipelines in background."""
+    import tempfile, os
+
+    raw = await file.read()
+    filename = file.filename or "Untitled"
+    ext = os.path.splitext(filename)[1].lower()
+
+    text = ""
+    if ext == ".pdf":
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(raw)
+            tmp_path = tmp.name
+        try:
+            from ingestion.parser import _parse_pdf
+            from pathlib import Path
+            pages = _parse_pdf(Path(tmp_path))
+            text = "\n\n".join(p["text"] for p in pages) if pages else ""
+            if not text:
+                text = raw.decode("utf-8", errors="replace")
+        finally:
+            os.unlink(tmp_path)
+    else:
+        text = raw.decode("utf-8", errors="replace")
+
+    text = text[:100000]
+    text = text.replace("\x00", "").replace("\ufffd", "")
 
     doc = Document(
         id=uuid4(),
-        title=file.filename or "Untitled",
-        content=text[:100000],
+        title=filename,
+        content=text,
         source_type="user_upload",
         file_path=None,
-        metadata_json={"size_bytes": len(content), "content_type": file.content_type},
+        metadata_json={"size_bytes": len(raw), "content_type": file.content_type, "pages": ext == ".pdf", "ingestion_status": "pending"},
     )
     db.add(doc)
     await db.commit()
     await db.refresh(doc)
-    logger.info("document_uploaded", document_id=str(doc.id), title=doc.title)
-    return {"id": str(doc.id), "title": doc.title, "status": "uploaded"}
+    logger.info("document_uploaded", document_id=str(doc.id), title=doc.title, chars=len(text))
+
+    background_tasks.add_task(
+        _run_ingestion,
+        str(doc.id),
+        doc.title,
+        text,
+    )
+
+    return {"id": str(doc.id), "title": doc.title, "status": "uploaded", "chars": len(text), "ingestion": "processing in background"}
+
+
+async def _run_ingestion(doc_id: str, title: str, text: str):
+    """Run RAG + GraphRAG ingestion in background."""
+    try:
+        from ingestion.embedder import ingest_document
+        await ingest_document(doc_id, title, text, "user_upload")
+        logger.info("rag_ingestion_complete", doc_id=doc_id)
+    except Exception as e:
+        logger.error("rag_ingestion_failed", doc_id=doc_id, error=str(e))
+
+    try:
+        from ingestion.graph_extractor import ingest_to_graph
+        await ingest_to_graph(doc_id, title, text[:4000])
+        logger.info("graph_ingestion_complete", doc_id=doc_id)
+    except Exception as e:
+        logger.error("graph_ingestion_failed", doc_id=doc_id, error=str(e))
 
 
 @router.post("/save-scout-report", status_code=201)

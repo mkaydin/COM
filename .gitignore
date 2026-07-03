@@ -1,48 +1,78 @@
-# Python
+# ===== Python =====
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
-dist/
 *.egg
+dist/
+build/
 .venv/
+.venv*/
+env/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+*.so
 
-# Node
+# ===== Node =====
 node_modules/
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# Build artifacts
+# ===== Secrets / environment =====
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# ===== Electron / desktop build output =====
 desktop/dist/
 desktop/out/
+release/
+*.app
+*.exe
+*.AppImage
+*.deb
+*.snap
+*.dmg
 
-# Secrets
-.env
-*.env.local
-*.env.production
-!backend/.env.example
+# ===== Large / vendored data (not app source) =====
+# Ingestion corpus & external OKF reference repo — re-clone or regenerate locally.
+raw_data/
+google-okf/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-logs/
-
-# Docker volumes
+# ===== Docker volumes =====
 docker/pgdata/
 docker/neo4jdata/
 docker/neo4jlogs/
 docker/chromadata/
 
-# Electron Store
-config.json
+# ===== Logs =====
+*.log
+logs/
+# (the backend also logs to an absolute /tmp path outside the repo)
 
-# Temp
-/tmp/com-logs/
+# ===== IDE / editors =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+*.sublime-project
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+.directory
+desktop.ini
+
+# ===== Misc local state =====
+config.json

@@ -4,6 +4,7 @@ from config import get_settings
 from logging_config import get_logger
 from agents.schemas import HistorianResponse
 from agents.prompts import HISTORIAN_SYSTEM_PROMPT
+from agents.json_utils import schema_for_prompt, extract_json
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -46,32 +47,39 @@ async def historian_node(state: dict) -> dict:
     documents = await _retrieve_documents(query)
 
     context_block = ""
+    citation_map = {}
     if documents:
-        context_block = "\n\nRETRIEVED DOCUMENTS:\n" + "\n".join(
-            f"- [{d['doc_id'][:8]}...] {d['title']}: {d['excerpt'][:200]} (relevance: {d['relevance']:.2f})"
-            for d in documents
-        )
+        context_block = "\n\nRETRIEVED EVIDENCE (cite each source by its [E#] ID in your claims):\n"
+        for i, d in enumerate(documents):
+            eid = f"E{i+1}"
+            citation_map[eid] = {"doc_id": d["doc_id"], "title": d["title"], "relevance": d["relevance"]}
+            context_block += f"[{eid}] {d['title']} (relevance: {d['relevance']:.2f})\n    \"{d['excerpt'][:300]}\"\n"
     else:
-        context_block = "\n\nRETRIEVED DOCUMENTS: (none available — no documents in ChromaDB yet)"
+        context_block = "\n\nRETRIEVED EVIDENCE: (none available — no documents in library)"
 
     messages = [
-        {"role": "system", "content": HISTORIAN_SYSTEM_PROMPT},
-        {"role": "user", "content": f"Answer this query using the provided evidence sources. Output HistorianResponse JSON.\n\nQUERY: {query}{context_block}"}
+        {"role": "system", "content": HISTORIAN_SYSTEM_PROMPT + schema_for_prompt(HistorianResponse)},
+        {"role": "user", "content": f"Answer this query using ONLY the provided evidence. Each claim MUST include a 'sources' list referencing the evidence IDs (e.g. [\"E1\", \"E3\"]). If no evidence is available, set insufficient_data=true.\n\nQUERY: {query}{context_block}"}
     ]
 
     try:
-        response = completion(
-            model=settings.llm_model,
-            messages=messages,
-            temperature=0.3,
-            max_tokens=2048,
-        )
+        from config import llm_complete
+        response = await llm_complete(messages, temperature=0.3, max_tokens=4096, provider=provider)
         raw = response.choices[0].message.content
+        _reasoning = getattr(response, 'reasoning', '')
+        data = extract_json(raw)
 
-        json_match = re.search(r'\{[\s\S]*\}', raw)
-        data = json.loads(json_match.group(0)) if json_match else {}
+        for claim in data.get("claims", []):
+            srcs = claim.get("sources", [])
+            if isinstance(srcs, list):
+                claim["sources"] = [
+                    citation_map.get(s, {"title": s}) if isinstance(s, str) else s
+                    for s in srcs
+                ]
+
         historian_output = HistorianResponse(**data)
     except Exception as e:
+        _reasoning = ""
         logger.error("historian_llm_failed", error=str(e))
         historian_output = HistorianResponse(
             confidence=0.0,
@@ -81,4 +89,6 @@ async def historian_node(state: dict) -> dict:
         )
 
     logger.info("historian_complete", confidence=historian_output.confidence)
-    return {"historian_response": historian_output.model_dump()}
+    _result = historian_output.model_dump()
+    _result["_reasoning"] = _reasoning
+    return {"historian_response": _result}

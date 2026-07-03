@@ -1,72 +1,112 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import Optional
 from uuid import UUID, uuid4
 
 from db.postgres import get_db
-from db.models import Deliberation, Verdict
+from db.models import Verdict, Deliberation, AgentResponse
 from logging_config import get_logger
 
 router = APIRouter(prefix="/api/verdicts", tags=["verdicts"])
 logger = get_logger(__name__)
 
 
-class VerdictSubmit(BaseModel):
-    deliberation_id: UUID
-    chosen_agent: Optional[str] = Field(default=None)
-    chosen_response_id: Optional[UUID] = Field(default=None)
-    user_override: Optional[str] = Field(default=None, max_length=10000)
-
-
-class VerdictResponse(BaseModel):
-    id: UUID
-    deliberation_id: UUID
-    chosen_response_id: Optional[UUID] = None
+class VerdictCreate(BaseModel):
+    deliberation_id: str
+    chosen_agent: Optional[str] = None
     user_override: Optional[str] = None
-    verdict_type: str
-    created_at: str
-
-    model_config = {"from_attributes": True}
+    verdict_type: str = "accepted"
 
 
-@router.post("", response_model=VerdictResponse, status_code=201)
-async def submit_verdict(body: VerdictSubmit, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Deliberation).where(Deliberation.id == body.deliberation_id))
+@router.post("", status_code=201)
+async def submit_verdict(body: VerdictCreate, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Deliberation).where(Deliberation.id == UUID(body.deliberation_id))
+    )
     deliberation = result.scalar_one_or_none()
     if not deliberation:
         raise HTTPException(status_code=404, detail="Deliberation not found")
 
-    verdict_type = "overridden" if body.user_override else "accepted"
+    chosen_response_id = None
+    if body.chosen_agent:
+        resp_result = await db.execute(
+            select(AgentResponse)
+            .where(AgentResponse.deliberation_id == body.deliberation_id)
+            .where(AgentResponse.agent_name == body.chosen_agent)
+            .limit(1)
+        )
+        agent_resp = resp_result.scalar_one_or_none()
+        if agent_resp:
+            chosen_response_id = agent_resp.id
 
     verdict = Verdict(
-        id=uuid4(),
-        deliberation_id=body.deliberation_id,
-        chosen_response_id=body.chosen_response_id,
+        id=str(uuid4()),
+        deliberation_id=UUID(body.deliberation_id),
+        chosen_response_id=chosen_response_id,
         user_override=body.user_override,
-        verdict_type=verdict_type,
+        verdict_type=body.verdict_type,
     )
-
-    existing = await db.execute(
-        select(Verdict).where(Verdict.deliberation_id == body.deliberation_id)
-    )
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Verdict already exists for this deliberation")
-
     db.add(verdict)
+
+    deliberation.status = "completed"
     await db.commit()
     await db.refresh(verdict)
-    logger.info("verdict_submitted", deliberation_id=str(body.deliberation_id), type=verdict_type)
-    return verdict
+
+    # Gather agent summaries for the OKF filing (run before returning).
+    query = deliberation.query or ""
+    agent_rows = (await db.execute(
+        select(AgentResponse).where(AgentResponse.deliberation_id == body.deliberation_id)
+    )).scalars().all()
+    agent_summaries = {
+        r.agent_name: (r.response_data or {}).get("verdict", "")
+        or str((r.response_data or {}).get("consensus", ""))[:500]
+        for r in agent_rows
+    }
+
+    verdict_text = body.user_override or f"{body.verdict_type} (chosen: {body.chosen_agent or 'none'})"
+
+    async def _file_okf():
+        try:
+            from okf.bundle import file_deliberation, BUNDLE_ROOT
+            from okf.index import regenerate_indexes
+            res = file_deliberation(
+                deliberation_id=body.deliberation_id,
+                query=query,
+                verdict=verdict_text,
+                agent_summaries=agent_summaries,
+            )
+            await regenerate_indexes(BUNDLE_ROOT)
+            logger.info("okf_deliberation_filed", deliberation_id=body.deliberation_id, result=res)
+        except Exception as e:
+            logger.warning("okf_filing_failed", error=str(e))
+
+    background_tasks.add_task(_file_okf)
+
+    logger.info("verdict_submitted", deliberation_id=body.deliberation_id, verdict_type=body.verdict_type)
+    return {
+        "id": str(verdict.id),
+        "deliberation_id": body.deliberation_id,
+        "verdict_type": verdict.verdict_type,
+        "status": "saved",
+    }
 
 
-@router.get("/{deliberation_id}", response_model=VerdictResponse)
-async def get_verdict(deliberation_id: UUID, db: AsyncSession = Depends(get_db)):
+@router.get("/{deliberation_id}")
+async def get_verdict(deliberation_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(Verdict).where(Verdict.deliberation_id == deliberation_id)
+        select(Verdict).where(Verdict.deliberation_id == UUID(deliberation_id))
     )
     verdict = result.scalar_one_or_none()
     if not verdict:
-        raise HTTPException(status_code=404, detail="No verdict yet for this deliberation")
-    return verdict
+        raise HTTPException(status_code=404, detail="No verdict found for this deliberation")
+
+    return {
+        "id": str(verdict.id),
+        "deliberation_id": str(verdict.deliberation_id),
+        "chosen_response_id": str(verdict.chosen_response_id) if verdict.chosen_response_id else None,
+        "user_override": verdict.user_override,
+        "verdict_type": verdict.verdict_type,
+        "created_at": str(verdict.created_at),
+    }

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- rounded obsidian tile + gold ring (app brand) -->
+  <rect width="1024" height="1024" rx="220" fill="#1a1a2e"/>
+  <rect x="6" y="6" width="1012" height="1012" rx="216" fill="none" stroke="#ffd700" stroke-width="12" opacity="0.85"/>
+
+  <!-- account_balance style building (the menu/council glyph), solid gold -->
+  <g fill="#ffd700">
+    <!-- pediment (roof) -->
+    <polygon points="512,210 210,372 814,372"/>
+    <!-- architrave beam -->
+    <rect x="210" y="372" width="604" height="54"/>
+    <!-- columns (4) -->
+    <rect x="298" y="450" width="72" height="300"/>
+    <rect x="418" y="450" width="72" height="300"/>
+    <rect x="534" y="450" width="72" height="300"/>
+    <rect x="652" y="450" width="72" height="300"/>
+    <!-- base -->
+    <rect x="196" y="750" width="632" height="56"/>
+    <!-- step -->
+    <rect x="160" y="806" width="704" height="50"/>
+  </g>
+</svg>

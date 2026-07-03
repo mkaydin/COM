@@ -1,9 +1,15 @@
 (() => {
   window.COM = window.COM || {};
 
+  let _wsPort = 8734;
+  if (window.electronAPI?.getBackendPort) {
+    Promise.resolve(window.electronAPI.getBackendPort()).then(port => {
+      if (typeof port === 'number' && port > 0) _wsPort = port;
+    }).catch(() => {});
+  }
+
   window.COM.connectStream = function(sessionId, handlers = {}) {
-    const port = window.electronAPI?.getBackendPort?.() || 8734;
-    const url = `ws://localhost:${port}/ws/sessions/${sessionId}/stream`;
+    const url = `ws://localhost:${_wsPort}/ws/sessions/${sessionId}/stream`;
 
     let ws = null;
     let reconnectTimer = null;

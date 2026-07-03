@@ -123,6 +123,7 @@
       <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="council_chamber.html"><span class="material-symbols-outlined">castle</span>Chamber</a></li>
       <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="history.html"><span class="material-symbols-outlined">history</span>Archive</a></li>
       <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="runic_library.html"><span class="material-symbols-outlined">auto_stories</span>Runic Library</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="divination.html"><span class="material-symbols-outlined">auto_awesome</span>Divination</a></li>
       <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="council_rules.html"><span class="material-symbols-outlined">menu_book</span>Council Rules</a></li>
       <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="agent_profiles.html"><span class="material-symbols-outlined">people</span>Agent Profiles</a></li>
     </ul>
@@ -135,42 +136,37 @@
 <main class="flex-1 md:ml-64 bg-background min-h-[calc(100vh-64px)] pb-20 md:pb-0">
   <section class="w-full max-w-[1400px] mx-auto px-4 py-8 flex flex-col items-center text-center border-b-2 border-amber-900/20">
     <h1 class="font-pixel-display text-pixel-display text-runed-gold mb-4 drop-shadow-[4px_4px_0px_rgba(0,0,0,1)] text-[48px]">Council of Minds</h1>
-    <p class="font-pixel-heading text-pixel-heading text-parchment mb-6 max-w-2xl text-[28px]">Where AI Minds Deliberate</p>
-    <button class="bg-runed-gold text-obsidian px-6 py-3 font-pixel-heading text-pixel-heading border-2 border-obsidian hover:bg-parchment hover:border-runed-gold transition-all active:scale-95 shadow-[4px_4px_0_0_rgba(255,215,0,0.3)]" onclick="window.location.href='council_chamber.html'">Enter the Council</button>
+    <p class="font-pixel-heading text-pixel-heading text-parchment mb-3 max-w-2xl text-[28px]">Where AI Minds Deliberate</p>
+    <p class="font-pixel-body text-pixel-body text-on-surface-variant mb-6 max-w-2xl">Present a question and a council of specialized AI minds deliberates in parallel — each reasoning its own way, then the Moderator synthesizes their arguments into a clear decision space. You stay the judge.</p>
+    <button id="enter-council-btn" class="bg-runed-gold text-obsidian px-6 py-3 font-pixel-heading text-pixel-heading border-2 border-obsidian hover:bg-parchment hover:border-runed-gold transition-all active:scale-95 shadow-[4px_4px_0_0_rgba(255,215,0,0.3)] cursor-pointer">Enter the Council</button>
   </section>
 
   <section class="w-full max-w-[1400px] mx-auto px-4 py-8">
     <h2 class="font-pixel-heading text-pixel-heading text-center text-parchment mb-8 border-b-2 border-runed-gold inline-block pb-2 mx-auto block w-fit">Meet the Council</h2>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      <div class="bg-surface-container border-2 border-neutral-gray p-4 hover:scale-[1.02] transition-transform flex flex-col items-center text-center shadow-[4px_4px_0_0_rgba(127,140,141,0.2)]">
-        <div class="w-24 h-24 border-2 border-neutral-gray mb-2 bg-obsidian flex items-center justify-center"><span class="material-symbols-outlined text-[48px] text-neutral-gray">travel_explore</span></div>
-        <h3 class="font-pixel-heading text-pixel-heading text-neutral-gray">The Scout</h3>
-        <p class="font-pixel-small text-pixel-small text-on-surface-variant mt-1">Intelligence Operative</p>
-        <p class="font-pixel-body text-pixel-body text-parchment mt-2">Searches the web to detect emerging signals, track consensus, and deliver real-time external intelligence to the council.</p>
-      </div>
       <div class="bg-surface-container border-2 border-runed-gold p-4 hover:scale-[1.02] transition-transform flex flex-col items-center text-center shadow-[4px_4px_0_0_rgba(255,215,0,0.2)]">
-        <div class="w-24 h-24 border-2 border-runed-gold mb-2 bg-obsidian flex items-center justify-center"><span class="material-symbols-outlined text-[48px] text-runed-gold">history_edu</span></div>
-        <h3 class="font-pixel-heading text-pixel-heading text-runed-gold">The Historian</h3>
-        <p class="font-pixel-small text-pixel-small text-on-surface-variant mt-1">Keeper of Lore</p>
-        <p class="font-pixel-body text-pixel-body text-parchment mt-2">Draws upon vast archives of past events to provide context and precedent to the current deliberation.</p>
+        <div class="w-24 h-24 border-2 border-runed-gold mb-2 bg-obsidian flex items-center justify-center"><span class="material-symbols-outlined text-[48px] text-runed-gold">auto_awesome</span></div>
+        <h3 class="font-pixel-heading text-pixel-heading text-runed-gold">The Oracle</h3>
+        <p class="font-pixel-small text-pixel-small text-on-surface-variant mt-1">Seeker of Truth</p>
+        <p class="font-pixel-body text-pixel-body text-parchment mt-2">Grounds every answer in the structured knowledge bundle — citing evidence, surfacing claims, and flagging what it cannot verify.</p>
       </div>
-      <div class="bg-surface-container border-2 border-spectral-blue p-4 hover:scale-[1.02] transition-transform flex flex-col items-center text-center shadow-[4px_4px_0_0_rgba(135,206,235,0.2)]">
-        <div class="w-24 h-24 border-2 border-spectral-blue mb-2 bg-obsidian flex items-center justify-center"><span class="material-symbols-outlined text-[48px] text-spectral-blue">search</span></div>
-        <h3 class="font-pixel-heading text-pixel-heading text-spectral-blue">The Detective</h3>
-        <p class="font-pixel-small text-pixel-small text-on-surface-variant mt-1">Seeker of Facts</p>
-        <p class="font-pixel-body text-pixel-body text-parchment mt-2">Analyzes logic and hunts for inconsistencies in arguments, focusing purely on empirical evidence.</p>
+      <div class="bg-surface-container border-2 border-success p-4 hover:scale-[1.02] transition-transform flex flex-col items-center text-center shadow-[4px_4px_0_0_rgba(39,174,96,0.2)]">
+        <div class="w-24 h-24 border-2 border-success mb-2 bg-obsidian flex items-center justify-center"><span class="material-symbols-outlined text-[48px] text-success">library_books</span></div>
+        <h3 class="font-pixel-heading text-pixel-heading text-success">The Scholar</h3>
+        <p class="font-pixel-small text-pixel-small text-on-surface-variant mt-1">Keeper of Lore</p>
+        <p class="font-pixel-body text-pixel-body text-parchment mt-2">Retrieves verifiable knowledge from documents and past records, ranking every source by a trust tier before it speaks.</p>
       </div>
       <div class="bg-surface-container border-2 border-ember-glow p-4 hover:scale-[1.02] transition-transform flex flex-col items-center text-center shadow-[4px_4px_0_0_rgba(255,107,107,0.2)]">
         <div class="w-24 h-24 border-2 border-ember-glow mb-2 bg-obsidian flex items-center justify-center"><span class="material-symbols-outlined text-[48px] text-ember-glow">local_fire_department</span></div>
         <h3 class="font-pixel-heading text-pixel-heading text-ember-glow">The Sage</h3>
         <p class="font-pixel-small text-pixel-small text-on-surface-variant mt-1">Voice of Intuition</p>
-        <p class="font-pixel-body text-pixel-body text-parchment mt-2">Provides philosophical insights and considers the ethical implications of the council's decisions.</p>
+        <p class="font-pixel-body text-pixel-body text-parchment mt-2">Reasons by analogy and philosophy, weighing the ethical dimensions and the bigger picture the other minds may miss.</p>
       </div>
       <div class="bg-surface-container border-2 border-mystic-purple p-4 hover:scale-[1.02] transition-transform flex flex-col items-center text-center shadow-[4px_4px_0_0_rgba(155,89,182,0.2)]">
         <div class="w-24 h-24 border-2 border-mystic-purple mb-2 bg-obsidian flex items-center justify-center"><span class="material-symbols-outlined text-[48px] text-mystic-purple">gavel</span></div>
         <h3 class="font-pixel-heading text-pixel-heading text-mystic-purple">The Moderator</h3>
         <p class="font-pixel-small text-pixel-small text-on-surface-variant mt-1">Master of Rules</p>
-        <p class="font-pixel-body text-pixel-body text-parchment mt-2">Ensures civilized discourse, synthesizes arguments, and formally concludes the deliberation process.</p>
+        <p class="font-pixel-body text-pixel-body text-parchment mt-2">Synthesizes all arguments, maps the agreements and conflicts, and structures the decision space — but never decides for you.</p>
       </div>
     </div>
   </section>
@@ -214,4 +210,20 @@
 
 <script src="api.js"></script>
 <script src="ws.js"></script>
+<script>
+document.getElementById('enter-council-btn').onclick = async function() {
+  const btn = this;
+  btn.textContent = 'Opening Council...';
+  btn.disabled = true;
+  try {
+    const session = await window.COM.createSession('New Deliberation');
+    sessionStorage.setItem('com_session_id', session.id);
+    window.location.href = 'council_chamber.html';
+  } catch (e) {
+    console.error('Failed to create session:', e);
+    sessionStorage.setItem('com_session_id', '');
+    window.location.href = 'council_chamber.html';
+  }
+};
+</script>
 </body></html>

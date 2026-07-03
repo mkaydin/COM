@@ -83,6 +83,7 @@
       <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="council_chamber.html"><span class="material-symbols-outlined">castle</span>Chamber</a></li>
       <li><a class="sidebar-link active text-amber-400 border-l-3 border-amber-400 flex items-center px-4 py-3 gap-3 bg-amber-400/5" href="history.html"><span class="material-symbols-outlined">history</span>Archive</a></li>
       <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="runic_library.html"><span class="material-symbols-outlined">auto_stories</span>Runic Library</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="divination.html"><span class="material-symbols-outlined">auto_awesome</span>Divination</a></li>
       <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="council_rules.html"><span class="material-symbols-outlined">menu_book</span>Council Rules</a></li>
       <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="agent_profiles.html"><span class="material-symbols-outlined">people</span>Agent Profiles</a></li>
     </ul>
@@ -93,109 +94,44 @@
 </nav>
 
 <main class="flex-1 md:ml-64 w-full max-w-[900px] mx-auto flex flex-col gap-6 pb-8 px-4 pb-20 md:pb-8 pt-6">
-  <header class="flex flex-col gap-4 pb-4 border-b-[2px] border-neutral-gray/30">
-    <a class="inline-flex items-center gap-1 text-spectral-blue hover:text-white transition-colors w-fit text-pixel-body font-pixel-body" href="history.html">
-      <span class="material-symbols-outlined" style="font-size:16px;">arrow_back</span>Back to Archive
-    </a>
-    <div class="flex flex-col gap-1">
-      <h1 class="text-pixel-display font-pixel-display text-runed-gold tracking-widest uppercase shadow-[0_2px_0_rgba(0,0,0,1)]">Origin of the Relic</h1>
-      <div class="flex flex-wrap gap-4 text-neutral-gray text-pixel-small font-pixel-small">
-        <span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:14px;">calendar_today</span>Epoch 14, Cycle 2</span>
-        <span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:14px;">hourglass_empty</span>Duration: 42 Cycles</span>
-        <span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:14px;">groups</span>Agents: 5</span>
-      </div>
-    </div>
-  </header>
-
-  <section class="bg-obsidian border-[2px] border-parchment p-4 relative shadow-[4px_4px_0_rgba(232,213,183,0.1)]">
-    <div class="absolute -top-[10px] left-4 bg-obsidian px-2 text-parchment text-pixel-small font-pixel-small uppercase tracking-widest border-[2px] border-parchment">Initial Query</div>
-    <p class="text-pixel-heading font-pixel-heading text-parchment leading-relaxed pt-2">"Is the recently discovered chronal artifact a key to ultimate power or a catalyst for calamity?"</p>
-  </section>
-
-  <div class="flex flex-col gap-6">
-    <article class="bg-obsidian border-[2px] border-neutral-gray p-4 relative group hover:scale-[1.01] transition-transform duration-200">
-      <div class="flex items-start gap-4 mb-4">
-        <div class="w-16 h-16 shrink-0 border-[2px] border-neutral-gray bg-surface-container-low flex items-center justify-center relative overflow-hidden">
-          <span class="material-symbols-outlined text-[32px] text-neutral-gray">travel_explore</span>
-        </div>
-        <div class="flex-1">
-          <h3 class="text-pixel-heading font-pixel-heading text-neutral-gray uppercase">Scout</h3>
-          <div class="w-full bg-surface-container h-2 border border-neutral-gray/30 mt-1 relative"><div class="absolute top-0 left-0 h-full bg-neutral-gray w-[74%]"></div></div>
-          <span class="text-pixel-small font-pixel-small text-neutral-gray/70 mt-1 inline-block">Confidence: 74%</span>
-        </div>
-      </div>
-      <div class="bg-surface-container-low/50 p-3 border border-neutral-gray/20 text-on-surface text-pixel-body font-pixel-body">Recent forum discussions and technical papers show divided consensus on chronal artifacts. Multiple independent sources confirm Class-4 temporal phenomena are well-documented, but emerging theories suggest pre-calamity containment protocols were deliberately obscured. Source diversity: high. Verification: medium.</div>
-      <div class="mt-2 flex justify-between items-center">
-        <span class="flex items-center gap-1 text-neutral-gray/80 text-pixel-small font-pixel-small uppercase"><span class="material-symbols-outlined" style="font-size:14px;">travel_explore</span>Reconnaissance</span>
-        <button class="flex items-center gap-1 text-pixel-small text-neutral-gray hover:text-runed-gold hover:border-runed-gold border border-transparent hover:border-runed-gold/30 px-2 py-1 rounded transition-colors cursor-pointer" onclick="saveScoutToLibrary(this)" data-topic="Origin of the Relic" data-summary="Forum discussions and technical papers show divided consensus on chronal artifacts. Source diversity: high." data-urls="https://example.com/thread,https://github.com/example" data-original="Multiple independent sources confirm Class-4 temporal phenomena. Emerging theories suggest containment protocols were obscured." data-confidence="0.74" data-signals="Divided consensus on chronal artifacts (moderate), Class-4 phenomena well-documented (strong), Pre-calamity protocols possibly obscured (emerging)"><span class="material-symbols-outlined" style="font-size:14px;">library_add</span>Save to Library</button>
-      </div>
-    </article>
-
-    <article class="bg-obsidian border-[2px] border-warning p-4 relative group hover:scale-[1.01] transition-transform duration-200">
-      <div class="flex items-start gap-4 mb-4">
-        <div class="w-16 h-16 shrink-0 border-[2px] border-warning bg-surface-container-low flex items-center justify-center relative overflow-hidden">
-          <img alt="Historian" class="w-full h-full object-cover opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBPjsimktixm83U57eSuYfXQHVgf2aMVnLXTuzCLRzyTBT8eV5aR2hJo_DqEJ_WP9Z7r3vZ_1CitzD_wmtEDfzxokGatsnhe0h6fjHX6vt2YbEW0DFKBNsWmxGC_Iy6aNKlUNBPZY-4n7a--yvdfOK8Ct2qzhH8SB9Qy0-Pkzgr-AIYvQ2H1wQJwolazWmOyVegmFbe5gmad1Oy-yxYfZG_F1JkTOW7NWlFI7gq5jkw3aEU_xdqL_UHkKYusSLrxMs1-BpKBCRVtSs"/>
-        </div>
-        <div class="flex-1">
-          <h3 class="text-pixel-heading font-pixel-heading text-warning uppercase">Historian</h3>
-          <div class="w-full bg-surface-container h-2 border border-warning/30 mt-1 relative"><div class="absolute top-0 left-0 h-full bg-warning w-[85%]"></div></div>
-          <span class="text-pixel-small font-pixel-small text-warning/70 mt-1 inline-block">Confidence: 85%</span>
-        </div>
-      </div>
-      <div class="bg-surface-container-low/50 p-3 border border-warning/20 text-on-surface text-pixel-body font-pixel-body">The archives of the Pre-Calamity era speak of objects that bind time itself. If this is truly the 'Aegis of Seconds' described in the forbidden texts, its power was never meant to be wielded by mortal hands. The texts suggest it caused the shattering of the first continent.</div>
-      <div class="mt-2 flex justify-end"><span class="flex items-center gap-1 text-warning/80 text-pixel-small font-pixel-small uppercase"><span class="material-symbols-outlined" style="font-size:14px;">auto_stories</span>Evidence</span></div>
-    </article>
-
-    <article class="bg-obsidian border-[2px] border-spectral-blue p-4 relative ml-6 group hover:scale-[1.01] transition-transform duration-200">
-      <div class="flex items-start gap-4 mb-4">
-        <div class="w-16 h-16 shrink-0 border-[2px] border-spectral-blue bg-surface-container-low flex items-center justify-center relative overflow-hidden">
-          <img alt="Detective" class="w-full h-full object-cover opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCd5HMHi1T92s5Vcg3_iiWCo11DdPtsSmQTLiqRqrBXGVBObXDcdTw9ntAQrJHBaB45V_XHFD6Km91cQTss-h2_FMbfw4wZxTcAbttKKv2LuD7HXSMQMIRd9tS12Kz-Tp0IVdV9c-gPisiAKBVRrI0udRkliHMCtfxf2VWyW9mD7iM6T1TIqVcLilq-SZFPtytUvUDhm2TAszM7BcguVtX6M9Qz8I00Nv_vep0JIc7boZHrziMHdLZXAk5VX9ggRXQRRluKLPBl_0c"/>
-        </div>
-        <div class="flex-1">
-          <h3 class="text-pixel-heading font-pixel-heading text-spectral-blue uppercase">Detective</h3>
-          <div class="w-full bg-surface-container h-2 border border-spectral-blue/30 mt-1 relative"><div class="absolute top-0 left-0 h-full bg-spectral-blue w-[70%]"></div></div>
-          <span class="text-pixel-small font-pixel-small text-spectral-blue/70 mt-1 inline-block">Confidence: 70%</span>
-        </div>
-      </div>
-      <div class="bg-surface-container-low/50 p-3 border border-spectral-blue/20 text-on-surface text-pixel-body font-pixel-body">Consider the placement pattern in the ruins where it was found. It wasn't discarded; it was sealed. Three concentric wards of stasis magic. You don't lock away a simple tool like that. The sealing pattern is a known containment matrix for volatile chronal energy.</div>
-      <div class="mt-2 flex justify-end"><span class="flex items-center gap-1 text-spectral-blue/80 text-pixel-small font-pixel-small uppercase"><span class="material-symbols-outlined" style="font-size:14px;">search</span>Inference</span></div>
-    </article>
-
-    <article class="bg-obsidian border-[2px] border-ember-glow p-4 relative group hover:scale-[1.01] transition-transform duration-200">
-      <div class="flex items-start gap-4 mb-4">
-        <div class="w-16 h-16 shrink-0 border-[2px] border-ember-glow bg-surface-container-low flex items-center justify-center relative overflow-hidden">
-          <img alt="Sage" class="w-full h-full object-cover opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBvadFcgtO8YQh4FRuRunfTwzIW-ontwY3qpT1cUIUWSzqAJbQbpP8mToxaHcaDaf2EogD9d2rdAdpYoosQOsOvV2fpBDcTHalY15FjpycMI8tYR32kjH2FPbazbpVdCbPYaubNG0sNjue2FeHR0UM6-C0MlcjmUFwYA15GHRFfLej1xXIxKAkmIb3faDNmd9-vbihtywLk2b80uYGh_5tbEi0XxhIUOP-8wgWUEa6kkNBfinPx4N0ZkRYA5NTr6fsg5LIKXkOlfOU"/>
-        </div>
-        <div class="flex-1">
-          <h3 class="text-pixel-heading font-pixel-heading text-ember-glow uppercase">Sage</h3>
-          <div class="w-full bg-surface-container h-2 border border-ember-glow/30 mt-1 relative"><div class="absolute top-0 left-0 h-full bg-ember-glow w-[92%]"></div></div>
-          <span class="text-pixel-small font-pixel-small text-ember-glow/70 mt-1 inline-block">Confidence: 92%</span>
-        </div>
-      </div>
-      <div class="bg-surface-container-low/50 p-3 border border-ember-glow/20 text-on-surface text-pixel-body font-pixel-body">The artifact itself is inert. It is a mirror. It amplifies the temporal intent of its wielder. To a builder, it offers endless hours to construct. To a conqueror, it offers the means to erase enemies before they strike. Calamity is not inherent to the object, but to the nature of those who covet it.</div>
-      <div class="mt-2 flex justify-end"><span class="flex items-center gap-1 text-ember-glow/80 text-pixel-small font-pixel-small uppercase"><span class="material-symbols-outlined" style="font-size:14px;">psychology</span>Intuition</span></div>
-    </article>
-
-    <article class="bg-obsidian border-[2px] border-mystic-purple p-4 relative mt-4 shadow-[0_0_15px_rgba(155,89,182,0.2)]">
-      <div class="absolute -top-[10px] left-4 bg-obsidian px-2 text-mystic-purple text-pixel-small font-pixel-small uppercase tracking-widest border-[2px] border-mystic-purple">Final Synthesis</div>
-      <div class="flex items-start gap-4 mb-4 mt-2">
-        <div class="w-16 h-16 shrink-0 border-[2px] border-mystic-purple bg-surface-container-low flex items-center justify-center relative overflow-hidden">
-          <div class="absolute inset-0 bg-mystic-purple/20 animate-pulse"></div>
-          <span class="material-symbols-outlined text-mystic-purple" style="font-size:32px;">gavel</span>
-        </div>
-        <div class="flex-1"><h3 class="text-pixel-heading font-pixel-heading text-mystic-purple uppercase">Moderator</h3></div>
-      </div>
-      <div class="bg-surface-container-low/50 p-3 border border-mystic-purple/20 text-on-surface text-pixel-body font-pixel-body">The Council concludes that the chronal artifact acts as a catalyst contingent upon intent. Scout confirms recent community consensus aligns with containment protocols. Historian verifies pre-calamity precedent. Detective's sealing pattern analysis is noted but unconfirmed. Sage's intent-driven model offers strategic framing. The artifact must remain sealed. Any attempt to harness it for 'ultimate power' will probabilistically result in a Class-Omega calamity.</div>
-    </article>
+  <div id="dv-loading" class="flex flex-col items-center justify-center py-24 text-neutral-gray">
+    <span class="material-symbols-outlined text-[48px] animate-pulse">description</span>
+    <p class="font-pixel-body text-pixel-body mt-4">Loading deliberation record...</p>
   </div>
+  <div id="dv-error" class="hidden flex flex-col items-center justify-center py-24 text-error">
+    <span class="material-symbols-outlined text-[48px]">error</span>
+    <p class="font-pixel-body text-pixel-body mt-4" id="dv-error-message">Failed to load deliberation</p>
+    <a href="history.html" class="mt-4 bg-surface-container-highest border-2 border-neutral-gray text-on-surface font-pixel-body text-pixel-body py-2 px-4 rounded hover:border-runed-gold hover:text-runed-gold">Back to Archive</a>
+  </div>
+  <div id="dv-content" class="hidden flex flex-col gap-6">
+    <header class="flex flex-col gap-4 pb-4 border-b-[2px] border-neutral-gray/30">
+      <a class="inline-flex items-center gap-1 text-spectral-blue hover:text-white transition-colors w-fit text-pixel-body font-pixel-body" href="history.html">
+        <span class="material-symbols-outlined" style="font-size:16px;">arrow_back</span>Back to Archive
+      </a>
+      <div class="flex flex-col gap-1">
+        <h1 id="dv-title" class="text-pixel-display font-pixel-display text-runed-gold tracking-widest uppercase shadow-[0_2px_0_rgba(0,0,0,1)]"></h1>
+        <div class="flex flex-wrap gap-4 text-neutral-gray text-pixel-small font-pixel-small">
+          <span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:14px;">calendar_today</span><span id="dv-date"></span></span>
+          <span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:14px;">groups</span><span id="dv-agents"></span></span>
+          <span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:14px;">category</span><span id="dv-query-type"></span></span>
+        </div>
+      </div>
+    </header>
 
-  <div class="fixed bottom-24 right-6 md:bottom-6 flex flex-col gap-2 z-40">
-    <button class="bg-runed-gold text-obsidian border-[2px] border-runed-gold hover:bg-parchment hover:border-parchment transition-colors p-2 px-4 flex items-center gap-1 text-pixel-heading font-pixel-heading uppercase shadow-[2px_2px_0_rgba(0,0,0,1)]">
-      <span class="material-symbols-outlined" style="font-size:18px;">download</span>Export
-    </button>
-    <button class="bg-surface text-runed-gold border-[2px] border-runed-gold hover:bg-runed-gold/10 transition-colors p-2 px-4 flex items-center gap-1 text-pixel-heading font-pixel-heading uppercase shadow-[2px_2px_0_rgba(0,0,0,1)]">
-      <span class="material-symbols-outlined" style="font-size:18px;">share</span>Share
-    </button>
+    <section class="bg-obsidian border-[2px] border-parchment p-4 relative shadow-[4px_4px_0_rgba(232,213,183,0.1)]">
+      <div class="absolute -top-[10px] left-4 bg-obsidian px-2 text-parchment text-pixel-small font-pixel-small uppercase tracking-widest border-[2px] border-parchment">Initial Query</div>
+      <p id="dv-query" class="text-pixel-heading font-pixel-heading text-parchment leading-relaxed pt-2"></p>
+    </section>
+
+    <div id="dv-responses" class="flex flex-col gap-6"></div>
+
+    <div id="dv-verdict" class="hidden"></div>
+
+    <div class="fixed bottom-24 right-6 md:bottom-6 flex flex-col gap-2 z-40">
+      <button onclick="exportPDF()" class="bg-runed-gold text-obsidian border-[2px] border-runed-gold hover:bg-parchment hover:border-parchment transition-colors p-2 px-4 flex items-center gap-1 text-pixel-heading font-pixel-heading uppercase shadow-[2px_2px_0_rgba(0,0,0,1)]">
+        <span class="material-symbols-outlined" style="font-size:18px;">download</span>Export
+      </button>
+    </div>
   </div>
 </main>
 </div>
@@ -212,45 +148,236 @@
 <script src="api.js"></script>
 <script src="ws.js"></script>
 <script>
-  async function saveScoutToLibrary(btn) {
-    const originalText = btn.textContent;
-    btn.textContent = ' Saving...';
-    btn.disabled = true;
+const AGENT_STYLES = {
+  oracle: { color: 'runed-gold', icon: 'auto_awesome', label: 'Evidence', labelIcon: 'auto_awesome', border: 'runed-gold' },
+  rag: { color: 'success', icon: 'library_books', label: 'Retrieval', labelIcon: 'library_books', border: 'success' },
+  sage: { color: 'ember-glow', icon: 'local_fire_department', label: 'Intuition', labelIcon: 'psychology', border: 'ember-glow' },
+  moderator: { color: 'mystic-purple', icon: 'gavel', label: 'Synthesis', labelIcon: 'gavel', border: 'mystic-purple' },
+  companion: { color: 'mystic-purple', icon: 'support_agent', label: 'Guidance', labelIcon: 'support_agent', border: 'mystic-purple' },
+  scout: { color: 'neutral-gray', icon: 'travel_explore', label: 'Reconnaissance', labelIcon: 'travel_explore', border: 'neutral-gray', img: null },
+  historian: { color: 'runed-gold', icon: 'history_edu', label: 'Evidence', labelIcon: 'auto_stories', border: 'runed-gold' },
+  detective: { color: 'spectral-blue', icon: 'search', label: 'Inference', labelIcon: 'search', border: 'spectral-blue' },
+};
 
-    try {
-      const data = {
-        topic: btn.dataset.topic,
-        summarized_text: btn.dataset.summary,
-        original_urls: btn.dataset.urls ? btn.dataset.urls.split(',') : [],
-        original_texts: btn.dataset.original || null,
-        confidence: parseFloat(btn.dataset.confidence) || null,
-        key_signals: btn.dataset.signals || null
-      };
+const AGENT_NAMES = {
+  oracle: 'Oracle', rag: 'Scholar', sage: 'Sage', moderator: 'Moderator', companion: 'Companion',
+  scout: 'Scout', historian: 'Historian', detective: 'Detective'
+};
 
-      if (window.COM && window.COM.saveScoutReport) {
-        await window.COM.saveScoutReport(data);
-      } else {
-        await fetch(`http://localhost:${window.electronAPI?.getBackendPort?.() || 8734}/api/documents/save-scout-report`, {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(data)
-        });
-      }
+let deliberationData = null;
 
-      btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px;">check_circle</span>Saved';
-      btn.classList.add('text-success', 'border-success/50');
-      setTimeout(() => {
-        btn.innerHTML = originalText;
-        btn.classList.remove('text-success', 'border-success/50');
-        btn.disabled = false;
-      }, 3000);
-    } catch (e) {
-      btn.textContent = ' Save failed';
-      setTimeout(() => {
-        btn.textContent = originalText;
-        btn.disabled = false;
-      }, 2000);
-    }
+async function loadDeliberation() {
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get('deliberation_id');
+
+  if (!id) {
+    document.getElementById('dv-loading').classList.add('hidden');
+    document.getElementById('dv-error').classList.remove('hidden');
+    document.getElementById('dv-error-message').textContent = 'No deliberation ID specified';
+    return;
   }
+
+  try {
+    const data = await window.COM.getDeliberation(id);
+    deliberationData = data;
+    renderDeliberation(data);
+
+    let verdict = null;
+    try { verdict = await window.COM.getVerdict(id); } catch {}
+    if (verdict) renderVerdict(verdict);
+  } catch (e) {
+    document.getElementById('dv-loading').classList.add('hidden');
+    document.getElementById('dv-error').classList.remove('hidden');
+    document.getElementById('dv-error-message').textContent = e.message || 'Failed to load deliberation';
+  }
+}
+
+function renderDeliberation(data) {
+  document.getElementById('dv-loading').classList.add('hidden');
+  document.getElementById('dv-content').classList.remove('hidden');
+
+  const queryText = typeof data.query === 'string' ? data.query : (data.query?.user_query || '');
+  document.getElementById('dv-title').textContent = queryText.length > 60 ? queryText.substring(0, 60) + '...' : queryText;
+  document.getElementById('dv-date').textContent = new Date(data.created_at).toLocaleDateString('en-US', {
+    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+
+  const agentCount = data.responses ? data.responses.filter(r => r.agent !== 'companion').length : 0;
+  document.getElementById('dv-agents').textContent = `Agents: ${agentCount}`;
+  document.getElementById('dv-query-type').textContent = `Type: ${data.query_type || 'general'}`;
+  document.getElementById('dv-query').textContent = `"${queryText}"`;
+
+  const container = document.getElementById('dv-responses');
+  container.innerHTML = '';
+
+  if (!data.responses || data.responses.length === 0) {
+    container.innerHTML = '<p class="text-neutral-gray text-center font-pixel-body py-8">No agent responses recorded.</p>';
+    return;
+  }
+
+  const order = ['oracle', 'rag', 'sage', 'moderator', 'companion', 'scout', 'historian', 'detective'];
+  const sorted = [...data.responses].sort((a, b) => order.indexOf(a.agent) - order.indexOf(b.agent));
+
+  sorted.forEach(r => {
+    const style = AGENT_STYLES[r.agent] || AGENT_STYLES.scout;
+    const displayName = AGENT_NAMES[r.agent] || r.agent;
+    const confidence = r.confidence != null ? Math.round(r.confidence * 100) : null;
+    const responseText = typeof r.response === 'string' ? r.response : (r.response?.text || r.response?.synthesis || r.response?.analysis || JSON.stringify(r.response));
+
+    const isScout = r.agent === 'scout';
+    const scoutData = isScout && typeof r.response === 'object' ? r.response : null;
+
+    const isModerator = r.agent === 'moderator';
+    const isCompanion = r.agent === 'companion';
+
+    const extraClass = isModerator ? 'mt-4 shadow-[0_0_15px_rgba(155,89,182,0.2)]' : '';
+    const marginClass = !isModerator && !isCompanion ? '' : '';
+
+    const iconHtml = style.img
+      ? `<img alt="${displayName}" class="w-full h-full object-cover opacity-80" src="${style.img}"/>`
+      : `<span class="material-symbols-outlined text-[32px] text-${style.color}">${style.icon}</span>`;
+
+    let scoutBtn = '';
+    if (isScout && scoutData) {
+      const summary = scoutData.summarized_text || scoutData.text || '';
+      const urls = scoutData.original_urls || scoutData.source_urls || [];
+      const original = scoutData.original_texts || scoutData.raw_content || '';
+      const signals = scoutData.key_signals || scoutData.signals || '';
+      const topic = queryText.length > 100 ? queryText.substring(0, 100) : queryText;
+      scoutBtn = `<button class="flex items-center gap-1 text-pixel-small text-${style.color} hover:text-runed-gold hover:border-runed-gold border border-transparent hover:border-runed-gold/30 px-2 py-1 rounded transition-colors cursor-pointer" onclick="saveScoutToLibrary(this)" data-topic="${escapeAttr(topic)}" data-summary="${escapeAttr(summary)}" data-urls="${escapeAttr(Array.isArray(urls) ? urls.join(',') : urls)}" data-original="${escapeAttr(original)}" data-confidence="${r.confidence || 0}" data-signals="${escapeAttr(signals)}"><span class="material-symbols-outlined" style="font-size:14px;">library_add</span>Save to Library</button>`;
+    }
+
+    const html = `<article class="bg-obsidian border-[2px] border-${style.border} p-4 relative group hover:scale-[1.01] transition-transform duration-200 ${extraClass} ${marginClass}">
+      ${isModerator ? `<div class="absolute -top-[10px] left-4 bg-obsidian px-2 text-${style.color} text-pixel-small font-pixel-small uppercase tracking-widest border-[2px] border-${style.border}">Final Synthesis</div>` : ''}
+      ${isCompanion ? `<div class="absolute -top-[10px] left-4 bg-obsidian px-2 text-${style.color} text-pixel-small font-pixel-small uppercase tracking-widest border-[2px] border-${style.border}">Companion Note</div>` : ''}
+      <div class="flex items-start gap-4 mb-4 ${(isModerator || isCompanion) ? 'mt-2' : ''}">
+        <div class="w-16 h-16 shrink-0 border-[2px] border-${style.border} bg-surface-container-low flex items-center justify-center relative overflow-hidden">
+          ${isModerator ? '<div class="absolute inset-0 bg-mystic-purple/20 animate-pulse"></div>' : ''}
+          ${iconHtml}
+        </div>
+        <div class="flex-1">
+          <h3 class="text-pixel-heading font-pixel-heading text-${style.color} uppercase">${displayName}</h3>
+          ${confidence != null ? `<div class="w-full bg-surface-container h-2 border border-${style.color}/30 mt-1 relative"><div class="absolute top-0 left-0 h-full bg-${style.color} w-[${confidence}%]"></div></div>
+          <span class="text-pixel-small font-pixel-small text-${style.color}/70 mt-1 inline-block">Confidence: ${confidence}%</span>` : ''}
+        </div>
+      </div>
+      <div class="bg-surface-container-low/50 p-3 border border-${style.border}/20 text-on-surface text-pixel-body font-pixel-body">${escapeHtml(responseText)}</div>
+      <div class="mt-2 flex ${isScout ? 'justify-between' : 'justify-end'} items-center">
+        <span class="flex items-center gap-1 text-${style.color}/80 text-pixel-small font-pixel-small uppercase"><span class="material-symbols-outlined" style="font-size:14px;">${style.labelIcon}</span>${style.label}</span>
+        ${scoutBtn}
+      </div>
+    </article>`;
+
+    container.insertAdjacentHTML('beforeend', html);
+  });
+}
+
+function renderVerdict(verdict) {
+  const el = document.getElementById('dv-verdict');
+  el.classList.remove('hidden');
+  const typeLabel = verdict.verdict_type === 'accepted' ? 'Accepted' : verdict.verdict_type === 'overridden' ? 'Overridden' : verdict.verdict_type;
+  el.innerHTML = `<div class="bg-obsidian border-[2px] border-success p-4 mt-2">
+    <div class="flex items-center gap-2 mb-2">
+      <span class="material-symbols-outlined text-success">check_circle</span>
+      <h3 class="text-pixel-heading font-pixel-heading text-success uppercase">Verdict: ${typeLabel}</h3>
+    </div>
+    ${verdict.user_override ? `<p class="text-on-surface text-pixel-body font-pixel-body">${escapeHtml(verdict.user_override)}</p>` : '<p class="text-on-surface-variant text-pixel-body font-pixel-body">No user override text.</p>'}
+    <p class="text-pixel-small text-on-surface-variant mt-2">Delivered on ${new Date(verdict.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+  </div>`;
+}
+
+async function saveScoutToLibrary(btn) {
+  const originalHTML = btn.innerHTML;
+  btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px;">sync</span> Saving...';
+  btn.disabled = true;
+
+  try {
+    const data = {
+      topic: btn.dataset.topic,
+      summarized_text: btn.dataset.summary,
+      original_urls: btn.dataset.urls ? btn.dataset.urls.split(',') : [],
+      original_texts: btn.dataset.original || null,
+      confidence: parseFloat(btn.dataset.confidence) || null,
+      key_signals: btn.dataset.signals || null
+    };
+
+    if (window.COM && window.COM.saveScoutReport) {
+      await window.COM.saveScoutReport(data);
+    } else {
+      await fetch(`http://localhost:8734/api/documents/save-scout-report`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+      });
+    }
+
+    btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px;">check_circle</span>Saved';
+    btn.classList.add('text-success', 'border-success/50');
+    setTimeout(() => {
+      btn.innerHTML = originalHTML;
+      btn.classList.remove('text-success', 'border-success/50');
+      btn.disabled = false;
+    }, 3000);
+  } catch (e) {
+    btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px;">error</span> Failed';
+    setTimeout(() => {
+      btn.innerHTML = originalHTML;
+      btn.disabled = false;
+    }, 2000);
+  }
+}
+
+async function exportPDF() {
+  if (!deliberationData) return;
+  const id = new URLSearchParams(window.location.search).get('deliberation_id');
+  const queryText = typeof deliberationData.query === 'string' ? deliberationData.query : 'deliberation';
+
+  try {
+    const savePath = window.electronAPI
+      ? await window.electronAPI.saveFileDialog(queryText.substring(0, 40).replace(/[^a-zA-Z0-9]/g, '_') + '.pdf')
+      : null;
+
+    if (window.electronAPI && !savePath) return;
+
+    const resp = await fetch(window.COM_API_BASE + '/api/deliberations/' + id + '/export/pdf');
+    if (!resp.ok) throw new Error('Export failed: ' + resp.status);
+
+    if (window.electronAPI && savePath) {
+      const buf = await resp.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      const base64 = btoa(binary);
+      const ok = await window.electronAPI.saveFile(savePath, base64);
+      if (ok && window.electronAPI.showNotification) {
+        window.electronAPI.showNotification({ title: 'PDF Exported', body: savePath.split('/').pop() });
+      }
+    } else {
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = queryText.substring(0, 40).replace(/[^a-zA-Z0-9]/g, '_') + '.pdf';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  } catch (e) {
+    console.error('PDF export error:', e);
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function escapeAttr(str) {
+  if (!str) return '';
+  return str.replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+document.addEventListener('DOMContentLoaded', loadDeliberation);
 </script>
 </body></html>

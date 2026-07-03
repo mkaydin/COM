@@ -2,6 +2,11 @@
   "name": "com-council-of-minds",
   "version": "1.0.0",
   "description": "Multi-agent AI deliberation system — Council of Minds",
+  "homepage": "https://github.com/mka/Code/COM",
+  "author": {
+    "name": "MKA",
+    "email": "mka@council.minds"
+  },
   "main": "main.js",
   "scripts": {
     "start": "NODE_ENV=dev electron .",
@@ -23,20 +28,33 @@
       "../com_website/**/*"
     ],
     "extraResources": [
-      { "from": "../backend", "to": "backend" }
+      {
+        "from": "../backend",
+        "to": "backend"
+      }
     ],
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Office",
-      "executableArgs": ["--ozone-platform=wayland"],
+      "maintainer": "MKA <mka@council.minds>",
+      "executableArgs": [
+        "--ozone-platform=wayland"
+      ],
       "icon": "icons/icon.png"
     },
     "mac": {
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "icon": "icons/icon.icns"
     },
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "icon": "icons/icon.ico"
     }
   },
@@ -45,6 +63,6 @@
     "electron-builder": "^25.0.0"
   },
   "dependencies": {
-    "electron-store": "^10.0.0"
+    "electron-store": "^8.2.0"
   }
 }

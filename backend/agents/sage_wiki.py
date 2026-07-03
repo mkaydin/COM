@@ -88,6 +88,7 @@ status: draft
 
 
 async def ingest_source(source_path: str, title: str) -> dict:
+    """Ingest a raw source file into the wiki."""
     content = _read_file(Path(source_path))
     if not content:
         return {"status": "failed", "reason": "empty source"}
@@ -100,7 +101,43 @@ async def ingest_source(source_path: str, title: str) -> dict:
     return {"status": "ingested", "path": str(summary_path), "title": title}
 
 
+async def file_insight(query: str, sage_response: dict) -> dict:
+    """
+    File a good Sage insight back into the wiki as a persistent page.
+    Called after deliberation if the Sage response is valuable.
+    """
+    synthesis = sage_response.get("synthesis", "")
+    if not synthesis or len(synthesis) < 50:
+        return {"status": "skipped", "reason": "insight too short"}
+
+    slug = _slugify(query[:60])
+    content = f"""## Query
+{query}
+
+## Sage Synthesis
+{synthesis}
+
+## Analogies
+""" + "\n".join(
+        f"- **{a['domain']}**: {a['concept']} → {a['application']}"
+        for a in sage_response.get("analogies", [])
+    )
+
+    if sage_response.get("ethical_dimensions"):
+        content += "\n\n## Ethical Dimensions\n" + "\n".join(f"- {e}" for e in sage_response["ethical_dimensions"])
+
+    if sage_response.get("speculation_warning"):
+        content += "\n\n> ⚠️ **Speculative**: This synthesis involves interpretation beyond documented facts."
+
+    path = write_wiki_page("queries", slug, query[:80], content, ["deliberation", "sage"])
+
+    append_log(f"## [{datetime.utcnow().strftime('%Y-%m-%d')}] query | {query[:60]}\n- Filed: [[wiki/queries/{slug}]]")
+
+    return {"status": "filed", "path": str(path)}
+
+
 async def lint_wiki() -> dict:
+    """Health-check the wiki for issues."""
     issues = []
     pages = {}
     for md_file in WIKI_DIR.rglob("*.md"):
@@ -112,7 +149,7 @@ async def lint_wiki() -> dict:
 
     for path, content in pages.items():
         if "status: draft" in content:
-            issues.append(f"draft: {path}")
+            issues.append({"type": "draft", "page": path})
 
     for path, content in pages.items():
         page_slug = path.split("/")[-1].replace(".md", "")
@@ -120,11 +157,18 @@ async def lint_wiki() -> dict:
         for other_path, other_content in pages.items():
             if other_path != path and page_slug in other_content:
                 ref_count += 1
-        if ref_count == 0 and path not in ("index.md", "log.md"):
-            issues.append(f"orphan: {path} (no inbound links)")
+        if ref_count == 0:
+            issues.append({"type": "orphan", "page": path, "note": "no inbound links"})
+
+    contradictions = []
+    all_content = " ".join(pages.values()).lower()
+    for path, content in pages.items():
+        if "contradiction" in content.lower() or "⚠️" in content:
+            contradictions.append({"type": "flagged_contradiction", "page": path})
+    issues.extend(contradictions)
 
     append_log(f"## [{datetime.utcnow().strftime('%Y-%m-%d')}] lint | {len(issues)} issues found")
     for issue in issues:
-        append_log(f"  - {issue}")
+        append_log(f"  - {issue['type']}: {issue['page']}")
 
-    return {"issues": issues, "total_pages": len(pages)}
+    return {"issues": issues, "total_pages": len(pages), "total_issues": len(issues)}

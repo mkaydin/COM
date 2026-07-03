@@ -4,6 +4,7 @@ from config import get_settings
 from logging_config import get_logger
 from agents.schemas import CompanionResponse
 from agents.prompts import COMPANION_SYSTEM_PROMPT
+from agents.json_utils import schema_for_prompt, extract_json
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -36,7 +37,7 @@ async def companion_node(state: dict) -> dict:
     priority = state.get("agent_priority", [])
 
     messages = [
-        {"role": "system", "content": COMPANION_SYSTEM_PROMPT},
+        {"role": "system", "content": COMPANION_SYSTEM_PROMPT + schema_for_prompt(CompanionResponse)},
         {"role": "user", "content": f"""The Council has deliberated on this query. Advise the user in plain language.
 
 QUERY: {query}
@@ -49,22 +50,36 @@ AGENT RESPONSES:
 MODERATOR SYNTHESIS:
 {moderator_summary}
 
-Output CompanionResponse JSON. Be helpful, clear, and actionable."""}
+You MUST provide trust_guidance for ALL FOUR agents: scout, historian, detective, sage. Each entry MUST include the 'agent' field with the exact agent name. Be helpful, clear, and actionable."""}
     ]
 
     try:
-        response = completion(
-            model=settings.llm_model,
-            messages=messages,
-            temperature=0.5,
-            max_tokens=2048,
-        )
+        from config import llm_complete
+        response = await llm_complete(messages, temperature=0.5, max_tokens=4096, provider=provider)
         raw = response.choices[0].message.content
+        _reasoning = getattr(response, 'reasoning', '')
+        data = extract_json(raw)
 
-        json_match = re.search(r'\{[\s\S]*\}', raw)
-        data = json.loads(json_match.group(0)) if json_match else {}
+        known_agents = ["scout", "historian", "detective", "sage"]
+        guidance = data.get("trust_guidance", [])
+        for i, g in enumerate(guidance):
+            if isinstance(g, dict) and not g.get("agent") and i < len(known_agents):
+                g["agent"] = known_agents[i]
+
+        if len(guidance) < 4:
+            existing = {g.get("agent", "") for g in guidance if isinstance(g, dict)}
+            for agent_name in known_agents:
+                if agent_name not in existing:
+                    guidance.append({
+                        "agent": agent_name,
+                        "trust_level": "medium",
+                        "reason": "No specific guidance generated for this agent.",
+                    })
+            data["trust_guidance"] = guidance
+
         companion_output = CompanionResponse(**data)
     except Exception as e:
+        _reasoning = ""
         logger.error("companion_llm_failed", error=str(e))
         companion_output = CompanionResponse(
             translation="The Council was unable to reach a clear conclusion.",
@@ -74,4 +89,6 @@ Output CompanionResponse JSON. Be helpful, clear, and actionable."""}
         )
 
     logger.info("companion_complete", recommended=companion_output.recommended_agent)
-    return {"companion_notes": companion_output.model_dump()}
+    _result = companion_output.model_dump()
+    _result["_reasoning"] = _reasoning
+    return {"companion_notes": _result}

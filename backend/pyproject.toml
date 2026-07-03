@@ -27,6 +27,7 @@ dependencies = [
     "psycopg2-binary>=2.9",
     "pgvector>=0.3",
     "beautifulsoup4>=4.12",
+    "fpdf2>=2.8",
 ]
 
 [project.optional-dependencies]

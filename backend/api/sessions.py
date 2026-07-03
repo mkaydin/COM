@@ -59,9 +59,16 @@ async def create_session(body: SessionCreate, db: AsyncSession = Depends(get_db)
 
 
 @router.get("", response_model=List[SessionResponse])
-async def list_sessions(db: AsyncSession = Depends(get_db)):
+async def list_sessions(
+    offset: int = 0,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db)
+):
     result = await db.execute(
-        select(Session).order_by(Session.updated_at.desc()).limit(50)
+        select(Session)
+        .order_by(Session.updated_at.desc())
+        .offset(offset)
+        .limit(limit)
     )
     return result.scalars().all()
 
@@ -117,9 +124,9 @@ async def start_session_deliberation(
 
     background_tasks.add_task(
         _run_deliberation,
-        deliberation.id,
-        body.query,
+        str(deliberation.id),
         str(session_id),
+        body.query,
     )
 
     session.updated_at = datetime.utcnow()

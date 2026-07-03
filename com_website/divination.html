@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Council of Minds - Divination</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700;900&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="styles.css" rel="stylesheet"/>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: { extend: {
+      colors: {
+        "obsidian": "#1a1a2e","surface": "#141315","surface-dim": "#141315",
+        "surface-container": "#201f21","surface-container-low": "#1c1b1d","surface-container-lowest": "#0e0e10",
+        "surface-container-high": "#2a2a2b","surface-container-highest": "#353436","surface-variant": "#353436",
+        "parchment": "#e8d5b7","on-surface": "#e5e1e3","on-surface-variant": "#c8c5cd",
+        "runed-gold": "#ffd700","spectral-blue": "#87ceeb","ember-glow": "#ff6b6b",
+        "mystic-purple": "#9b59b6","warning": "#f39c12","success": "#27ae60",
+        "error": "#c0392b","neutral-gray": "#7f8c8d"
+      },
+      fontFamily: { "pixel-display": ["VT323","monospace"], "pixel-heading": ["VT323","monospace"], "pixel-body": ["VT323","monospace"], "pixel-small": ["VT323","monospace"] },
+      fontSize: {
+        "pixel-display": ["32px",{lineHeight:"1.2",fontWeight:"700"}],
+        "pixel-heading": ["24px",{lineHeight:"1.3",fontWeight:"700"}],
+        "pixel-body": ["18px",{lineHeight:"1.6",fontWeight:"400"}],
+        "pixel-small": ["14px",{lineHeight:"1.5",fontWeight:"400"}]
+      }
+    }}
+  }
+</script>
+<style>
+  .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: #1c1b1d; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: #ffd700; border: 2px solid #1c1b1d; }
+  .divination-body { font-size: 20px; line-height: 1.7; white-space: pre-wrap; word-wrap: break-word; }
+  .source-link { font-size: 18px; }
+  .search-term { font-size: 18px; }
+</style>
+</head>
+<body class="bg-surface-dim text-on-surface font-pixel-body h-screen overflow-hidden flex flex-col">
+
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-4 h-16 bg-obsidian border-b-2 border-amber-400/30">
+  <div class="text-xl font-black text-amber-400 drop-shadow-[0_2px_0_rgba(0,0,0,1)] font-['Be_Vietnam_Pro'] tracking-tighter uppercase">COUNCIL OF MINDS</div>
+  <div class="flex gap-3 items-center">
+    <span class="text-neutral-gray font-pixel-small text-pixel-small uppercase">Provider:</span>
+    <select id="provider-select" class="bg-obsidian border border-amber-400/30 text-amber-400 font-pixel-small text-pixel-small px-2 py-1 rounded outline-none cursor-pointer hover:bg-amber-400/10">
+      <!-- GLM deactivated -->
+      <option value="lm_studio">LM Studio</option>
+    </select>
+    <button class="hover:bg-amber-400/10 hover:text-amber-300 transition-colors text-amber-400 p-2 rounded"><span class="material-symbols-outlined">settings</span></button>
+  </div>
+</header>
+
+<div class="flex flex-1 pt-16">
+
+<nav class="hidden md:flex fixed left-0 top-16 bottom-0 w-64 flex-col pt-6 bg-obsidian border-r-2 border-slate-800 font-['Be_Vietnam_Pro'] uppercase text-xs font-medium tracking-widest">
+  <div class="px-4 mb-6">
+    <div class="flex items-center gap-3 mb-3">
+      <div class="w-10 h-10 bg-surface-container-highest rounded flex items-center justify-center pixel-border"><span class="material-symbols-outlined text-spectral-blue">auto_awesome</span></div>
+      <div>
+        <div class="font-pixel-heading text-pixel-heading text-spectral-blue leading-none">Divination</div>
+        <div class="font-pixel-small text-pixel-small text-on-surface-variant">Scout Intelligence</div>
+      </div>
+    </div>
+  </div>
+  <div class="flex-1 overflow-y-auto">
+    <ul class="space-y-1">
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="council_landing_page.html"><span class="material-symbols-outlined">home</span>Home</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="council_chamber.html"><span class="material-symbols-outlined">castle</span>Chamber</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="history.html"><span class="material-symbols-outlined">history</span>Archive</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="runic_library.html"><span class="material-symbols-outlined">auto_stories</span>Runic Library</a></li>
+      <li><a class="sidebar-link active text-spectral-blue border-l-3 border-spectral-blue flex items-center px-4 py-3 gap-3 bg-spectral-blue/5" href="divination.html"><span class="material-symbols-outlined">auto_awesome</span>Divination</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="council_rules.html"><span class="material-symbols-outlined">menu_book</span>Council Rules</a></li>
+      <li><a class="sidebar-link text-slate-400 flex items-center px-4 py-3 gap-3" href="agent_profiles.html"><span class="material-symbols-outlined">people</span>Agent Profiles</a></li>
+    </ul>
+  </div>
+</nav>
+
+<main class="ml-0 md:ml-64 mt-0 h-[calc(100vh-64px)] relative bg-surface-container-low flex flex-col flex-1">
+  <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-spectral-blue/10 via-surface-container-lowest to-black opacity-90 z-0 pointer-events-none"></div>
+
+  <!-- Chat area -->
+  <div id="chat-scroll" class="relative z-10 flex-1 overflow-y-auto custom-scrollbar">
+    <div id="chat-area" class="w-full max-w-3xl mx-auto px-4 pb-32 pt-8">
+      <div class="text-center mb-8">
+        <span class="material-symbols-outlined text-[64px] text-spectral-blue/30 mx-auto block mb-2">auto_awesome</span>
+        <h1 class="font-pixel-heading text-pixel-heading text-spectral-blue uppercase mb-1">Divination Chamber</h1>
+        <p class="font-pixel-body text-pixel-body text-on-surface-variant">Scout will divine knowledge from the web. Ask anything.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Input bar -->
+  <div class="absolute bottom-0 left-0 w-full bg-obsidian border-t-2 border-spectral-blue/50 p-4 flex items-end gap-4 shadow-[0_-10px_20px_rgba(0,0,0,0.8)] z-30">
+    <div class="flex-grow flex flex-col relative">
+      <div class="absolute -top-[28px] left-0 bg-spectral-blue text-obsidian font-pixel-small text-pixel-small px-3 py-1 uppercase font-bold border-t-2 border-l-2 border-r-2 border-spectral-blue shadow-[2px_0_0_#0e0e10]">Divine</div>
+      <textarea id="divination-input" class="bg-surface-container-lowest border-2 border-neutral-gray focus:border-spectral-blue focus:ring-0 text-parchment font-pixel-body text-pixel-body p-3 w-full h-16 resize-none outline-none custom-scrollbar placeholder:text-surface-tint/50 transition-colors shadow-[inset_2px_2px_5px_rgba(0,0,0,0.5)]" placeholder="Ask Scout to search the depths of knowledge..."></textarea>
+    </div>
+    <button id="divination-submit" class="bg-spectral-blue text-obsidian border-2 border-spectral-blue font-pixel-heading text-pixel-heading px-6 py-3 uppercase hover:bg-parchment hover:border-parchment transition-colors h-16 shadow-[4px_4px_0_#0e0e10] active:translate-y-[2px] active:shadow-[2px_2px_0_#0e0e10] flex items-center justify-center min-w-[120px]">Divine</button>
+  </div>
+</main>
+</div>
+
+<nav class="md:hidden fixed bottom-0 w-full z-50 flex justify-around items-center bg-obsidian border-t-2 border-amber-400/20 h-16">
+  <a class="text-slate-400 flex flex-col items-center justify-center p-2" href="council_landing_page.html"><span class="material-symbols-outlined text-[20px]">home</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Home</span></a>
+  <a class="text-slate-400 flex flex-col items-center justify-center p-2" href="council_chamber.html"><span class="material-symbols-outlined text-[20px]">castle</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Chamber</span></a>
+  <a class="text-slate-400 flex flex-col items-center justify-center p-2" href="history.html"><span class="material-symbols-outlined text-[20px]">history</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Archive</span></a>
+  <a class="text-slate-400 flex flex-col items-center justify-center p-2" href="runic_library.html"><span class="material-symbols-outlined text-[20px]">auto_stories</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Library</span></a>
+  <a class="active text-spectral-blue flex flex-col items-center justify-center p-2 bg-spectral-blue/5 border-t-2 border-spectral-blue -mt-[2px]" href="divination.html"><span class="material-symbols-outlined text-[20px]">auto_awesome</span><span class="font-['Be_Vietnam_Pro'] text-[10px] font-bold uppercase">Divine</span></a>
+</nav>
+
+<script src="api.js"></script>
+<script>
+function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t || ''; return d.innerHTML; }
+
+// Simple markdown to HTML renderer
+function renderMarkdown(text) {
+  if (!text) return '';
+  let html = escapeHtml(text);
+  // Headings
+  html = html.replace(/^### (.+)$/gm, '<h3 class="text-spectral-blue font-pixel-heading text-pixel-body mt-3 mb-1">$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h2 class="text-spectral-blue font-pixel-heading text-pixel-heading mt-4 mb-2">$1</h2>');
+  html = html.replace(/^# (.+)$/gm, '<h1 class="text-spectral-blue font-pixel-heading text-pixel-display mt-4 mb-2">$1</h1>');
+  // Bold
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Links
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" class="text-spectral-blue underline">$1</a>');
+  // Bullet points
+  html = html.replace(/^[\-\*] (.+)$/gm, '<li class="ml-4">$1</li>');
+  html = html.replace(/(<li.*<\/li>)/s, '<ul class="list-disc list-inside mb-2">$1</ul>');
+  // Numbered lists
+  html = html.replace(/^\d+\. (.+)$/gm, '<li class="ml-4">$1</li>');
+  // Line breaks (double newline = paragraph)
+  html = html.replace(/\n\n/g, '</p><p class="mb-2">');
+  html = html.replace(/\n/g, '<br>');
+  // Wrap in paragraph
+  html = '<p class="mb-2">' + html + '</p>';
+  return html;
+}
+
+// Store results in JS array — no HTML data attributes for large text
+const _resultsStore = [];
+
+document.getElementById('divination-submit').onclick = async () => {
+  const input = document.getElementById('divination-input');
+  const query = input.value.trim();
+  if (!query) return;
+
+  const provider = document.getElementById('provider-select').value;
+  const chatArea = document.getElementById('chat-area');
+  const scrollEl = document.getElementById('chat-scroll');
+
+  // Render user message
+  const userMsg = document.createElement('div');
+  userMsg.className = 'bg-surface-container border-2 border-neutral-gray p-4 mb-4 ml-12';
+  userMsg.innerHTML = `<div class="flex items-center gap-2 mb-2"><span class="material-symbols-outlined text-parchment">person</span><span class="font-pixel-small text-pixel-small text-parchment uppercase">You</span></div><p class="divination-body text-parchment">${escapeHtml(query)}</p>`;
+  chatArea.appendChild(userMsg);
+
+  input.value = '';
+
+  // Loading state
+  const loadingMsg = document.createElement('div');
+  loadingMsg.id = 'loading-msg';
+  loadingMsg.className = 'bg-obsidian border-2 border-spectral-blue p-4 mb-4';
+  loadingMsg.innerHTML = `
+    <div class="flex items-center gap-2 mb-3">
+      <span class="material-symbols-outlined text-spectral-blue animate-spin">auto_awesome</span>
+      <span class="font-pixel-small text-pixel-small text-spectral-blue uppercase">Scout is divining...</span>
+    </div>
+    <div class="space-y-2 animate-pulse">
+      <div class="h-3 bg-surface-container-highest rounded w-full"></div>
+      <div class="h-3 bg-surface-container-highest rounded w-3/4"></div>
+      <div class="h-3 bg-surface-container-highest rounded w-5/6"></div>
+    </div>`;
+  chatArea.appendChild(loadingMsg);
+  scrollEl.scrollTop = scrollEl.scrollHeight;
+
+  try {
+    const result = await window.COM.divination(query, provider);
+    loadingMsg.remove();
+
+    // Store result in JS array — reference by index in save button
+    const resultId = _resultsStore.length;
+    _resultsStore.push(result);
+
+    // Render result
+    const resultMsg = document.createElement('div');
+    resultMsg.className = 'bg-obsidian border-2 border-spectral-blue p-4 mb-4 shadow-[0_0_15px_rgba(135,206,235,0.1)]';
+
+    let termsHtml = result.search_terms.map(t => `<span class="search-term inline-block bg-surface-container border border-spectral-blue/30 text-spectral-blue px-2 py-1 m-1 rounded">${escapeHtml(t)}</span>`).join('');
+
+    let sourcesHtml = '';
+    if (result.sources && result.sources.length > 0) {
+      sourcesHtml = '<div class="mt-4 border-t border-surface-variant pt-3"><span class="font-pixel-small text-pixel-small text-spectral-blue uppercase block mb-2">Sources:</span>';
+      result.sources.forEach((s, i) => {
+        sourcesHtml += `<div class="source-link mb-1"><span class="text-neutral-gray">[${i+1}]</span> <a href="${escapeHtml(s.url)}" target="_blank" class="text-spectral-blue hover:text-parchment underline">${escapeHtml(s.title || s.url)}</a></div>`;
+      });
+      sourcesHtml += '</div>';
+    } else {
+      sourcesHtml = '<div class="mt-4 border-t border-surface-variant pt-3 text-neutral-gray font-pixel-small text-pixel-small">No web sources found. Analysis based on parametric knowledge.</div>';
+    }
+
+    // Source summaries — detailed per-source text from the synthesis
+    let summariesHtml = '';
+    if (result.summaries && result.summaries.length > 0) {
+      summariesHtml = '<div class="mt-4 border-t border-surface-variant pt-3">';
+      summariesHtml += '<span class="font-pixel-small text-pixel-small text-spectral-blue uppercase block mb-2">Per-Source Summaries:</span>';
+      summariesHtml += '<div class="space-y-2">';
+      result.summaries.forEach((s, i) => {
+        summariesHtml += '<div class="bg-surface-container-low border border-surface-variant rounded p-3">';
+        summariesHtml += '<div class="font-pixel-small text-pixel-small text-spectral-blue mb-1">' + escapeHtml(s.source || 'Source ' + (i+1)) + '</div>';
+        summariesHtml += '<div class="font-pixel-small text-pixel-small text-parchment/80 whitespace-pre-wrap" style="font-size:15px; line-height:1.6;">' + escapeHtml(s.text || '(no summary)') + '</div>';
+        summariesHtml += '</div>';
+      });
+      summariesHtml += '</div></div>';
+    }
+
+    // Render synthesis as markdown
+    const synthesisHtml = renderMarkdown(result.synthesis);
+
+    resultMsg.innerHTML = `
+      <div class="flex items-center gap-2 mb-3 border-b border-surface-variant pb-2">
+        <span class="material-symbols-outlined text-spectral-blue">travel_explore</span>
+        <span class="font-pixel-heading text-pixel-heading text-spectral-blue uppercase">Scout's Divination</span>
+      </div>
+      <div class="mb-3"><span class="font-pixel-small text-pixel-small text-neutral-gray uppercase">Search Terms:</span><div>${termsHtml}</div></div>
+      <div class="divination-body text-parchment mb-3">${synthesisHtml}</div>
+      ${sourcesHtml}
+      ${summariesHtml}
+      <div class="mt-4 flex gap-2">
+        <button onclick="saveToLibrary(${resultId})" class="bg-obsidian border-2 border-runed-gold text-runed-gold font-pixel-small text-pixel-small px-4 py-2 hover:bg-runed-gold/10 transition-colors shadow-[2px_2px_0_#0e0e10] active:translate-y-[1px] flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">library_add</span>Save to Runic Library</button>
+      </div>`;
+    chatArea.appendChild(resultMsg);
+    scrollEl.scrollTop = scrollEl.scrollHeight;
+
+  } catch (e) {
+    loadingMsg.remove();
+    const errMsg = document.createElement('div');
+    errMsg.className = 'bg-obsidian border-2 border-error p-4 mb-4';
+    errMsg.innerHTML = `<div class="flex items-center gap-2"><span class="material-symbols-outlined text-error">error</span><span class="font-pixel-heading text-pixel-heading text-error uppercase">Divination Failed</span></div><p class="divination-body text-parchment mt-2">${escapeHtml(e.message || 'Unknown error')}</p>`;
+    chatArea.appendChild(errMsg);
+    scrollEl.scrollTop = scrollEl.scrollHeight;
+  }
+};
+
+async function saveToLibrary(resultId) {
+  const result = _resultsStore[resultId];
+  if (!result) return;
+
+  // Find the button element
+  const buttons = document.querySelectorAll(`button[onclick="saveToLibrary(${resultId})"]`);
+  const btn = buttons[buttons.length - 1]; // Get the last matching button
+  if (!btn) return;
+
+  const originalHtml = btn.innerHTML;
+  btn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>Saving...';
+  btn.disabled = true;
+
+  try {
+    await window.COM.saveDivination({
+      title: result.original_query,
+      synthesis: result.synthesis,
+      sources: result.sources,
+      summaries: result.summaries,
+    });
+    btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">check</span>Saved!';
+    btn.className = 'bg-success/20 border-2 border-success text-success font-pixel-small text-pixel-small px-4 py-2 shadow-[2px_2px_0_#0e0e10] flex items-center gap-2';
+  } catch (e) {
+    btn.innerHTML = originalHtml;
+    btn.disabled = false;
+    console.error('Save failed:', e);
+    alert('Failed to save: ' + (e.message || 'Unknown error'));
+  }
+}
+
+document.getElementById('divination-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('divination-submit').click(); }
+});
+</script>
+</body></html>
