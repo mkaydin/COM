@@ -28,25 +28,45 @@ Available as a desktop app (Electron) or in the browser.
 
 ## How it works
 
-```
-┌─────────────┐     ┌─────────────────────────────────────┐
-│  Electron    │────▶│         Python FastAPI               │
-│  (renderer)  │ WS  │                                     │
-│  com_website │ HTTP │  ┌─────────┐  ┌──────────────────┐ │
-│  HTML/CSS/JS │────▶│  │ Router  │─▶│ Oracle │ Scholar  │ │
-│              │     │  └─────────┘  │ Sage   │ (RAG)    │ │
-│              │     │               └────┬─────────────┘ │
-│              │     │              ┌─────▼──────┐         │
-│              │     │              │ Moderator  │◀─ critique loop │
-│              │     │              └─────┬──────┘         │
-│              │     │                    │ verdict        │
-│              │     │              ┌─────▼──────┐         │
-│              │     │              │   User     │         │
-│              │     │              └────────────┘         │
-│              │     │                                     │
-│              │     │  PostgreSQL+pgvector · ChromaDB     │
-│              │     │  Neo4j (graph) · Redis (cache)      │
-└─────────────┘     └─────────────────────────────────────┘
+```mermaid
+flowchart LR
+  UI["Electron / Browser<br/>com_website"] ==>|WS + HTTP| API["FastAPI"]
+  API --> Router["Router<br/>(classify query)"]
+
+  Router --> Oracle["Oracle<br/>OKF bundle"]
+  Router --> Scholar["Scholar (RAG)<br/>vector retrieval"]
+  Router --> Sage["Sage<br/>LLM Wiki"]
+
+  Oracle --> Mod["Moderator<br/>alignment · conflicts · decision space"]
+  Scholar --> Mod
+  Sage --> Mod
+
+  Mod -->|material conflict| Crit["Critique round<br/>hold / revise / concede"]
+  Crit -->|updated synthesis| Mod
+
+  Mod -->|verdict| User["User<br/>(final decision)"]
+  User -.->|follow-up| Router
+
+  Mem[("Session memory")] -.-> Mod
+
+  subgraph KS["Knowledge systems"]
+    direction LR
+    PG[("Postgres + pgvector")]
+    CH[("ChromaDB")]
+  end
+  Scholar -.-> PG
+  Scholar -.-> CH
+
+  subgraph Web["Web intelligence (Divination)"]
+    direction LR
+    Scout["Scout<br/>gather + scrape"]
+    SEARX[("SearXNG<br/>meta-search")]
+    LP["Lightpanda<br/>(JS render)"]
+  end
+  API -.->|divination| Scout
+  Scout --> SEARX
+  Scout --> LP
+  Scout -.->|scout reports| PG
 ```
 
 1. **Router** classifies the query (factual / relational / strategic / general).
@@ -77,7 +97,8 @@ Available as a desktop app (Electron) or in the browser.
 ## Tech stack
 
 - **Backend:** Python 3.12 · FastAPI · LangGraph · SQLAlchemy/asyncpg · LiteLLM
-- **Knowledge systems:** PostgreSQL + pgvector · ChromaDB · Neo4j · Redis
+- **Knowledge systems:** PostgreSQL + pgvector · ChromaDB
+- **Web intelligence:** SearXNG (meta-search) · Scout + Lightpanda (scrape / JS render)
 - **Frontend:** Vanilla HTML/CSS/JS (Tailwind) · Material Symbols · `marked` + `DOMPurify` (markdown)
 - **Desktop:** Electron
 - **LLM:** any LiteLLM-supported provider (OpenAI, Anthropic, Ollama / LM Studio, GLM / Z.ai, …)
