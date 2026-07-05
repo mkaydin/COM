@@ -65,3 +65,7 @@ Append-only chronological record of ingests, queries, and lint passes.
 - Filed: [[wiki/queries/which-options-are-important-for-building-linux-kernel-from-s]]
 ## [2026-07-05] query | which image classification model should i use on raspberry p
 - Filed: [[wiki/queries/which-image-classification-model-should-i-use-on-raspberry-p]]
+## [2026-07-05] query | how does arm assembly works best on raspberry pi 5
+- Filed: [[wiki/queries/how-does-arm-assembly-works-best-on-raspberry-pi-5]]
+## [2026-07-05] query | how can i analyze composite materials on simulation, which p
+- Filed: [[wiki/queries/how-can-i-analyze-composite-materials-on-simulation-which-p]]
