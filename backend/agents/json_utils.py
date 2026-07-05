@@ -8,12 +8,16 @@ def extract_json(raw: str) -> dict:
     """Extract a JSON object from raw LLM output.
 
     Handles:
+    - Reasoning tags (<analysis>...</analysis>, <think>...</think>) from models like ornith:9b
     - Markdown code fences (```json ... ```)
     - Leading/trailing prose around the JSON
     - Nested braces
     """
     if not raw:
         return {}
+
+    # Strip reasoning tags that some models (ornith:9b) put inline.
+    raw = re.sub(r'<(?:analysis|think|reflection)>.*?</(?:analysis|think|reflection)>', '', raw, flags=re.DOTALL)
 
     fence_match = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', raw)
     if fence_match:

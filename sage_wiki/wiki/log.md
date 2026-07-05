@@ -63,3 +63,5 @@ Append-only chronological record of ingests, queries, and lint passes.
 - Filed: [[wiki/queries/image-classification-will-work-on-raspberry-pi-5-sbc-board-s]]
 ## [2026-07-03] query | which options are important for building linux kernel from s
 - Filed: [[wiki/queries/which-options-are-important-for-building-linux-kernel-from-s]]
+## [2026-07-05] query | which image classification model should i use on raspberry p
+- Filed: [[wiki/queries/which-image-classification-model-should-i-use-on-raspberry-p]]

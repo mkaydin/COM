@@ -117,7 +117,7 @@ def _is_resolved(stances: list) -> bool:
 
 async def critique_round_node(state: dict) -> dict:
     round_num = state.get("critique_round", 0) + 1
-    provider = state.get("provider", "lm_studio")
+    provider = state.get("provider", "ollama")
     unresolved = state.get("unresolved_conflicts", []) or []
     max_rounds = state.get("max_critique_rounds", 2)
 

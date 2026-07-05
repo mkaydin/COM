@@ -46,8 +46,8 @@ async def sage_node(state: dict) -> dict:
         full_context += "\n\n" + rag_context
 
     # Select prompt based on provider
-    provider = state.get("provider", "lm_studio")
-    if provider == "lm_studio":
+    provider = state.get("provider", "ollama")
+    if provider == "ollama":
         from agents.prompts import LOCAL_SAGE_PROMPT
         system_content = LOCAL_SAGE_PROMPT
         max_tok = 4096

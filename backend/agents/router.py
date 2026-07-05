@@ -11,10 +11,10 @@ settings = get_settings()
 
 async def router_node(state: dict) -> dict:
     query = state.get("user_query", "")
-    provider = state.get("provider", "lm_studio")
+    provider = state.get("provider", "ollama")
     logger.info("router_classifying", query=query[:100])
 
-    if provider == "lm_studio":
+    if provider == "ollama":
         from agents.prompts import LOCAL_ROUTER_PROMPT
         system_content = LOCAL_ROUTER_PROMPT
         max_tok = 512

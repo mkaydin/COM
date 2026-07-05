@@ -133,7 +133,7 @@ class RagChunk(Base):
 
     # Content
     chunk_text = Column(Text, nullable=False)
-    embedding = Column(Vector(384), nullable=True)
+    embedding = Column(Vector(1024), nullable=True)
 
     # Structure-aware chunking metadata
     section = Column(String(512), nullable=True)

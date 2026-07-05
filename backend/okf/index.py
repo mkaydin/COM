@@ -9,7 +9,7 @@ from typing import Callable
 from okf.document import OKFDocument
 
 _INDEX_FILE = "index.md"
-_FALLBACK_MODEL = "lm-studio"
+_FALLBACK_MODEL = "ollama"
 
 
 def _load_doc(path: Path) -> OKFDocument | None:

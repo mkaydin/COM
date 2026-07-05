@@ -18,21 +18,13 @@ PROVIDERS = {
 }
 
 DIVINATION_PROVIDERS = {
-    # "glm": {  # Deactivated — full local AI mode
-    #     "label": "Z.ai GLM-5.2",
-    #     "llm_model": "openai/glm-5.2",
-    #     "llm_api_key": "0d716e1f4b3e414bba31387be0308cc0.W4tqTUQ38TnzTX1M",
-    #     "llm_api_base": "https://api.z.ai/api/coding/paas/v4",
-    #     "supports_json_mode": True,
-    #     "max_tokens_default": 2048,
-    # },
-    "lm_studio": {
-        "label": "LM Studio (vibethinker-3b)",
-        "llm_model": "openai/vibethinker-3b",
-        "llm_api_key": "lm-studio",
-        "llm_api_base": "http://192.168.50.1:1234/v1",
+    "ollama": {
+        "label": "Ollama (ornith:9b)",
+        "llm_model": "openai/ornith:9b",
+        "llm_api_key": "ollama",
+        "llm_api_base": "http://localhost:11434/v1",
         "supports_json_mode": False,
-        "max_tokens_default": 4096,
+        "max_tokens_default": 8192,
     },
 }
 
@@ -43,10 +35,10 @@ class Settings(BaseSettings):
     log_dir: str = "/tmp/com-logs"
 
     llm_provider: str = "openai"
-    llm_model: str = "openai/vibethinker-3b"
-    llm_api_key: str = "lm-studio"
-    llm_api_base: str = "http://192.168.50.1:1234/v1"
-    active_provider: str = "lm_studio"
+    llm_model: str = "openai/ornith:9b"
+    llm_api_key: str = "ollama"
+    llm_api_base: str = "http://localhost:11434/v1"
+    active_provider: str = "ollama"
     supports_json_mode: bool = False
 
     postgres_url: str = "postgresql+asyncpg://council:council_dev@localhost:5432/council"
@@ -57,7 +49,9 @@ class Settings(BaseSettings):
     chroma_host: str = "localhost"
     chroma_port: int = 8000
 
-    embedding_model: str = "text-embedding-3-small"
+    ollama_host: str = "localhost"
+    ollama_port: int = 11434
+    embedding_model: str = "qwen3-embedding:0.6b"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

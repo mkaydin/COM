@@ -109,7 +109,7 @@ class TestIngestionDedupe:
             row = (await db.execute(sql_text("SELECT count(embedding) FROM rag_chunks WHERE title = 'TEST_doc1'"))).fetchone()
             assert row[0] >= 2
             row = (await db.execute(sql_text("SELECT vector_dims(embedding) FROM rag_chunks WHERE title = 'TEST_doc1' LIMIT 1"))).fetchone()
-            assert row[0] == 384
+            assert row[0] == 1024
 
             await db.execute(sql_text("DELETE FROM rag_chunks WHERE title LIKE 'TEST_%'"))
             await db.commit()

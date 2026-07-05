@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import RagChunk
-from rag.ingest import TRUST_WEIGHTS, _get_embedder
+from rag.ingest import TRUST_WEIGHTS
 from logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -206,7 +206,8 @@ async def retrieve(
     has_curated_match = len(curated) > 0
 
     # 3. Fall back to vector search over rag_chunks.
-    query_vec = _get_embedder().encode([query], normalize_embeddings=True)[0].tolist()
+    from embedding import embed_text
+    query_vec = embed_text(query)
     raw_results = await _vector_search(db, query_vec, top_k=top_k)
 
     # 4. Gap detection (spec §4.5): track queries with no curated match.
@@ -311,7 +312,8 @@ async def retrieve_raw_context(
     Returns a formatted string with trust_tier annotations, or "" on failure.
     """
     try:
-        query_vec = _get_embedder().encode([query], normalize_embeddings=True)[0].tolist()
+        from embedding import embed_text
+        query_vec = embed_text(query)
         raw = await _vector_search(db, query_vec, top_k=top_k)
         if not raw:
             return ""

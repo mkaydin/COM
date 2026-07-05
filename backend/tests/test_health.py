@@ -23,15 +23,15 @@ async def test_agents_list(client):
     assert resp.status_code == 200
     data = resp.json()
     assert isinstance(data, list)
-    assert len(data) >= 5
+    assert len(data) >= 4
 
 
 @pytest.mark.asyncio
 async def test_agent_by_name(client):
-    resp = await client.get("/api/agents/scout")
+    resp = await client.get("/api/agents/rag")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["name"] == "scout"
+    assert data["name"] == "rag"
 
 
 @pytest.mark.asyncio

@@ -42,25 +42,21 @@ DEFAULT_TRUST_BY_SOURCE = {
     "scout_report": "ai_summary",
 }
 
-# Cached embedding model.
+# Cached embedding model — now uses Ollama via centralized embedding module.
 _st_model = None
 
 
 def _get_embedder():
-    global _st_model
-    if _st_model is None:
-        from sentence_transformers import SentenceTransformer
-        _st_model = SentenceTransformer("all-MiniLM-L6-v2")
-    return _st_model
+    """Legacy compat — returns None (Ollama embeddings are HTTP-based)."""
+    return None
 
 
 def _embed(texts: list[str]) -> list[list[float]]:
-    """Embed a batch of texts → list of 384-dim vectors."""
+    """Embed a batch of texts via Ollama → list of 1024-dim vectors."""
     if not texts:
         return []
-    model = _get_embedder()
-    vectors = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
-    return [v.tolist() for v in vectors]
+    from embedding import embed_texts
+    return embed_texts(texts)
 
 
 def _content_hash(text: str) -> str:

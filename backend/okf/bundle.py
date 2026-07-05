@@ -76,11 +76,8 @@ _concept_cache: dict[str, Any] = {"root": None, "ids": [], "embeddings": None}
 
 
 def _get_st_model():
-    global _st_model
-    if _st_model is None:
-        from sentence_transformers import SentenceTransformer
-        _st_model = SentenceTransformer("all-MiniLM-L6-v2")
-    return _st_model
+    """Legacy compat — returns None (Ollama embeddings are HTTP-based)."""
+    return None
 
 
 def _concept_text(c: dict[str, Any]) -> str:
@@ -94,9 +91,9 @@ def _ensure_index(bundle_root: Path) -> None:
     if _concept_cache["root"] == root and _concept_cache["embeddings"] is not None:
         return
     concepts = list_concepts(root)
-    model = _get_st_model()
     texts = [_concept_text(c) for c in concepts] or ["empty"]
-    emb = model.encode(texts, normalize_embeddings=True)
+    from embedding import embed_texts
+    emb = embed_texts(texts)
     _concept_cache.update(
         root=root,
         ids=[c["id"] for c in concepts],
@@ -112,9 +109,8 @@ def retrieve_relevant(
 ) -> list[dict[str, Any]]:
     """Return the top_k concepts most semantically similar to `query`.
 
-    Uses cosine similarity over sentence-transformer embeddings of
-    (title + description + tags). Falls back to keyword overlap if the
-    embedding model is unavailable.
+    Uses cosine similarity over Ollama embeddings of (title + description +
+    tags). Falls back to keyword overlap if the embedding service is unavailable.
     """
     root = Path(bundle_root or BUNDLE_ROOT)
     try:
@@ -126,9 +122,10 @@ def retrieve_relevant(
     if cache["embeddings"] is None or len(cache["ids"]) == 0:
         return []
 
-    model = _get_st_model()
-    q_emb = model.encode([query], normalize_embeddings=True)
-    q_emb = np.asarray(q_emb, dtype=np.float32)[0]
+    from embedding import embed_text
+    q_emb = np.asarray(embed_text(query), dtype=np.float32)
+    if len(q_emb) == 0:
+        return _keyword_retrieve(query, root, top_k)
     scores = cache["embeddings"] @ q_emb
     order = np.argsort(-scores)[:top_k]
     concepts = cache["concepts"]

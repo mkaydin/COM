@@ -14,11 +14,8 @@ _st_model = None
 
 
 def _get_local_model():
-    global _st_model
-    if _st_model is None:
-        from sentence_transformers import SentenceTransformer
-        _st_model = SentenceTransformer("all-MiniLM-L6-v2")
-    return _st_model
+    """Legacy compat — returns None (Ollama embeddings are HTTP-based)."""
+    return None
 
 
 def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
@@ -37,10 +34,10 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[st
 
 
 def generate_embedding(text: str) -> List[float]:
-    """Generate embedding vector for a text chunk using local sentence-transformers."""
+    """Generate embedding vector using Ollama qwen3-embedding:0.6b."""
+    from embedding import embed_text
     try:
-        model = _get_local_model()
-        return model.encode(text).tolist()
+        return embed_text(text)
     except Exception as e:
         logger.error("embedding_failed", error=str(e))
         return []

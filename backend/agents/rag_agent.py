@@ -23,7 +23,7 @@ settings = get_settings()
 
 async def rag_node(state: dict) -> dict:
     query = state.get("user_query", "")
-    provider = state.get("provider", "lm_studio")
+    provider = state.get("provider", "ollama")
     logger.info("rag_processing", query=query[:80])
 
     # 1. Unified retrieval (OKF → Wiki → vector fallback).
@@ -48,7 +48,7 @@ async def rag_node(state: dict) -> dict:
         citations_raw = _build_citations(all_results)
 
     # 3. Select prompt + call LLM.
-    if provider == "lm_studio":
+    if provider == "ollama":
         system_prompt = LOCAL_RAG_PROMPT
         max_tok = 8192
     else:

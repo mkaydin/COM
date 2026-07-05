@@ -105,7 +105,7 @@ class TestVectorSearchIntegration:
         from sqlalchemy.pool import NullPool
         from sqlalchemy import text
         from config import get_settings
-        from rag.ingest import ingest, _get_embedder
+        from rag.ingest import ingest
         from rag.retrieval import _vector_search
 
         s = get_settings()
@@ -122,7 +122,8 @@ class TestVectorSearchIntegration:
                          title="TESTSUP_doc", source_type="user_upload")
 
             # Search for content that matches.
-            qvec = _get_embedder().encode(["supersede test content alpha beta"], normalize_embeddings=True)[0].tolist()
+            from embedding import embed_text
+            qvec = embed_text("supersede test content alpha beta")
             results = await _vector_search(db, qvec, top_k=10)
 
             # Only non-superseded chunks should appear.
@@ -147,16 +148,24 @@ class TestSupporterMode:
     async def test_supporter_returns_annotated_context(self):
         from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
         from sqlalchemy.pool import NullPool
+        from sqlalchemy import text
         from config import get_settings
         from rag.retrieval import retrieve_raw_context
+        from rag.ingest import ingest
 
         s = get_settings()
         engine = create_async_engine(s.postgres_url, poolclass=NullPool)
         async with AsyncSession(engine, expire_on_commit=False) as db:
+            await db.execute(text("DELETE FROM rag_chunks WHERE title LIKE 'TESTSUP2_%'"))
+            await db.commit()
+            # Ingest test data with known trust tier.
+            await ingest(db, content="# Materials\n\nComposite material analysis for aerospace.\n",
+                         title="TESTSUP2_doc", source_type="user_upload", trust_tier="preprint")
             ctx = await retrieve_raw_context(db, "composite material analysis", top_k=3)
             assert "RAW KNOWLEDGE" in ctx
-            # Trust-tier annotations present (at least one of the tiers).
             assert any(t in ctx for t in ["PREPRINT", "AI_SUMMARY", "WEB_SECONDARY", "WEB_PRIMARY"])
+            await db.execute(text("DELETE FROM rag_chunks WHERE title LIKE 'TESTSUP2_%'"))
+            await db.commit()
         await engine.dispose()
 
     @pytest.mark.asyncio
@@ -179,13 +188,21 @@ class TestSupporterMode:
     async def test_supporter_truncates_at_max_chars(self):
         from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
         from sqlalchemy.pool import NullPool
+        from sqlalchemy import text
         from config import get_settings
         from rag.retrieval import retrieve_raw_context
+        from rag.ingest import ingest
 
         s = get_settings()
         engine = create_async_engine(s.postgres_url, poolclass=NullPool)
         async with AsyncSession(engine, expire_on_commit=False) as db:
-            ctx = await retrieve_raw_context(db, "material", top_k=10, max_chars=500)
-            assert len(ctx) <= 600
+            # Ingest a large test document to ensure enough content for truncation.
+            long_content = "# Test Truncation\n\n" + "This is a long paragraph about materials science and engineering. " * 50
+            await ingest(db, content=long_content, title="TESTTRUNC_doc", source_type="user_upload")
+            ctx = await retrieve_raw_context(db, "materials science", top_k=5, max_chars=200)
+            assert len(ctx) <= 300
             assert "[RAG context truncated]" in ctx
+            # Cleanup
+            await db.execute(text("DELETE FROM rag_chunks WHERE title LIKE 'TESTTRUNC_%'"))
+            await db.commit()
         await engine.dispose()

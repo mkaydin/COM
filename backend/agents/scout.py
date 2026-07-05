@@ -47,8 +47,8 @@ async def scout_node(state: dict) -> dict:
     provenance = "EXCLUSIVE web-scraped intelligence" if web_status == "web_scraped" else "LLM parametric knowledge (no live web sources)"
 
     # Select prompt based on provider
-    provider = state.get("provider", "lm_studio")
-    if provider == "lm_studio":
+    provider = state.get("provider", "ollama")
+    if provider == "ollama":
         from agents.prompts import LOCAL_SCOUT_PROMPT
         system_content = LOCAL_SCOUT_PROMPT
         max_tok = 8192

@@ -264,7 +264,7 @@ def _fallback_synthesis(briefs: dict, signals: dict, deliberation_id: str) -> Mo
 async def moderator_node(state: dict) -> dict:
     logger.info("moderator_synthesizing")
     deliberation_id = state.get("deliberation_id", "")
-    provider = state.get("provider", "lm_studio")
+    provider = state.get("provider", "ollama")
 
     critique_round = state.get("critique_round", 0)
     max_rounds = state.get("max_critique_rounds", 2)
@@ -276,7 +276,7 @@ async def moderator_node(state: dict) -> dict:
 
     session_memory = state.get("session_memory") or ""
 
-    if provider == "lm_studio":
+    if provider == "ollama":
         from agents.prompts import LOCAL_MODERATOR_PROMPT
         system_content = LOCAL_MODERATOR_PROMPT
         max_tok = 4096

@@ -43,3 +43,4 @@ _No entries yet. The Sage will populate this as sources are ingested._
 - [2026-07-02] [[wiki/queries/which-model-architecture-should-i-use-for-image-classificati]] — which model architecture should i use for image classification
 - [2026-07-02] [[wiki/queries/image-classification-will-work-on-raspberry-pi-5-sbc-board-s]] — image classification will work on raspberry pi 5 sbc board so the architecture o
 - [2026-07-03] [[wiki/queries/which-options-are-important-for-building-linux-kernel-from-s]] — which options are important for building linux kernel from source?
+- [2026-07-05] [[wiki/queries/which-image-classification-model-should-i-use-on-raspberry-p]] — which image classification model should i use on raspberry pi 5

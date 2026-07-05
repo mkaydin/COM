@@ -33,7 +33,7 @@ async def _retrieve_from_bundle(query: str, top_k: int = 5):
 
 async def oracle_node(state: dict) -> dict:
     query = state.get("user_query", "")
-    provider = state.get("provider", "lm_studio")
+    provider = state.get("provider", "ollama")
     logger.info("oracle_processing", query=query[:80])
 
     # 1. Retrieve relevant concepts from the OKF bundle.
@@ -62,7 +62,7 @@ async def oracle_node(state: dict) -> dict:
         full_context += "\n\n" + rag_context
 
     # 3. Select prompt + call LLM.
-    if provider == "lm_studio":
+    if provider == "ollama":
         system_prompt = LOCAL_ORACLE_PROMPT
         max_tok = 8192
     else:
