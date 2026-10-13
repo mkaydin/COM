@@ -16,7 +16,15 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from llm import catalogue, health, list_models, providers, roles, test_model
+from llm import (
+    catalogue,
+    diagnose_call_error,
+    health,
+    list_models,
+    providers,
+    roles,
+    test_model,
+)
 from agents import registry
 from logging_config import get_logger
 
@@ -109,9 +117,35 @@ async def test(body: TestRequest):
     """Send a real completion to confirm a model answers.
 
     Exists because "the provider has a key" and "this model actually works"
-    are different claims, and only the second one matters.
+    are different claims, and only the second one matters. A key can be
+    perfectly valid and still unable to serve a single completion — Zen's free
+    tier is locked to the OpenCode client, and an unfunded account rejects
+    paid models. Both are reported here with a `diagnosis`.
     """
     return await test_model(body.model_id, body.provider)
+
+
+@router.post("/verify")
+async def verify(body: TestRequest = TestRequest(model_id=""), provider: Optional[str] = None):
+    """Prove the default model is callable, and explain it if it is not.
+
+    `GET /api/health` only reports that a key is *configured*. This actually
+    calls the model, which is what the setup wizard needs before telling the
+    user they are ready.
+    """
+    model_id = body.model_id
+    if not model_id:
+        try:
+            model_id = roles.model_for("MODERATOR")
+        except Exception:
+            model_id = ""
+    result = await test_model(model_id or "big-pickle", body.provider or provider)
+    result["note"] = (
+        "A key being present does not mean it can serve requests."
+        if not result.get("ok")
+        else "The provider answered a real completion."
+    )
+    return result
 
 
 @router.post("/reload")

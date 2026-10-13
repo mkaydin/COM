@@ -160,7 +160,57 @@ async def health() -> dict:
         detail["hint"] = None
 
     detail["ok"] = ok
+    # `ok` means "configured", not "proven to work". A key can be present and
+    # still unable to serve a single completion — Zen's free tier is locked to
+    # the OpenCode client, and an unfunded account rejects paid models with
+    # "Insufficient account funds". Only POST /api/llm/test proves that.
+    detail["configured"] = ok
+    detail["callable"] = None
+    detail["callable_note"] = (
+        "not verified — POST /api/llm/test with a model id to prove it can "
+        "actually serve a completion"
+    )
     return detail
+
+
+#: Substrings that identify a key which authenticates but cannot serve calls.
+NOT_CALLABLE_HINTS = (
+    "free tier can only be used from within opencode",
+    "insufficient account funds",
+    "model access is disabled",
+    "model is unavailable",
+)
+
+
+def diagnose_call_error(message: str) -> Optional[str]:
+    """Turn a provider error into an actionable explanation.
+
+    The raw messages are not obvious: "OpenCode's free tier can only be used
+    from within OpenCode" means the backend cannot use free models over the
+    plain API at all, and "Insufficient account funds" means the account has no
+    billing. Both surface identically to a user as "the key is set but nothing
+    works", which is exactly the case worth explaining.
+    """
+    if not message:
+        return None
+    low = message.lower()
+    if "free tier can only be used from within opencode" in low:
+        return (
+            "Zen's free models are locked to the OpenCode client and cannot be "
+            "called from a standalone API client. Either route calls through "
+            "the opencode CLI, or add billing to use paid models over HTTP."
+        )
+    if "insufficient account funds" in low:
+        return (
+            "The key is valid but the account has no billing, so paid models "
+            "are refused. Add billing at opencode.ai, or use the opencode CLI "
+            "for the free tier."
+        )
+    if "model access is disabled" in low:
+        return "This key does not have access to that model."
+    if "model is unavailable" in low:
+        return "That model is currently unavailable at the provider."
+    return None
 
 
 async def test_model(model_id: str, provider_id: Optional[str] = None) -> dict:
@@ -177,6 +227,14 @@ async def test_model(model_id: str, provider_id: Optional[str] = None) -> dict:
             model=model_id,
         )
         text = (resp.choices[0].message.content or "").strip()
-        return {"ok": bool(text), "model": model_id, "sample": text[:120]}
+        return {"ok": bool(text), "model": model_id, "sample": text[:120],
+                "callable": True}
     except Exception as e:
-        return {"ok": False, "model": model_id, "error": str(e)[:300]}
+        message = str(e)
+        return {
+            "ok": False,
+            "callable": False,
+            "model": model_id,
+            "error": message[:300],
+            "diagnosis": diagnose_call_error(message),
+        }

@@ -178,11 +178,14 @@ async function save() {
     msg.innerHTML = 'Set <code>OPENCODE_API_KEY</code> in <code>backend/.env</code>, then reload.';
   }
 
+  // `/api/health` only reports that a key is *configured*. A key can be valid
+  // and still unable to serve a single completion — so prove it with a real
+  // call before telling the user they are ready.
   try {
-    const h = await window.COM.health();
-    if (h.llm_ok) { finish(`${h.provider} · ${(h.roles || []).length} models configured`); return; }
-    msg.innerHTML = `<span class="text-warning">Backend is up but the provider is not ready</span><br/>
-      <span class="opacity-70">${esc(h.hint || 'unknown reason')}</span>`;
+    const v = await window.COM.api('/api/llm/verify', { method: 'POST', body: '{}' });
+    if (v.ok) { finish(`${esc(v.model)} answered`); return; }
+    msg.innerHTML = `<span class="text-error">The key is set, but no model answers</span><br/>
+      <span class="opacity-70">${esc(v.diagnosis || v.error || 'unknown reason')}</span>`;
     document.getElementById('status-spinner').classList.add('hidden');
     document.getElementById('btn-retry').classList.remove('hidden');
   } catch (e) {
