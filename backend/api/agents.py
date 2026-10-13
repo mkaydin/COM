@@ -1,70 +1,78 @@
 from fastapi import APIRouter
+from agents import registry
 from logging_config import get_logger
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 logger = get_logger(__name__)
 
 
-AGENTS = [
-    {
-        "name": "oracle",
-        "display_name": "The Oracle",
-        "archetype": "Seeker of Truth",
-        "color": "runed-gold",
-        "icon": "auto_awesome",
-        "temperature": 0.3,
-        "reasoning_type": "evidence",
-        "data_source": "Structured Knowledge Bundle (OKF)",
-        "description": "Grounds every answer in the structured knowledge bundle. Every claim must be backed by cited evidence, and when evidence is thin it says so explicitly rather than guessing.",
-        "tags": ["Evidence-Bound", "Skeptical", "Honest About Uncertainty"],
-    },
-    {
-        "name": "rag",
-        "display_name": "The Scholar",
-        "archetype": "Keeper of Lore",
-        "color": "success",
-        "icon": "library_books",
-        "temperature": 0.3,
-        "reasoning_type": "evidence",
-        "data_source": "Vector RAG (pgvector + ChromaDB + document archive)",
-        "description": "Retrieves verifiable knowledge from documents and the archive, ranking every source by a trust tier. Answers from what can be backed up and flags gaps where the record runs out.",
-        "tags": ["Source-Ranked", "Verifiable", "Gap-Aware"],
-    },
-    {
-        "name": "sage",
-        "display_name": "The Sage",
-        "archetype": "Voice of Intuition",
-        "color": "ember-glow",
-        "icon": "local_fire_department",
-        "temperature": 0.7,
-        "reasoning_type": "synthesis",
-        "data_source": "LLM Wiki (persistent markdown) + internal reasoning",
-        "description": "Approaches deliberation through wisdom and moral philosophy, weighing the deeper implications, human factors, and long-term consequences. Challenges assumptions and questions underlying values.",
-        "tags": ["Philosophical", "Ethical", "Holistic"],
-    },
-    {
-        "name": "moderator",
-        "display_name": "The Moderator",
-        "archetype": "Master of Rules",
-        "color": "mystic-purple",
-        "icon": "gavel",
-        "temperature": 0.2,
-        "reasoning_type": "synthesis",
-        "data_source": "All agent responses (arbiter, no external data)",
-        "description": "Synthesizes all council responses into a structured decision space — agreements, conflicts, and tradeoffs. Does NOT decide; that stays with the user.",
-        "tags": ["Synthesizing", "Impartial", "Structuring"],
-    },
-]
+# The Moderator is not a forum character — it opens and closes topics rather
+# than holding a position — but it is still an agent for profile/stats
+# purposes, so it is appended here rather than living in the character
+# registry.
+MODERATOR_CARD = {
+    "name": "moderator",
+    "display_name": "The Moderator",
+    "archetype": "Master of Rules",
+    "color": "mystic-purple",
+    "icon": "gavel",
+    "temperature": 0.25,
+    "model_role": "MODERATOR",
+    "knowledge": [],
+    "voice_rules": [
+        "Opens the topic and frames the question.",
+        "Reports what the Council actually concluded, not what sounds decisive.",
+        "Cannot declare consensus the thread has not demonstrably reached.",
+    ],
+    "description": (
+        "Opens topics, invites the cast, and closes the thread. Publishes one "
+        "accepted answer when the Council converges, or several attributed "
+        "positions when it does not."
+    ),
+    "tags": ["Synthesizing", "Impartial", "Structuring"],
+}
+
+
+def _agent_cards() -> list[dict]:
+    """Every agent card, with each character's live model binding.
+
+    Built from the registry rather than a literal list, so a new character
+    appears here automatically.
+    """
+    from llm import providers, roles
+
+    try:
+        provider = providers.get()
+        bindings = {r["role"]: r["model"] for r in roles.all_roles(provider)}
+    except Exception:
+        bindings = {}
+
+    out = []
+    for c in registry.all_characters():
+        card = c.brief()
+        card["reasoning_type"] = (
+            "evidence" if ("okf" in c.knowledge or "rag" in c.knowledge) else "synthesis"
+        )
+        card["data_source"] = " + ".join(c.knowledge) or "internal reasoning"
+        card["model"] = bindings.get(c.model_role)
+        out.append(card)
+
+    mod = dict(MODERATOR_CARD)
+    mod["reasoning_type"] = "synthesis"
+    mod["data_source"] = "the whole thread (arbiter, no external data)"
+    mod["model"] = bindings.get("MODERATOR")
+    out.append(mod)
+    return out
 
 
 @router.get("")
 async def list_agents():
-    return AGENTS
+    return _agent_cards()
 
 
 @router.get("/{name}")
 async def get_agent(name: str):
-    for agent in AGENTS:
+    for agent in _agent_cards():
         if agent["name"] == name:
             return agent
     from fastapi import HTTPException

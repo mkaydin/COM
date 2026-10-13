@@ -1,0 +1,155 @@
+"""Model catalogue per provider.
+
+The Council's defaults are **free-tier models**. The list below was verified
+against the live Zen catalogue on 2026-10-13 (`GET https://opencode.ai/zen/v1/models`
+returned 78 models, 11 of them free). It is a *snapshot*, not a guarantee —
+Zen rotates models, and a tag can disappear between releases. Every entry here
+is therefore only a **default**: `LLM_MODEL_<ROLE>` overrides it, and the
+runtime falls back to `LLM_MODEL_DEFAULT` when a configured model is not in
+the live catalogue.
+
+Why each free model was picked (all served on `/v1/chat/completions`, which is
+what LiteLLM's `openai/` prefix speaks):
+
+* ``big-pickle``            — general workhorse; the Moderator's job is
+                               structured synthesis + JSON, not depth.
+* ``longcat-2.5-preview-free`` — long-context; the Oracle reasons over whole
+                               OKF concept bodies.
+* ``nemotron-3.5-lightning-free`` — fast, retrieval-heavy; the Scholar makes
+                               many calls with large grounded context.
+* ``mimo-v2.6-flash-free``  — used at high temperature for the Sage's analogy
+                               and ethics work.
+* ``ling-3.1-flash-free`` / ``step-5-preview-free`` / ``cat-jam-free`` /
+  ``space-bunny-free`` — reserve cast for the Analyst and Historian, and for
+  spreading rate-limit pressure across distinct endpoints.
+
+Deliberately excluded from the chat-completions defaults:
+
+* ``muse-spark-1.2/1.3-contributor-free`` — free, but served on
+  ``/v1/responses`` rather than ``/v1/chat/completions``. Usable, but only via
+  a provider-specific code path that does not exist yet.
+* ``jev-1.13-free`` — the bespoke ``/v1/systemone`` endpoint, not a chat model.
+* ``exo-free`` — appeared in the OpenCode model catalog but was absent from the
+  live ``/v1/models`` response. Treated as transient; never a default.
+"""
+
+# --- opencode (OpenCode Zen) -------------------------------------------------------
+
+OPENCODE_DEFAULT_BASE_URL = "https://opencode.ai/zen/v1"
+
+#: `model id -> default role`. One model per role keeps load spread across
+#: distinct endpoints, which matters because every one of these is free-tier.
+OPENCODE_ROLE_DEFAULTS: dict[str, str] = {
+    "MODERATOR": "big-pickle",
+    "ORACLE": "longcat-2.5-preview-free",
+    "SCHOLAR": "nemotron-3.5-lightning-free",
+    "SAGE": "mimo-v2.6-flash-free",
+    "ANALYST": "ling-3.1-flash-free",
+    "HISTORIAN": "step-5-preview-free",
+}
+
+#: Verified free models usable over `/v1/chat/completions`.
+OPENCODE_FREE_MODELS: dict[str, dict] = {
+    "big-pickle": {
+        "name": "Big Pickle",
+        "roles": ["MODERATOR"],
+        "notes": "general default",
+    },
+    "longcat-2.5-preview-free": {
+        "name": "LongCat 2.5 Preview Free",
+        "roles": ["ORACLE"],
+        "notes": "long context",
+    },
+    "nemotron-3.5-lightning-free": {
+        "name": "Nemotron 3.5 Lightning Free",
+        "roles": ["SCHOLAR"],
+        "notes": "fast, retrieval-heavy",
+    },
+    "mimo-v2.6-flash-free": {
+        "name": "MiMo-V2.6-Flash Free",
+        "roles": ["SAGE"],
+        "notes": "high-temperature work",
+    },
+    "ling-3.1-flash-free": {"name": "Ling 3.1 Flash Free", "roles": ["ANALYST"]},
+    "step-5-preview-free": {"name": "Step 5 Preview Free", "roles": ["HISTORIAN"]},
+    "cat-jam-free": {"name": "Cat Jam Free", "roles": []},
+    "space-bunny-free": {"name": "Space Bunny Free", "roles": []},
+}
+
+#: Free models that exist but are not reachable over `/v1/chat/completions`.
+#: Listed so the UI can explain *why* they are not offered rather than hiding them.
+OPENCODE_FREE_UNSUPPORTED: dict[str, str] = {
+    "muse-spark-1.2-contributor-free": "served on /v1/responses, not chat/completions",
+    "muse-spark-1.3-contributor-free": "served on /v1/responses, not chat/completions",
+    "jev-1.13-free": "bespoke /v1/systemone endpoint, not a chat model",
+}
+
+#: Paid models, offered as opt-in upgrades. Never a default.
+OPENCODE_PAID_SUGGESTIONS: list[str] = [
+    "claude-sonnet-4-6",
+    "claude-opus-4-8",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gemini-3.5-flash",
+    "deepseek-v4-pro",
+    "glm-5.3",
+    "kimi-k3",
+]
+
+OPENCODE_SNAPSHOT_DATE = "2026-10-13"
+
+
+# --- ollama (optional local provider) ---------------------------------------------
+
+#: Ollama serves an OpenAI-compatible surface, so no per-role catalogue is
+#: needed — the operator sets `LLM_MODEL_<ROLE>` to whatever tag they pulled.
+#: This is the fallback when nothing per-role is configured.
+OLLAMA_FALLBACK_MODEL = "gemma4:e4b"
+
+#: `model id -> default role` for the optional local provider. Kept separate
+#: from the Zen defaults so switching providers never silently re-points a
+#: character at a remote model.
+OLLAMA_ROLE_DEFAULTS: dict[str, str] = {
+    role: OLLAMA_FALLBACK_MODEL for role in OPENCODE_ROLE_DEFAULTS
+}
+
+
+def free_models_for(provider: str) -> list[dict]:
+    """The verified free-model list for a provider, for the setup UI."""
+    if provider != "opencode":
+        return []
+    out = []
+    for model_id, meta in OPENCODE_FREE_MODELS.items():
+        out.append(
+            {
+                "id": model_id,
+                "name": meta.get("name", model_id),
+                "free": True,
+                "roles": meta.get("roles", []),
+                "notes": meta.get("notes", ""),
+            }
+        )
+    return out
+
+
+def unsupported_free_models() -> list[dict]:
+    """Free models that exist but are not offered, and why."""
+    return [
+        {"id": k, "free": True, "available": False, "reason": v}
+        for k, v in OPENCODE_FREE_UNSUPPORTED.items()
+    ]
+
+
+def default_for_role(role: str, provider: str) -> str:
+    """The built-in default model for a role under a provider.
+
+    `role` is matched case-insensitively so `oracle`, `ORACLE` and `Oracle`
+    all resolve to the same character.
+    """
+    key = (role or "").strip().upper()
+    table = OPENCODE_ROLE_DEFAULTS if provider == "opencode" else OLLAMA_ROLE_DEFAULTS
+    if key in table:
+        return table[key]
+    # Unknown role (a new character added without a default) still gets a
+    # usable model rather than an empty string.
+    return next(iter(table.values()))

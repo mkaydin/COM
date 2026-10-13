@@ -15,6 +15,10 @@ async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit
 
 
 async def init_db():
+    # Import for side effects: the forum models share Base.metadata, and
+    # create_all only sees tables whose module has actually been imported.
+    import db.forum_models  # noqa: F401
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

@@ -76,3 +76,6 @@ desktop.ini
 
 # ===== Misc local state =====
 config.json
+
+# ===== Alembic / migration scratch =====
+backend/.pytest_cache/

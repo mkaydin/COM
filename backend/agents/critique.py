@@ -10,7 +10,7 @@ all conflicts (so the loop was a no-op).
 import asyncio
 from typing import Any, Optional
 
-from config import llm_complete
+from config import llm_complete  # shim -> llm.llm_complete
 from logging_config import get_logger
 from agents.json_utils import extract_json
 
@@ -18,6 +18,18 @@ logger = get_logger(__name__)
 
 COUNCIL_AGENTS = ("oracle", "rag", "sage")
 AGENT_DISPLAY = {"oracle": "Oracle", "rag": "Scholar (RAG)", "sage": "Sage"}
+
+# Legacy agent keys mapped onto character-registry keys. "rag" predates the
+# rename to "scholar".
+_REGISTRY_KEY = {"rag": "scholar"}
+
+
+def _model_role_for(agent: str) -> str:
+    """The model role an agent critiques on, from the character registry."""
+    from agents import registry
+
+    character = registry.get(_REGISTRY_KEY.get(agent, agent))
+    return character.model_role if character else "MODERATOR"
 
 # Safety caps so a noisy moderator can't explode LLM cost/latency
 MAX_CONFLICTS_PER_ROUND = 4
@@ -86,8 +98,11 @@ async def _critique_as_agent(agent: str, conflict: dict, state: dict) -> dict:
         your_original=_agent_main(agent, state)[:1500],
     )
     try:
+        # Each agent re-evaluates in its own voice, so it critiques on its own
+        # model. "rag" is the legacy key for the Scholar.
         resp = await llm_complete(
             [{"role": "user", "content": prompt}],
+            role=_model_role_for(agent),
             temperature=0.3, max_tokens=MAX_TOK,
         )
         data = extract_json(resp.choices[0].message.content)

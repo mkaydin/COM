@@ -54,7 +54,7 @@ async def sage_node(state: dict) -> dict:
 
     try:
         from config import llm_complete
-        response = await llm_complete(messages, temperature=0.7, max_tokens=max_tok)
+        response = await llm_complete(messages, role="SAGE", temperature=0.7, max_tokens=max_tok)
         raw = response.choices[0].message.content
         _reasoning = getattr(response, 'reasoning', '')
         data = extract_json(raw)

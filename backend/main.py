@@ -14,6 +14,9 @@ from api.wiki import router as wiki_router
 from api.divination import router as divination_router
 from api.okf import router as okf_router
 from api.rag import router as rag_router
+from api.forum import router as forum_router
+from api.forum_ws import router as forum_ws_router
+from api.llm import router as llm_router
 
 setup_logging()
 logger = get_logger(__name__)
@@ -22,13 +25,21 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("backend_starting", port=settings.backend_port)
+    logger.info("backend_starting", port=settings.backend_port, provider=settings.llm_provider)
 
     try:
         await init_db()
         logger.info("database_initialized")
     except Exception as e:
         logger.error("database_init_failed", error=str(e))
+
+    # Load persisted role -> model overrides so a per-character model choice
+    # survives a restart. Non-fatal: env config still applies without it.
+    try:
+        from llm import roles as llm_roles
+        await llm_roles.load_overrides()
+    except Exception as e:
+        logger.warning("llm_roles_load_failed", error=str(e))
 
     yield
 
@@ -62,24 +73,32 @@ app.include_router(wiki_router)
 app.include_router(divination_router)
 app.include_router(okf_router)
 app.include_router(rag_router)
+app.include_router(forum_router)
+app.include_router(llm_router)
 app.include_router(websocket_router)
+app.include_router(forum_ws_router)
 
 
 @app.get("/api/health")
 async def health():
-    from ollama_client import llm_health
+    from llm import health as llm_health
 
     llm = await llm_health()
     checks = {
-        "status": "ok" if llm["ok"] else "degraded",
-        "configured": llm["ok"],
-        "llm_model": settings.llm_model,
-        "llm_ok": llm["ok"],
-        "ollama_reachable": llm["reachable"],
-        "model_present": llm["model_present"],
-        "hint": llm["hint"],
-        "version": "1.0.0",
+        "status": "ok" if llm.get("ok") else "degraded",
+        "configured": llm.get("ok"),
+        "provider": llm.get("provider"),
+        "llm_ok": llm.get("ok"),
+        "hint": llm.get("hint"),
+        "roles": llm.get("roles", []),
+        "forum_enabled": settings.forum_enabled,
+        "version": "2.0.0",
     }
+    # Ollama-specific keys, kept for the existing UI chips.
+    if llm.get("provider") == "ollama":
+        checks["ollama_reachable"] = llm.get("reachable")
+        checks["model_present"] = llm.get("model_present")
+        checks["installed"] = llm.get("installed", [])
 
     try:
         from db.postgres import engine
@@ -102,7 +121,23 @@ async def ready():
 
 @app.get("/api/ollama/status")
 async def ollama_status():
-    """Installed models on the local Ollama server and whether ours is present."""
+    """Installed models on the local Ollama server and whether ours is present.
+
+    Kept for the existing setup wizard; the provider-agnostic version is
+    `GET /api/llm/models?provider=ollama`.
+    """
     from ollama_client import ollama_status as _status
     return await _status()
+
+
+@app.get("/api/forum/status")
+async def forum_status():
+    """Lightweight liveness for the forum surface, for the UI badge."""
+    from agents import registry
+    return {
+        "enabled": settings.forum_enabled,
+        "cast": registry.keys(),
+        "max_rounds": settings.forum_max_rounds,
+        "intake_open": not settings.forum_intake_key,
+    }
 

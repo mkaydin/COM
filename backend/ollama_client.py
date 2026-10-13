@@ -1,8 +1,11 @@
 """Helpers for talking to the local Ollama server.
 
-Used by the health endpoint and `/api/ollama/status` to verify that the
-configured model is actually installed. A non-empty API key is not evidence
-that the LLM works — a missing model tag makes every agent call fail.
+Scoped to the *optional* local provider. Used by `/api/ollama/status` and the
+setup wizard to verify that a configured local model is actually pulled.
+
+A non-empty API key is not evidence that an LLM works — a missing model tag
+makes every agent call fail — which is why this exists even though the
+provider-agnostic health check in `llm.health()` is the primary path.
 """
 
 import asyncio
@@ -66,7 +69,10 @@ async def ollama_status() -> dict:
 
 
 async def llm_health() -> dict:
-    """Health detail for `/api/health`."""
+    """Health detail for `/api/health`.
+
+    Ollama-specific; the provider-agnostic version is `llm.health()`.
+    """
     status = await ollama_status()
     ready = status["reachable"] and status["model_present"]
     if not status["reachable"]:
