@@ -256,6 +256,62 @@ Respond with ONLY this JSON:
 # ======================================================================================
 
 
+#: For a list-of-models field, which key a bare scalar should be wrapped
+#: under. `claims` want `{"text": ...}`; a causal chain naturally wants
+#: `{"chain": [...]}`. Keyed by the item model's name.
+_SCALAR_WRAP_KEY = {
+    "ForumClaim": "text",
+    "CausalChain": "chain",
+    "HiddenLink": "relation",
+}
+
+
+def _wrap_list_item(item, item_model=None):
+    """Normalise one element of a list-of-models field.
+
+    Models return these fields as objects *or* as bare scalars, depending on
+    how literally they read the example in the prompt:
+
+        "claims": [{"text": "a claim"}]     # as specified
+        "claims": ["a claim"]               # what the Analyst returned
+
+    The second shape failed validation and silently dropped a character out
+    of the thread — it posted nothing at all, with no visible cause.
+
+    `None` elements are dropped rather than passed through: a null inside a
+    list is noise, and passing it on just moves the validation error.
+    """
+    if isinstance(item, (dict, BaseModel)):
+        return item
+    if item is None:
+        return None
+
+    key = _SCALAR_WRAP_KEY.get(getattr(item_model, "__name__", ""), "text")
+    value = str(item)
+    if key == "chain":
+        # A causal chain is a list of links, not one string.
+        value = [part.strip() for part in value.split("->")] or [value]
+    return {key: value}
+
+
+def _item_model_for(model_cls, field_name):
+    """The model a list field's elements should be, if the annotation says so.
+
+    Read from the annotation's args rather than `FieldInfo.metadata`: Pydantic
+    keeps the element type in `list[Model]`'s own args, and looking in
+    metadata silently finds nothing — which is exactly the bug this replaced.
+    """
+    import typing
+
+    field = model_cls.model_fields.get(field_name)
+    if field is None:
+        return None
+    for arg in typing.get_args(field.annotation):
+        if isinstance(arg, type) and issubclass(arg, BaseModel):
+            return arg
+    return None
+
+
 class _Coerced(BaseModel):
     """Null-tolerant base for model-authored payloads.
 
@@ -277,10 +333,17 @@ class _Coerced(BaseModel):
     float_fields: ClassVar[frozenset[str]] = frozenset()
     bool_fields: ClassVar[frozenset[str]] = frozenset()
 
+    #: List fields whose elements are model objects rather than scalars.
+    list_fields: ClassVar[frozenset[str]] = frozenset()
+
     @field_validator("*", mode="before")
     @classmethod
     def _none_to_empty(cls, v, info):
         if v is not None:
+            if isinstance(v, list) and info.field_name in cls.list_fields:
+                item_model = _item_model_for(cls, info.field_name)
+                wrapped = [_wrap_list_item(i, item_model) for i in v]
+                return [i for i in wrapped if i is not None]
             return v
         name = info.field_name
         if name in cls.string_fields:
@@ -332,6 +395,10 @@ class CharacterStatement(_Coerced):
     bool_fields: ClassVar[frozenset[str]] = frozenset(
         {"speculation_warning", "insufficient_data"}
     )
+    list_fields: ClassVar[frozenset[str]] = frozenset(
+        {"claims", "citations", "analogies", "causal_chains", "hidden_links",
+         "prior_conclusions"}
+    )
 
     confidence: float = 0.0
     stance: str = "propose"
@@ -380,6 +447,7 @@ class Dissent(_Coerced):
     """A character still objecting to the published outcome."""
 
     string_fields: ClassVar[frozenset[str]] = frozenset({"author", "objection"})
+    list_fields: ClassVar[frozenset[str]] = frozenset({"backers"})
 
     author: str = ""
     objection: str = ""
@@ -389,6 +457,7 @@ class ForumSynthesis(_Coerced):
     string_fields: ClassVar[frozenset[str]] = frozenset(
         {"mode", "answer", "fault_line", "signals_note"}
     )
+    list_fields: ClassVar[frozenset[str]] = frozenset({"positions", "dissent"})
 
     mode: str = "plurality"
     #: Set when mode == "consensus": THE single accepted answer.

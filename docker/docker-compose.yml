@@ -1,11 +1,25 @@
-# Council of Minds — full stack.
+# Council of Minds — infrastructure.
 #
-#   docker compose up -d --build              default stack (this file)
-#   docker compose --profile local  up -d    + local Ollama (optional provider)
-#   docker compose --profile graph  up -d    + Neo4j (optional graph backend)
+# This file runs the STATEFUL services only: postgres, chromadb, searxng.
+# The backend does not belong in here, and the reason is specific.
 #
-# Default stack: postgres, chromadb, searxng, backend, frontend.
-# The app is then reachable at http://localhost:8080
+# The default provider reaches Zen's free models by shelling out to the
+# `opencode` client, because Zen's API refuses free models for any standalone
+# client ("FreeTierError: can only be used from within OpenCode"). A container
+# has no `opencode` binary, and the CLI also needs its own credential store —
+# so containerising the backend would mean either losing the free models or
+# mounting credentials into the container.
+#
+# Hence: Electron (or `python start.py`) runs the backend on the host, where
+# it can call the CLI, and Docker holds the memory and storage.
+#
+#   docker compose up -d                     infra only (the default)
+#   docker compose --profile local up -d     + Ollama (optional local LLM)
+#   docker compose --profile graph up -d     + Neo4j (optional graph store)
+#   docker compose --profile full up -d      + backend & nginx, for a headless
+#                                            deployment with no host backend
+#
+# The `full` profile is NOT the usual way to run COM — see README.
 
 name: com
 
@@ -45,13 +59,27 @@ services:
     volumes:
       - chromadata:/chroma/data
     healthcheck:
-      # Chroma has had no stable /health on every release; the v2 heartbeat is
-      # the one endpoint that has been stable, and it is what start.py probes.
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/v1/heartbeat || exit 1"]
+      # Two traps here, both hit in practice:
+      #  - the image ships no curl or wget, so the usual probe command does
+      #    not exist and the container is permanently "unhealthy";
+      #  - /api/v1/heartbeat is deprecated and answers 410 Gone. /api/v2 is
+      #    the live endpoint.
+      # bash's /dev/tcp is the only HTTP client this image has — and
+      # CMD-SHELL runs /bin/sh (dash), where /dev/tcp does not exist, so the
+      # container reports unhealthy forever. CMD + explicit `bash -c` is
+      # what actually reaches it.
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/localhost/8000 &&
+          printf 'GET /api/v2/heartbeat HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 &&
+          head -1 <&3 | grep -q '200'
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 20s
+      start_period: 30s
 
   searxng:
     image: searxng/searxng:latest
@@ -79,6 +107,9 @@ services:
   # root-owned directory 500s with PermissionError, so hand them to the app
   # user once, before the backend starts.
   fix-permissions:
+    # Only needed by the `full` profile, where the backend runs as `com` in a
+    # container. A host backend already has its own permissions.
+    profiles: ["full"]
     image: alpine:3.20
     container_name: com-fix-permissions
     user: "0:0"
@@ -89,6 +120,7 @@ services:
     restart: "no"
 
   backend:
+    profiles: ["full"]
     build:
       context: ..
       dockerfile: backend/Dockerfile
@@ -162,6 +194,7 @@ services:
       retries: 5
 
   frontend:
+    profiles: ["full"]
     build:
       context: ..
       dockerfile: com_website/Dockerfile

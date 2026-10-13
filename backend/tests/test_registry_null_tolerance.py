@@ -101,3 +101,59 @@ class TestTheCoercionIsNarrow:
     def test_a_missing_field_keeps_its_default(self):
         assert ForumSynthesis().mode == "plurality"
         assert CharacterStatement().stance == "propose"
+
+class TestListItemCoercion:
+    """Models return list fields as objects or as bare scalars, interchangeably.
+
+    Found in production: the Analyst returned `"claims": ["...", "..."]` and
+    Pydantic rejected it, so the character silently posted *nothing* — no
+    error surfaced anywhere, the thread just had a hole in it.
+    """
+
+    def test_bare_strings_become_claims(self):
+        c = CharacterStatement(claims=["first claim", "second claim"])
+        assert [x.text for x in c.claims] == ["first claim", "second claim"]
+
+    def test_dicts_still_work(self):
+        c = CharacterStatement(claims=[{"text": "a claim", "sources": ["s1"]}])
+        assert c.claims[0].text == "a claim"
+        assert c.claims[0].sources == ["s1"]
+
+    def test_mixed_shapes_are_accepted(self):
+        """The realistic case: half right, half wrong, in one list."""
+        c = CharacterStatement(claims=[{"text": "object form"}, "scalar form"])
+        assert [x.text for x in c.claims] == ["object form", "scalar form"]
+
+    def test_citations_coerce_too(self):
+        c = CharacterStatement(citations=["A Paper"])
+        assert c.citations[0].text == "A Paper"
+
+    def test_all_list_fields_coerce(self):
+        """Each list field wraps a bare scalar under its *own* natural key.
+
+        `claims` want `text`, but a causal chain wants `chain` and a hidden
+        link wants `relation` — wrapping everything as `{"text": ...}` would
+        produce an object missing its required fields.
+        """
+        c = CharacterStatement(
+            claims=["c"], citations=["s"], analogies=["a"],
+            causal_chains=["A -> B -> C"], hidden_links=["related_to"],
+            prior_conclusions=["prior"],
+        )
+        assert c.claims[0].text == "c"
+        assert c.citations[0].text == "s"
+        assert c.analogies[0].text == "a"
+        assert c.causal_chains[0].chain == ["A", "B", "C"]
+        assert c.hidden_links[0].relation == "related_to"
+        assert c.prior_conclusions[0].text == "prior"
+
+    def test_backers_accept_bare_strings(self):
+        assert ForumSynthesis(positions=[{"backers": ["oracle", "sage"]}]).positions[0].backers == [
+            "oracle", "sage"
+        ]
+
+    def test_a_scalar_wins_over_a_broken_model(self):
+        """The point: one odd element must not cost the whole character."""
+        c = CharacterStatement(claims=["good", 42, None])
+        assert c.claims[0].text == "good"
+        assert c.claims[1].text == "42"

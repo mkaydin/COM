@@ -274,9 +274,18 @@ def diagnose_call_error(message: str) -> Optional[str]:
     return None
 
 
-async def test_model(model_id: str, provider_id: Optional[str] = None) -> dict:
-    """Send a trivial completion to verify a model actually answers."""
+async def test_model(model_id: str = "", provider_id: Optional[str] = None) -> dict:
+    """Send a trivial completion to verify a model actually answers.
+
+    An empty `model_id` verifies the role default — and the response reports
+    which model that resolved to, which is the point of the call.
+    """
     provider = providers.get(provider_id)
+    if not model_id:
+        try:
+            model_id = roles.model_for(DEFAULT_ROLE, provider)
+        except Exception:
+            model_id = ""
     if provider.requires_key and not provider.api_key:
         return {"ok": False, "model": model_id, "error": "provider has no API key"}
     try:

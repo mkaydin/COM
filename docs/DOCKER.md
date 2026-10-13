@@ -30,9 +30,26 @@ docker compose -f docker/docker-compose.yml up -d --build
 | `postgres` | `pgvector/pgvector:pg16` | 5432 | primary store — topics, posts, sessions, vectors |
 | `chromadb` | `chromadb/chroma` | 8000 | document vector store |
 | `searxng` | `searxng/searxng` | 8888 | meta-search for Divination |
+
+Host ports are configurable (`POSTGRES_PORT`, `CHROMA_PORT`, `SEARXNG_PORT`)
+because 5432/8000/8888 are commonly taken by other local projects. **Mirror
+them in `backend/.env`** — the backend reaches the containers over localhost:
+
+| `docker/.env` | `backend/.env` |
+|---------------|----------------|
+| `POSTGRES_PORT` | the port in `POSTGRES_URL` |
+| `CHROMA_PORT` | `CHROMA_PORT` |
+| `SEARXNG_PORT` | the port in `SEARXNG_URL` |
+
+### `full` profile (not the usual way to run)
+
+| service | image | port | purpose |
+|---------|-------|------|---------|
 | `fix-permissions` | `alpine` | — | one-shot: chowns the knowledge volumes |
 | `backend` | built from `backend/Dockerfile` | 8734 | FastAPI + LangGraph |
 | `frontend` | built from `com_website/Dockerfile` | 8080 | nginx; serves the site, proxies `/api` and `/ws` |
+
+No `opencode` binary here, so this profile cannot use the free Zen models.
 
 ### `--profile local`
 
@@ -93,7 +110,8 @@ silently stop receiving posts.
 
 ## Permissions
 
-The backend runs as the non-root user `com` (uid 1000). Docker creates named
+Only relevant to the `full` profile. The backend container runs as the
+non-root user `com` (uid 1000); a host backend already has your permissions. Docker creates named
 volumes root-owned, so two things need care:
 
 - **`fix-permissions`** runs once before the backend and chowns `/sage_wiki`
@@ -110,7 +128,7 @@ volumes root-owned, so two things need care:
 
 ---
 
-## The backend image
+## The backend image (`full` profile only)
 
 Multi-stage: wheels are built once with a compiler, then copied into a slim
 runtime that never sees a toolchain.
@@ -162,10 +180,28 @@ PATH in that image, so "install the CLI" would be advice that cannot be acted on
 
 ---
 
+## Healthchecks
+
+`chroma` needed three corrections that are worth knowing if you add others:
+
+- the image ships **no `curl` or `wget`**, so the usual probe command does not
+  exist and the container reports *unhealthy* forever;
+- `/api/v1/heartbeat` is deprecated and answers **410 Gone** — `/api/v2` is live;
+- `CMD-SHELL` runs `/bin/sh` (dash), where bash's `/dev/tcp` does not exist.
+
+The working form is `CMD` + an explicit `bash -c`.
+
+`start.py` also probes Postgres with a **TCP connect**, not an HTTP GET —
+Postgres speaks its own wire protocol, so an HTTP probe there never succeeds
+and a healthy database reads as unreachable.
+
+---
+
 ## Troubleshooting
 
-**Port already allocated.** `8080` is a common collision. Override it:
-`FRONTEND_PORT=8090 docker compose -f docker/docker-compose.yml up -d`.
+**Port already allocated.** 5432/8000/8080/8888 all collide easily. Set
+`POSTGRES_PORT` / `CHROMA_PORT` / `SEARXNG_PORT` / `FRONTEND_PORT` in
+`docker/.env` and mirror them in `backend/.env`.
 
 **Backend restart-looping.** Almost always the log-volume permission problem.
 `docker logs com-backend --tail 20`.
@@ -199,10 +235,11 @@ docker compose -f docker/docker-compose.yml down -v
 ## Without Docker
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d postgres chromadb searxng
-python start.py --no-docker
+python start.py --server
 ```
 
-That runs uvicorn on the host (creating `backend/.env` from the example if
-needed), which is also the only place the free Zen models work. The Electron
-shell spawns the backend directly the same way.
+Runs uvicorn on the host with no containers at all — useful when Postgres is
+already running elsewhere. Knowledge retrieval degrades if the stores are
+missing, but the forum itself works.
+
+The Electron shell does the same thing, and also brings the infra up first.

@@ -10,7 +10,38 @@ positions**, each attributed to whoever holds it.
 
 Every character runs on its own model. The defaults are all free.
 
-Available as a desktop app (Electron) or in the browser.
+Desktop app (Electron), with the backend and Docker holding the state.
+
+---
+
+## Architecture
+
+```
+┌──────────────────────────────┐
+│  Electron                    │   GUI
+│  loads com_website/*.html    │
+└──────────────┬───────────────┘
+               │ HTTP + WebSocket
+               ▼
+┌──────────────────────────────┐
+│  backend  (uvicorn, host)    │   FastAPI + LangGraph
+│      │                       │
+│      └─► opencode CLI        │   Zen's FREE models
+└──────────────┬───────────────┘
+               │ localhost
+               ▼
+┌──────────────────────────────┐
+│  Docker                      │   state only
+│    postgres · chromadb · searxng │
+└──────────────────────────────┘
+```
+
+**The backend is on the host, not in a container**, and that is not a
+preference. The default provider reaches Zen's free models by shelling out to
+the `opencode` client, because Zen's API refuses free models to standalone
+clients. A container has neither the binary nor its credential store — so
+putting the backend in Docker would cost you the free models. Docker holds the
+stateful services; the app runs where you can see it.
 
 ---
 
@@ -103,45 +134,65 @@ Every binding is overridable per character, at runtime, from
 - **Backend:** Python 3.12 · FastAPI · LangGraph · SQLAlchemy/asyncpg · LiteLLM
 - **Knowledge:** PostgreSQL + pgvector · ChromaDB · (optional) Neo4j
 - **Web intelligence:** SearXNG (meta-search) · Scout scrape / JS render
-- **Frontend:** Vanilla HTML/CSS/JS (Tailwind) · nginx in Docker
-- **Desktop:** Electron
+- **Frontend:** Vanilla HTML/CSS/JS (Tailwind), loaded from `file://` by Electron
+- **Desktop:** Electron — GUI, and it spawns the backend
 - **LLM:** OpenCode Zen free models via the `opencode` CLI (**default**, no key) · Zen over HTTP · Ollama (local)
 
 ---
 
 ## Quick start
 
-### With Docker (everything)
+### Desktop app
 
 ```bash
-cp docker/.env.example docker/.env      # add your OPENCODE_API_KEY
-python start.py                         # -> http://localhost:8080
+cd desktop && npm install && npm start
 ```
 
-Or directly:
+Electron brings up postgres and chromadb in Docker, spawns the backend on the
+host, and opens the forum. One command.
+
+### From a terminal
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d --build
+python start.py      # Docker infra + backend on the host
 ```
 
-Brings up postgres, chromadb, searxng, the backend and an nginx frontend that
-proxies the API and the WebSocket.
+Then open `com_website/forum.html`.
 
-### The free models, on the host
+```
+=== Starting infrastructure (Docker) ===
+  postgres: OK
+  chromadb: OK
+=== Backend ===
+  provider: opencode-cli
+    binary: /home/you/.opencode/bin/opencode
+    verified: big-pickle answered
+```
+
+Nothing else is required — no API key. The CLI has its own credentials.
+
+| flag | effect |
+|------|--------|
+| `python start.py` | infra + host backend |
+| `--local` | also start Ollama in Docker |
+| `--graph` | also start Neo4j |
+| `--server` | backend only, no Docker |
+| `--container` | whole stack in Docker (loses the free models) |
+| `--stop` | stop the infra |
+
+### Infrastructure only
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d postgres chromadb   # infra only
-pip install opencode-ai                                                # the CLI
-cd backend && pip install -r requirements.txt && python -m uvicorn main:app --reload
-open com_website/forum.html
+docker compose -f docker/docker-compose.yml up -d
 ```
 
-### Without Docker at all
+postgres, chromadb and searxng. Pair it with a backend you run yourself —
+`python start.py --server`, or Electron.
 
-```bash
-docker compose -f docker/docker-compose.yml up -d postgres chromadb
-python start.py --no-docker          # runs uvicorn here, creates .env if needed
-```
+> **Ports.** If 5432/8000/8080/8888 are taken, set `POSTGRES_PORT`,
+> `CHROMA_PORT`, `FRONTEND_PORT` and `SEARXNG_PORT` in `docker/.env`, and
+> mirror them in `backend/.env` (`CHROMA_PORT`, `SEARXNG_URL`,
+> `POSTGRES_URL`) — the backend reaches the containers over localhost.
 
 ### Configuration
 
@@ -163,9 +214,10 @@ POST /zen/v1/chat/completions  →  FreeTierError:
 default models answer through it. The cost is latency: **1.4–3.2s per call**,
 so a five-character two-round topic takes ~3–5 minutes.
 
-> **The backend must run on the host** (`python start.py --no-docker`) — the
-> Docker image does not ship an `opencode` binary. In Docker use
+> **The backend must run on the host** — the Docker image ships no `opencode`
+> binary, and the CLI also needs its own credential store. In Docker use
 > `LLM_PROVIDER=ollama` (free, local) or `opencode` (Zen over HTTP, billed).
+> This is why `python start.py` and Electron both run the backend on the host.
 
 Everything else has a working default, and **the default models are all free**.
 See [docs/PROVIDERS.md](docs/PROVIDERS.md).
@@ -208,8 +260,8 @@ See [docs/FORUM.md](docs/FORUM.md).
 │   ├── db/forum_models.py    topics, posts, topic_intake, llm_roles
 │   └── tests/
 ├── com_website/              forum.html, topic.html, llm_settings.html, …
-├── desktop/                  Electron shell
-├── docker/                   compose, nginx, postgres-init, .env.example
+├── desktop/                  Electron shell — GUI + spawns the backend
+├── docker/                   compose (infra only), nginx, postgres-init
 └── sage_wiki/                persistent knowledge base
 ```
 

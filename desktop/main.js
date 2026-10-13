@@ -4,10 +4,16 @@ const path = require('path');
 const fs = require('fs');
 const Store = require('electron-store');
 
-// Default provider is OpenCode Zen; every shipped model is free-tier.
-const DEFAULT_PROVIDER = 'opencode';
+// Default provider reaches Zen's free models through the `opencode` CLI,
+// because Zen's API refuses free models to standalone clients. That is also
+// why the backend runs here on the host rather than in a container.
+const DEFAULT_PROVIDER = 'opencode-cli';
 const DEFAULT_MODEL = 'big-pickle';
 const DEFAULT_OLLAMA_MODEL = 'gemma4:e4b';
+
+// Stateful services live in Docker; the backend does not.
+const DOCKER_DIR = path.join(__dirname, '..', 'docker');
+const INFRA_SERVICES = ['postgres', 'chromadb'];
 
 const storeSchema = {
   pythonPath: { type: 'string', default: 'python3' },
@@ -140,6 +146,37 @@ function getPythonPath() {
   }
 
   return 'python3';
+}
+
+function dockerAvailable() {
+  try {
+    return fs.existsSync('/var/run/docker.sock') || fs.existsSync('/run/docker.sock');
+  } catch { return false; }
+}
+
+/**
+ * Bring up postgres/chroma in the background, then wait for postgres.
+ *
+ * Non-blocking: a slow or absent Docker must never stop the window opening.
+ * The backend degrades to reduced retrieval if the stores are not there, which
+ * is better than a GUI that will not start.
+ */
+function startInfra() {
+  if (!dockerAvailable()) {
+    log('warn', 'Docker not detected — knowledge retrieval will be degraded');
+    return;
+  }
+  log('info', 'Starting infrastructure (Docker): ' + INFRA_SERVICES.join(', '));
+  const proc = spawn('docker', ['compose', '-f', path.join(DOCKER_DIR, 'docker-compose.yml'),
+                                'up', '-d', ...INFRA_SERVICES],
+                     { cwd: DOCKER_DIR, stdio: ['ignore', 'pipe', 'pipe'] });
+  proc.stdout.on('data', (d) => log('info', `[docker] ${d.toString().trim()}`));
+  proc.stderr.on('data', (d) => log('warn', `[docker] ${d.toString().trim()}`));
+  proc.on('error', (e) => log('warn', `Could not run docker: ${e.message}`));
+  proc.on('close', (code) => {
+    if (code !== 0) log('warn', `docker compose exited ${code}`);
+    else log('info', 'Infrastructure ready');
+  });
 }
 
 async function startPythonBackend() {
@@ -335,6 +372,9 @@ ipcMain.on('navigate', (_, page) => {
 app.whenReady().then(async () => {
   log('info', 'App starting');
 
+  // Docker first and in parallel: the backend takes a few seconds to import,
+  // which is enough time for the stores to come up.
+  startInfra();
   await startPythonBackend();
   createWindow();
 
