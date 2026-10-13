@@ -1,5 +1,5 @@
 const { app, BrowserWindow, dialog, ipcMain, Notification, Tray, Menu, nativeImage, safeStorage } = require('electron');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const Store = require('electron-store');
@@ -14,6 +14,13 @@ const DEFAULT_OLLAMA_MODEL = 'gemma4:e4b';
 // Stateful services live in Docker; the backend does not.
 const REPO_ROOT = path.join(__dirname, '..');
 const INFRA_SERVICES = ['postgres', 'chromadb'];
+
+// Dev mode serves the site over HTTP instead of file://, so a reload picks up
+// edits without restarting Electron. One constant: the port appeared three
+// times, and changing the server without changing the URL it is loaded from
+// produces a window that shows nothing but a connection error.
+const DEV_SERVER_PORT = 5500;
+const DEV_ORIGIN = `http://localhost:${DEV_SERVER_PORT}`;
 
 const storeSchema = {
   pythonPath: { type: 'string', default: 'python3' },
@@ -80,28 +87,53 @@ function getBackendDir() {
 function writeBackendEnv(overrides = {}) {
   const envPath = path.join(getBackendDir(), '.env');
 
+  const existing = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8').split(/\r?\n/) : [];
+
+  // What the file already says, so a value the user set by hand survives.
+  // Without this, `OPENCODE_API_KEY: ... || ''` wrote a blank key over a real
+  // one on every launch whenever the Electron store did not hold it — and the
+  // app showed no sign of it, because the default provider needs no key. The
+  // loss only surfaced when someone switched to the Zen HTTP provider.
+  const fromFile = {};
+  for (const line of existing) {
+    const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (m) fromFile[m[1]] = m[2].trim();
+  }
+
   // Managed keys are (re)written from the app's settings; every other line is
   // preserved verbatim, so a hand-edited POSTGRES_URL or a comment survives.
-  // Values in `overrides` win; `force` is not needed because these keys are
-  // owned by the app.
+  // Precedence: explicit override -> app store -> existing file -> default.
   const provider = overrides.llmProvider || getStore().get('llmProvider') || DEFAULT_PROVIDER;
+  const pick = (...values) => values.find(v => v !== undefined && v !== null && v !== '') ?? '';
 
   const managed = {
     BACKEND_PORT: String(getStore().get('backendPort')),
     LLM_PROVIDER: provider,
-    OPENCODE_API_KEY: overrides.opencodeApiKey || getStore().get('opencodeApiKey') || '',
+    OPENCODE_API_KEY: pick(
+      overrides.opencodeApiKey,
+      getStore().get('opencodeApiKey'),
+      fromFile.OPENCODE_API_KEY
+    ),
     // With Ollama every role runs on one pulled tag, so it is both the
     // provider default and the legacy single-model setting.
     LLM_MODEL_DEFAULT: provider === 'ollama'
-      ? (overrides.llmModel || getStore().get('llmModel') || DEFAULT_OLLAMA_MODEL)
-      : (overrides.llmModelDefault || getStore().get('llmModelDefault') || DEFAULT_MODEL),
-    OLLAMA_HOST: overrides.ollamaHost || getStore().get('ollamaHost') || 'localhost',
-    OLLAMA_PORT: String(overrides.ollamaPort || getStore().get('ollamaPort') || 11434),
+      ? pick(overrides.llmModel, getStore().get('llmModel'), fromFile.LLM_MODEL_DEFAULT, DEFAULT_OLLAMA_MODEL)
+      : pick(overrides.llmModelDefault, getStore().get('llmModelDefault'), fromFile.LLM_MODEL_DEFAULT, DEFAULT_MODEL),
+    OLLAMA_HOST: pick(overrides.ollamaHost, getStore().get('ollamaHost'), fromFile.OLLAMA_HOST, 'localhost'),
+    OLLAMA_PORT: String(pick(overrides.ollamaPort, getStore().get('ollamaPort'), fromFile.OLLAMA_PORT, '11434')),
     LOG_LEVEL: 'INFO',
     LOG_DIR: LOG_DIR
   };
 
-  const existing = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8').split(/\r?\n/) : [];
+  // Clearing a key is only ever intentional: an explicit empty override.
+  // A store that simply has no key must not mean "erase the user's".
+  const explicitlyCleared = new Set(
+    Object.keys(overrides).filter(k => overrides[k] === '')
+  );
+  for (const k of explicitlyCleared) {
+    if (k === 'opencodeApiKey') managed.OPENCODE_API_KEY = '';
+  }
+
   const out = [];
   const seen = new Set();
 
@@ -123,6 +155,26 @@ function writeBackendEnv(overrides = {}) {
   log('info', `Backend .env written (provider=${managed.LLM_PROVIDER}, default=${managed.LLM_MODEL_DEFAULT})`);
 }
 
+/**
+ * Does this interpreter actually have the backend's dependencies?
+ *
+ * Checking that the file exists is not enough. `/usr/bin/python3` always
+ * exists and almost never has uvicorn, so selecting it produces a backend that
+ * dies instantly with a ModuleNotFoundError and a crash-restart loop, while
+ * the window opens normally and looks fine until you click something.
+ */
+function pythonHasBackendDeps(pythonPath) {
+  try {
+    const probe = spawnSync(pythonPath, ['-c', 'import uvicorn, fastapi'], {
+      timeout: 15000,
+      stdio: 'ignore'
+    });
+    return probe.status === 0;
+  } catch {
+    return false;
+  }
+}
+
 function getPythonPath() {
   const stored = getStore().get('pythonPath');
   if (stored && stored !== 'python3' && fs.existsSync(stored)) {
@@ -132,20 +184,22 @@ function getPythonPath() {
   const candidates = [
     path.join(__dirname, '..', '.venv', 'bin', 'python'),
     path.join(__dirname, '..', '.venv', 'bin', 'python3'),
-    '/usr/bin/python3',
     'python3'
   ];
 
   for (const candidate of candidates) {
     try {
-      if (fs.existsSync(candidate) || candidate === 'python3') {
-        log('info', `Using Python: ${candidate}`);
-        return candidate;
+      if (!fs.existsSync(candidate) && candidate !== 'python3') continue;
+      if (!pythonHasBackendDeps(candidate)) {
+        log('warn', `${candidate} cannot import uvicorn/fastapi — skipping`);
+        continue;
       }
+      log('info', `Using Python: ${candidate}`);
+      return candidate;
     } catch {}
   }
 
-  return 'python3';
+  return null;
 }
 
 function dockerAvailable() {
@@ -202,6 +256,24 @@ async function startPythonBackend() {
   const pythonPath = getPythonPath();
   const backendDir = getBackendDir();
 
+  if (!pythonPath) {
+    // Say so, rather than spawning something that will crash-loop. An
+    // unexplained blank window is the hardest version of this to debug.
+    const message =
+      'No Python with the backend dependencies was found.\n\n' +
+      'Looked for .venv/bin/python, .venv/bin/python3 and python3 on PATH; ' +
+      'none can import uvicorn.\n\n' +
+      'Create it:\n' +
+      `    python3 -m venv ${path.join(REPO_ROOT, '.venv')}\n` +
+      `    ${path.join(REPO_ROOT, '.venv', 'bin', 'pip')} install -r ` +
+      `${path.join(REPO_ROOT, 'backend', 'requirements.txt')}\n`;
+    log('error', 'No usable Python found for the backend.');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      dialog.showErrorBox('Backend unavailable', message);
+    }
+    return;
+  }
+
   log('info', `Starting Python backend (${pythonPath} uvicorn on port ${port})`);
 
   pythonProcess = spawn(pythonPath, ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)], {
@@ -211,7 +283,15 @@ async function startPythonBackend() {
   });
 
   pythonProcess.stdout.on('data', (data) => log('info', `[backend] ${data.toString().trim()}`));
-  pythonProcess.stderr.on('data', (data) => log('error', `[backend] ${data.toString().trim()}`));
+
+  // Uvicorn writes its ordinary startup and request lines to stderr, so
+  // logging stderr as errors turned "Application startup complete" into an
+  // [error] line — and buried the tracebacks that actually matter.
+  pythonProcess.stderr.on('data', (data) => {
+    const text = data.toString().trim();
+    const isFailure = /Traceback|^[A-Za-z_.]*(Error|Exception)\b|MODULE_NOT_FOUND|CRITICAL/i.test(text);
+    log(isFailure ? 'error' : 'info', `[backend] ${text}`);
+  });
 
   pythonProcess.on('close', (code) => {
     log('warn', `Python backend exited with code ${code}`);
@@ -254,8 +334,74 @@ async function waitForBackend(maxRetries = 30, interval = 1000) {
   return false;
 }
 
+/**
+ * Serve com_website/ over HTTP for `npm run dev`.
+ *
+ * Dev mode loads the app over HTTP rather than file://, so a reload picks up
+ * edits without restarting Electron. Nothing used to serve that port, so
+ * `npm start` — which set NODE_ENV=dev — opened a window that could only ever
+ * show "This site can't be reached".
+ */
+let staticServer = null;
+
+function startStaticServer(port = DEV_SERVER_PORT) {
+  if (staticServer) return;
+
+  const webRoot = path.join(REPO_ROOT, 'com_website');
+  const http = require('http');
+  const url = require('url');
+
+  const types = {
+    '.html': 'text/html; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.png': 'image/png',
+    '.svg': 'image/svg+xml',
+    '.ico': 'image/x-icon'
+  };
+
+  staticServer = http.createServer((req, res) => {
+    // Resolve inside webRoot and verify the result is still inside it, so a
+    // crafted path cannot read the rest of the repo.
+    const rel = decodeURIComponent(url.parse(req.url).pathname).replace(/^\/+/, '');
+    const target = path.resolve(webRoot, rel || 'forum.html');
+    if (target !== webRoot && !target.startsWith(webRoot + path.sep)) {
+      res.writeHead(403).end('forbidden');
+      return;
+    }
+
+    fs.readFile(target, (err, data) => {
+      if (err) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' }).end('not found');
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': types[path.extname(target)] || 'application/octet-stream' });
+      res.end(data);
+    });
+  });
+
+  staticServer.on('error', (err) => {
+    log('error', `Static server failed: ${err.message}`);
+    staticServer = null;
+  });
+
+  staticServer.listen(port, '127.0.0.1', () => {
+    log('info', `Dev static server on ${DEV_ORIGIN}`);
+  });
+}
+
+function stopStaticServer() {
+  if (staticServer) {
+    staticServer.close();
+    staticServer = null;
+  }
+}
+
 function createWindow() {
   const isDev = process.env.NODE_ENV === 'dev';
+
+  if (isDev) startStaticServer();
 
   mainWindow = new BrowserWindow({
     width: 1440, height: 900, minWidth: 1024, minHeight: 700,
@@ -272,7 +418,7 @@ function createWindow() {
   });
 
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5500/forum.html');
+    mainWindow.loadURL(`${DEV_ORIGIN}/forum.html`);
   } else {
     const loadTarget = path.join(__dirname, '..', 'com_website', 'forum.html');
     mainWindow.loadFile(loadTarget);
@@ -449,7 +595,7 @@ app.whenReady().then(async () => {
     }
 
     if (process.env.NODE_ENV === 'dev') {
-      mainWindow.loadURL(`http://localhost:5500/${targetPage}`);
+      mainWindow.loadURL(`${DEV_ORIGIN}/${targetPage}`);
     } else {
       mainWindow.loadFile(path.join(__dirname, '..', 'com_website', targetPage));
     }
@@ -476,4 +622,7 @@ app.on('before-quit', () => {
     pythonProcess.kill();
     pythonProcess = null;
   }
+  // Release the dev port, otherwise the next `npm run dev` fails to bind and
+  // the window silently falls back to a dead URL.
+  stopStaticServer();
 });

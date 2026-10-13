@@ -145,11 +145,24 @@ Every binding is overridable per character, at runtime, from
 ### Desktop app
 
 ```bash
-cd desktop && npm install && npm start
+cd desktop && npm install
+npm start              # or: npm run dev  (serves the site over HTTP, reload to apply edits)
 ```
 
-Electron brings up postgres and chromadb in Docker, spawns the backend on the
-host, and opens the forum. One command.
+One command. It brings up postgres and chromadb in Docker, spawns the backend
+on the host, and opens the forum.
+
+| script | loads from | use for |
+|--------|------------|---------|
+| `npm start` | `file://` | normal use |
+| `npm run dev` | `http://localhost:5500` | editing the UI — reload picks up changes without restarting Electron |
+
+If the backend cannot start, the app says so with the exact `pip install`
+command. The logs are at `~/.config/com-council-of-minds/logs/electron.log`.
+
+> The backend is launched with the interpreter that can actually import
+> `uvicorn` — the repo's `.venv`, in practice. If none can, the app tells you
+> rather than crash-looping behind a window that looks fine.
 
 ### From a terminal
 
