@@ -149,18 +149,38 @@ async def open_topic(state: ForumState) -> dict:
     from uuid import UUID
 
     async with async_session() as db:
-        topic = await create_topic(
-            db,
-            question,
-            title=(opening["title"] or question)[:MAX_TITLE],
-            framing=opening.get("framing"),
-            origin=state.get("origin", "user"),
-            mode=mode,
-            cast=cast,
-            tags=state.get("tags") or [],
-            session_id=state.get("session_id"),
-            max_rounds=max_rounds,
-        )
+        existing_id = state.get("topic_id")
+        if existing_id:
+            # The caller already created the topic row so clients can subscribe
+            # before the run starts. Fill it in rather than creating a second,
+            # orphan one.
+            topic = await create_topic(
+                db,
+                question,
+                title=(opening["title"] or question)[:MAX_TITLE],
+                framing=opening.get("framing"),
+                origin=state.get("origin", "user"),
+                mode=mode,
+                cast=cast,
+                tags=state.get("tags") or [],
+                session_id=state.get("session_id"),
+                max_rounds=max_rounds,
+                topic_id=UUID(existing_id),
+            )
+        else:
+            topic = await create_topic(
+                db,
+                question,
+                title=(opening["title"] or question)[:MAX_TITLE],
+                framing=opening.get("framing"),
+                origin=state.get("origin", "user"),
+                mode=mode,
+                cast=cast,
+                tags=state.get("tags") or [],
+                session_id=state.get("session_id"),
+                max_rounds=max_rounds,
+            )
+
         # The opening post is the Moderator's framing — it anchors the thread.
         await append_post(
             db,
@@ -386,7 +406,11 @@ async def moderator_synthesis(state: ForumState) -> dict:
     # report the real state rather than assume another round will fix it.
     # Derived here rather than in `decide_continue`, which cannot write state.
     forced = bool(state.get("forced")) or (state.get("round", 0) >= state.get("max_rounds", 2))
-    forced_mode = "plurality" if forced else None
+
+    # Exhausting the budget does NOT mean plurality. It only means "stop
+    # hoping they will converge". A thread that converged before the budget ran
+    # out has still converged, and must be publishable as consensus.
+    forced_mode = "plurality" if (forced and not signals.get("converged")) else None
 
     thread_text = "\n\n".join(
         f"#{p['seq']} {p['author'].upper()} [{p['stance']}]\n{(p['body'] or '').strip()}"
@@ -564,6 +588,7 @@ def get_graph():
 async def run_topic(
     question: str,
     *,
+    topic_id: Optional[str] = None,
     cast: Optional[list[str]] = None,
     mode: str = "auto",
     tags: Optional[list] = None,
@@ -573,6 +598,9 @@ async def run_topic(
     on_event=None,
 ) -> dict:
     """Open a topic and run it to its conclusion.
+
+    `topic_id` reuses a topic row the caller already created (so a client can
+    subscribe before the run starts) instead of making a second one.
 
     `on_event(event_type, payload)` is called as the thread develops so the
     WebSocket layer can stream posts out live. It may be async.
@@ -590,6 +618,7 @@ async def run_topic(
             logger.warning("forum_event_emit_failed", kind=kind, error=str(e)[:120])
 
     initial: ForumState = {
+        "topic_id": topic_id,
         "question": question,
         "cast": cast or [],
         "mode": mode,

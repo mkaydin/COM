@@ -143,7 +143,16 @@ class Post(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     topic = relationship("Topic", back_populates="posts")
-    replies = relationship("Post", backref="replies_to", remote_side=[reply_to])
+    #: Self-referential thread structure. `remote_side` points at the parent
+    #: side; without it SQLAlchemy cannot tell this one-to-many from its
+    #: inverse and mapper configuration fails outright.
+    replies_to = relationship(
+        "Post",
+        back_populates="replies",
+        remote_side=[id],
+        order_by="Post.seq",
+    )
+    replies = relationship("Post", back_populates="replies_to")
 
     __table_args__ = (
         UniqueConstraint("topic_id", "seq", name="uq_posts_topic_seq"),

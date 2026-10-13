@@ -307,12 +307,35 @@ class TopicOpening(BaseModel):
     reasoning: str = ""
 
 
+class Position(BaseModel):
+    """One surviving view in a plurality outcome.
+
+    `backers` is the point of this model: a position nobody holds is not a
+    position, and a position held by an unnamed character is unattributable.
+    The Moderator is required to name who stands behind each one.
+    """
+
+    label: str = ""
+    position: str = ""
+    backers: list[str] = []
+
+
+class Dissent(BaseModel):
+    """A character still objecting to the published outcome."""
+
+    author: str = ""
+    objection: str = ""
+
+
 class ForumSynthesis(BaseModel):
     mode: str = "plurality"
+    #: Set when mode == "consensus": THE single accepted answer.
     answer: str = ""
-    positions: list[ForumClaim] = []
+    #: Set when mode == "plurality".
+    positions: list[Position] = []
+    #: The real disagreement in one sentence.
     fault_line: str = ""
-    dissent: list[ForumClaim] = []
+    dissent: list[Dissent] = []
     signals_note: str = ""
 
 

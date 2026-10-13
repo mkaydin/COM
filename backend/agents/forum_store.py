@@ -15,7 +15,7 @@ testable without a database.
 from typing import Any, Optional
 
 from sqlalchemy import select, func, desc, asc
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from uuid import uuid4
 
 from db.forum_models import Topic, Post, TopicIntake
 from logging_config import get_logger
@@ -164,9 +164,17 @@ async def create_topic(
     session_id: Optional[str] = None,
     source_meta: Optional[dict] = None,
     max_rounds: int = 2,
+    topic_id: Optional[str] = None,
     commit: bool = True,
 ) -> dict:
-    topic = Topic(
+    """Create a topic, or update one the caller already created.
+
+    `topic_id` exists because the API creates the row up front so a client can
+    subscribe over WebSocket before the run begins. The Moderator's node then
+    fills in the title/framing/cast rather than inserting a second, orphan
+    topic — the returned id is the caller's id in both cases.
+    """
+    values = dict(
         title=title or question[:120],
         question=question,
         framing=framing,
@@ -179,6 +187,22 @@ async def create_topic(
         max_rounds=max_rounds,
         session_id=session_id,
     )
+
+    if topic_id is not None:
+        topic = await get_topic(db, topic_id)
+        if topic is not None:
+            for key, value in values.items():
+                if value in (None, [], {}) and key not in ("cast", "tags"):
+                    continue
+                setattr(topic, key, value)
+            if commit:
+                await db.commit()
+            else:
+                await db.flush()
+            await db.refresh(topic)
+            return topic_to_dict(topic)
+
+    topic = Topic(id=topic_id or uuid4(), **values)
     db.add(topic)
     if commit:
         await db.commit()
@@ -316,24 +340,29 @@ async def enqueue_intake(
 async def claim_intake(db, intake_id) -> Optional[dict]:
     """Mark a queued item as opened and return it.
 
-    Uses a conditional UPDATE so two workers cannot both claim the same item.
+    A conditional UPDATE rather than an upsert: `pg_insert(...).on_conflict_do_update`
+    would still validate NOT NULL columns on the INSERT path, and `question` is
+    NOT NULL. `WHERE status = 'queued'` is also what stops two workers from
+    both claiming the same item — the loser matches zero rows.
     """
     from datetime import datetime, timezone
 
-    result = await db.execute(
-        pg_insert(TopicIntake)
-        .values(id=intake_id, status="opened", opened_at=datetime.now(timezone.utc))
-        .on_conflict_do_update(
-            index_elements=[TopicIntake.id],
-            set_={"status": "opened", "opened_at": datetime.now(timezone.utc)},
-            where=(TopicIntake.status == "queued"),
+    row = (
+        await db.execute(
+            select(TopicIntake)
+            .where(TopicIntake.id == intake_id)
+            .where(TopicIntake.status == "queued")
+            .with_for_update()
         )
-        .returning(TopicIntake.id, TopicIntake.question, TopicIntake.source,
-                   TopicIntake.payload, TopicIntake.options)
-    )
-    row = result.first()
+    ).scalar_one_or_none()
     if row is None:
         return None
+
+    row.status = "opened"
+    row.opened_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(row)
+
     return {
         "id": str(row.id),
         "question": row.question,

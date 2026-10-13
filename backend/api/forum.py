@@ -113,10 +113,17 @@ def _require_intake_key(x_com_key: Optional[str]) -> None:
 
 
 async def _run_and_respond(topic_id: str, question: str, *, cast, mode, tags, origin, session_id, max_rounds):
+    """Run an already-created topic to its conclusion.
+
+    The topic row is created before the run so a client can subscribe over
+    WebSocket first; `topic_id` is passed into the graph so the Moderator's
+    opening fills that row in instead of creating a second one.
+    """
     from agents.forum_graph import run_topic
 
     return await run_topic(
         question,
+        topic_id=topic_id,
         cast=cast,
         mode=mode,
         tags=tags,
