@@ -121,8 +121,21 @@ class FakeChoice:
 
 
 class FakeResponse:
+    """Mirrors what `llm.llm_complete` actually returns.
+
+    `content` is the transport-agnostic accessor agents read — the CLI
+    provider returns a dict, LiteLLM an object graph, and `LLMResult.content`
+    is the one way in. A fake that only implements `.choices[0].message`
+    silently stops matching the real contract.
+    """
+
     def __init__(self, content):
         self.choices = [FakeChoice(content)]
+        self._content = content
+
+    @property
+    def content(self):
+        return self._content
 
 
 @pytest.fixture
