@@ -4,12 +4,21 @@ const path = require('path');
 const fs = require('fs');
 const Store = require('electron-store');
 
-const DEFAULT_MODEL = 'gemma4:e4b';
+// Default provider is OpenCode Zen; every shipped model is free-tier.
+const DEFAULT_PROVIDER = 'opencode';
+const DEFAULT_MODEL = 'big-pickle';
+const DEFAULT_OLLAMA_MODEL = 'gemma4:e4b';
 
 const storeSchema = {
   pythonPath: { type: 'string', default: 'python3' },
   backendPort: { type: 'number', default: 8734 },
-  llmModel: { type: 'string', default: DEFAULT_MODEL },
+  // Provider selection. 'opencode' is the default (free models over HTTPS);
+  // 'ollama' is the optional local provider.
+  llmProvider: { type: 'string', default: DEFAULT_PROVIDER },
+  llmModelDefault: { type: 'string', default: DEFAULT_MODEL },
+  // The local tag, used only when llmProvider is 'ollama'.
+  llmModel: { type: 'string', default: DEFAULT_OLLAMA_MODEL },
+  opencodeApiKey: { type: 'string', default: '' },
   ollamaHost: { type: 'string', default: 'localhost' },
   ollamaPort: { type: 'number', default: 11434 },
   configured: { type: 'boolean', default: false }
@@ -69,9 +78,17 @@ function writeBackendEnv(overrides = {}) {
   // preserved verbatim, so a hand-edited POSTGRES_URL or a comment survives.
   // Values in `overrides` win; `force` is not needed because these keys are
   // owned by the app.
+  const provider = overrides.llmProvider || getStore().get('llmProvider') || DEFAULT_PROVIDER;
+
   const managed = {
     BACKEND_PORT: String(getStore().get('backendPort')),
-    LLM_MODEL: overrides.llmModel || getStore().get('llmModel') || DEFAULT_MODEL,
+    LLM_PROVIDER: provider,
+    OPENCODE_API_KEY: overrides.opencodeApiKey || getStore().get('opencodeApiKey') || '',
+    // With Ollama every role runs on one pulled tag, so it is both the
+    // provider default and the legacy single-model setting.
+    LLM_MODEL_DEFAULT: provider === 'ollama'
+      ? (overrides.llmModel || getStore().get('llmModel') || DEFAULT_OLLAMA_MODEL)
+      : (overrides.llmModelDefault || getStore().get('llmModelDefault') || DEFAULT_MODEL),
     OLLAMA_HOST: overrides.ollamaHost || getStore().get('ollamaHost') || 'localhost',
     OLLAMA_PORT: String(overrides.ollamaPort || getStore().get('ollamaPort') || 11434),
     LOG_LEVEL: 'INFO',
@@ -97,7 +114,7 @@ function writeBackendEnv(overrides = {}) {
   }
 
   fs.writeFileSync(envPath, out.join('\n').replace(/\n+$/, '\n'));
-  log('info', `Backend .env written (model=${managed.LLM_MODEL})`);
+  log('info', `Backend .env written (provider=${managed.LLM_PROVIDER}, default=${managed.LLM_MODEL_DEFAULT})`);
 }
 
 function getPythonPath() {
@@ -217,9 +234,9 @@ function createWindow() {
   });
 
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5500/council_landing_page.html');
+    mainWindow.loadURL('http://localhost:5500/forum.html');
   } else {
-    const loadTarget = path.join(__dirname, '..', 'com_website', 'council_landing_page.html');
+    const loadTarget = path.join(__dirname, '..', 'com_website', 'forum.html');
     mainWindow.loadFile(loadTarget);
   }
 
@@ -289,11 +306,19 @@ ipcMain.handle('backend:restart', async () => {
 });
 
 ipcMain.handle('backend:saveConfig', async (_, config) => {
+  if (config.llmProvider) getStore().set('llmProvider', config.llmProvider);
   if (config.llmModel) getStore().set('llmModel', config.llmModel);
+  if (config.llmModelDefault) getStore().set('llmModelDefault', config.llmModelDefault);
+  if (config.opencodeApiKey) getStore().set('opencodeApiKey', config.opencodeApiKey);
   if (config.ollamaHost) getStore().set('ollamaHost', config.ollamaHost);
   if (config.ollamaPort) getStore().set('ollamaPort', Number(config.ollamaPort));
   getStore().set('configured', true);
-  writeBackendEnv({ llmModel: config.llmModel });
+  writeBackendEnv({
+    llmProvider: config.llmProvider,
+    llmModel: config.llmModel,
+    llmModelDefault: config.llmModelDefault,
+    opencodeApiKey: config.opencodeApiKey,
+  });
   await startPythonBackend();
   return true;
 });
@@ -320,7 +345,14 @@ app.whenReady().then(async () => {
     tray.setToolTip('Council of Minds');
     const ctxMenu = Menu.buildFromTemplate([
       { label: 'Show Window', click: () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } } },
-      { label: 'New Deliberation', click: () => {
+      { label: 'New Topic', click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          const target = path.join(__dirname, '..', 'com_website', 'forum.html');
+          if (fs.existsSync(target)) mainWindow.loadFile(target);
+        }
+      }},
+      { label: 'Chamber (legacy)', click: () => {
         if (mainWindow) {
           mainWindow.show();
           const target = path.join(__dirname, '..', 'com_website', 'council_chamber.html');
@@ -360,18 +392,18 @@ app.whenReady().then(async () => {
 
   if (mainWindow && !mainWindow.isDestroyed()) {
     const configured = getStore().get('configured');
-    let targetPage = 'council_landing_page.html';
+    let targetPage = 'forum.html';
 
     if (!healthy) {
-      targetPage = 'council_landing_page.html';
-      log('warn', 'Backend not healthy, loading landing page');
+      targetPage = 'forum.html';
+      log('warn', 'Backend not healthy, loading the forum');
     } else if (!configured) {
       const setupPath = path.join(__dirname, '..', 'com_website', 'setup.html');
       if (fs.existsSync(setupPath)) {
         targetPage = 'setup.html';
       } else {
-        log('warn', 'setup.html not found, loading landing page instead');
-        targetPage = 'council_landing_page.html';
+        log('warn', 'setup.html not found, loading the forum instead');
+        targetPage = 'forum.html';
       }
     }
 

@@ -1,6 +1,14 @@
 # Council of Minds
 
-**A multi-agent AI deliberation system.** Specialized agents — each with a distinct reasoning style and knowledge source — debate your question in parallel, a Moderator synthesizes their arguments into a clear decision space, and a critique round resolves the real disagreements. You stay the judge.
+**A forum where AI minds deliberate in public.**
+
+A Moderator opens a topic from your question — or from an API — and invites a
+cast of characters. Each one reads its own knowledge, speaks in its own voice,
+and answers the others point by point. Then the thread closes one of two ways:
+**one accepted answer** the cast stands behind, or **several distinct
+positions**, each attributed to whoever holds it.
+
+Every character runs on its own model. The defaults are all free.
 
 Available as a desktop app (Electron) or in the browser.
 
@@ -8,163 +16,203 @@ Available as a desktop app (Electron) or in the browser.
 
 ## Screenshots
 
-| Home | Chamber (deliberation) |
+| Forum (board) | Topic (thread) |
 |:---:|:---:|
-| ![Home](images/page1.png) | ![Chamber](images/page2.png) |
+| ![Board](images/page1.png) | ![Thread](images/page2.png) |
 
-| Archive | Runic Library |
+| Chamber (legacy) | Models |
 |:---:|:---:|
-| ![Archive](images/page3.png) | ![Runic Library](images/page4.png) |
-
-| Divination | Divination (results) |
-|:---:|:---:|
-| ![Divination](images/page5.png) | ![Divination results](images/page5-1.png) |
-
-| Council Rules | Agent Profiles |
-|:---:|:---:|
-| ![Council Rules](images/page6.png) | ![Agent Profiles](images/page7.png) |
+| ![Chamber](images/page3.png) | ![Models](images/page7.png) |
 
 ---
 
-## How it works
+## How a topic runs
 
-```mermaid
-flowchart LR
-  UI["Electron / Browser<br/>com_website"] ==>|WS + HTTP| API["FastAPI"]
-  API --> Router["Router<br/>(classify query)"]
-
-  Router --> Oracle["Oracle<br/>OKF bundle"]
-  Router --> Scholar["Scholar (RAG)<br/>vector retrieval"]
-  Router --> Sage["Sage<br/>LLM Wiki"]
-
-  Oracle --> Mod["Moderator<br/>alignment · conflicts · decision space"]
-  Scholar --> Mod
-  Sage --> Mod
-
-  Mod -->|material conflict| Crit["Critique round<br/>hold / revise / concede"]
-  Crit -->|updated synthesis| Mod
-
-  Mod -->|verdict| User["User<br/>(final decision)"]
-  User -.->|follow-up| Router
-
-  Mem[("Session memory")] -.-> Mod
-
-  subgraph KS["Knowledge systems"]
-    direction LR
-    PG[("Postgres + pgvector")]
-    CH[("ChromaDB")]
-  end
-  Scholar -.-> PG
-  Scholar -.-> CH
-
-  subgraph Web["Web intelligence (Divination)"]
-    direction LR
-    Scout["Scout<br/>gather + scrape"]
-    SEARX[("SearXNG<br/>meta-search")]
-    LP["Lightpanda<br/>(JS render)"]
-  end
-  API -.->|divination| Scout
-  Scout --> SEARX
-  Scout --> LP
-  Scout -.->|scout reports| PG
+```
+                 ┌──────────────────────────────────────────┐
+ your question ─►│  Moderator — titles it, frames it,       │
+ or an API call ─►│  picks the cast, picks the mode          │
+                 └────────────────────┬─────────────────────┘
+                                      ▼
+ ┌────────────────────────────────────────────────────────────────────┐
+ │  The thread — every post authored, ordered, and reply-targeted       │
+ │                                                                    │
+ │    round 0   Moderator ▸ framing                                    │
+ │              Oracle    ▸ evidence                                  │
+ │              Scholar   ▸ retrieval + citations                      │
+ │              Analyst   ▸ the chain: A → B → C                      │
+ │              Historian ▸ what we already concluded                  │
+ │              Sage      ▸ analogy, ethics, the bigger picture        │
+ │                                                                    │
+ │    round 1   Oracle    ▸ replies to Scholar's claim #3 (supports)   │
+ │              Scholar   ▸ replies to Oracle's claim #1 (challenges)  │
+ │              Analyst   ▸ connects two claims nobody connected        │
+ │              … bounded by max_rounds                               │
+ └──────────────────────────────┬─────────────────────────────────────┘
+                                ▼
+                  ┌────────────────────────────┐
+                  │  Deterministic signals     │  ← measured, not asked
+                  │  agreement · spread · gaps │
+                  └─────────────┬──────────────┘
+                                ▼
+                  ┌────────────────────────────┐
+                  │  Moderator synthesis       │
+                  │                            │
+                  │  converged → ONE answer,    │
+                  │               signed by its backers
+                  │                            │
+                  │  not converged → 2–4        │
+                  │               distinct positions,
+                  │               each attributed,
+                  │               + the fault line
+                  └────────────────────────────┘
 ```
 
-1. **Router** classifies the query (factual / relational / strategic / general).
-2. **Oracle, Scholar, Sage** reason in parallel — each over its own knowledge source.
-3. **Moderator** compares their outputs and produces:
-   - a **deterministic alignment** score (from confidence spread + source overlap),
-   - **conflicts** tagged *factual* vs *nuance*, and **agreements**,
-   - a **decision space** tailored to the query.
-4. **Critique round** — when material conflicts remain, each agent re-evaluates the others' arguments and chooses to **hold / revise / concede**. Resolved conflicts loop back into an **updated synthesis**. Bounded by a max-rounds budget so it can't spin forever.
-5. **You deliver the verdict** — accept an agent's answer or write your own.
-6. **Session memory** — the Moderator remembers earlier queries and settled conflicts, so follow-up questions stay coherent instead of resetting.
+The Moderator decides what the thread **means**. It does not decide whether the
+Council **agreed** — that is measured by `agents/forum_signals.py`, which
+compares claim overlap, confidence spread and unanswered challenges. A thread
+that has not converged cannot be published as consensus, however confidently
+the model words it. That veto is the point of the whole design.
 
 ---
 
-## The Council
+## The Cast
 
-| Agent | Archetype | Knowledge source | Color |
-|-------|-----------|------------------|-------|
-| **Oracle** | Seeker of Truth | Structured Knowledge Bundle (OKF) — every claim evidence-backed | Gold |
-| **Scholar (RAG)** | Keeper of Lore | Vector retrieval (pgvector + ChromaDB + document archive), trust-ranked | Green |
-| **Sage** | Voice of Intuition | LLM Wiki + internal reasoning — analogy, ethics, the bigger picture | Ember |
-| **Moderator** | Master of Rules | All agent outputs — synthesizes, never decides for you | Purple |
+Five characters, each with its own knowledge, its own model, and its own rules.
 
-> The Moderator only triggers a critique round on **factual** contradictions or large confidence divergence — never on mere wording differences.
+| Character | Archetype | Knowledge | Model (free default) |
+|-----------|-----------|-----------|----------------------|
+| **Oracle** | Seeker of Truth | OKF knowledge bundle + raw RAG | `longcat-2.5-preview-free` |
+| **Scholar** | Keeper of Lore | vector RAG, documents, archive | `nemotron-3.5-lightning-free` |
+| **Analyst** | Weaver of Connections | OKF + graph traversal | `ling-3.1-flash-free` |
+| **Historian** | Keeper of Time | wiki, prior sessions, OKF | `step-5-preview-free` |
+| **Sage** | Voice of Intuition | wiki | `mimo-v2.6-flash-free` |
+| **Moderator** | Master of Rules | the whole thread | `big-pickle` |
+
+> The characters differ by **how they think**, not just by which backend they
+> query — that distinction is the difference between a forum and one voice in
+> five fonts. See `backend/agents/registry.py`.
+
+Every binding is overridable per character, at runtime, from
+**`/llm_settings.html`** or `POST /api/llm/roles`.
 
 ---
 
 ## Tech stack
 
 - **Backend:** Python 3.12 · FastAPI · LangGraph · SQLAlchemy/asyncpg · LiteLLM
-- **Knowledge systems:** PostgreSQL + pgvector · ChromaDB
-- **Web intelligence:** SearXNG (meta-search) · Scout + Lightpanda (scrape / JS render)
-- **Frontend:** Vanilla HTML/CSS/JS (Tailwind) · Material Symbols · `marked` + `DOMPurify` (markdown)
+- **Knowledge:** PostgreSQL + pgvector · ChromaDB · (optional) Neo4j
+- **Web intelligence:** SearXNG (meta-search) · Scout scrape / JS render
+- **Frontend:** Vanilla HTML/CSS/JS (Tailwind) · nginx in Docker
 - **Desktop:** Electron
-- **LLM:** any LiteLLM-supported provider (OpenAI, Anthropic, Ollama / LM Studio, GLM / Z.ai, …)
+- **LLM:** OpenCode Zen (**default**, free models) · Ollama (**optional**, local)
+
+---
+
+## Quick start
+
+### With Docker (everything)
+
+```bash
+cp docker/.env.example docker/.env      # add your OPENCODE_API_KEY
+python start.py                         # -> http://localhost:8080
+```
+
+Or directly:
+
+```bash
+docker compose -f docker/docker-compose.yml up -d --build
+```
+
+Brings up postgres, chromadb, searxng, the backend and an nginx frontend that
+proxies the API and the WebSocket.
+
+### Without Docker
+
+```bash
+docker compose -f docker/docker-compose.yml up -d postgres chromadb   # infra only
+cd backend && uv pip install -r requirements.txt && python -m uvicorn main:app --reload
+# then open com_website/forum.html
+```
+
+### Configuration
+
+Only one value is required:
+
+```bash
+OPENCODE_API_KEY=...      # https://opencode.ai/auth
+```
+
+Everything else has a working default, and **the default models are all free**.
+See [docs/PROVIDERS.md](docs/PROVIDERS.md).
+
+---
+
+## Feeding topics from an API
+
+```bash
+curl -X POST http://localhost:8080/api/forum/intake \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "question": "Should we adopt trunk-based development?",
+    "source": "jira",
+    "payload": {"ticket": "PROJ-42"},
+    "open_now": true
+  }'
+# -> {"intake_id": "...", "topic_id": "...", "status": "opening"}
+```
+
+Set `open_now: false` to queue it and let the Moderator drain the queue later.
+See [docs/FORUM.md](docs/FORUM.md).
 
 ---
 
 ## Project structure
 
 ```
-├── backend/              # Python FastAPI + LangGraph
-│   ├── agents/           # oracle, rag_agent, sage, moderator, critique,
-│   │                     # router, session_memory, prompts, schemas
-│   ├── api/              # REST + WebSocket endpoints
-│   ├── db/               # SQLAlchemy models + DB clients
-│   ├── ingestion/        # RAG + GraphRAG pipelines
-│   ├── okf/              # Open Knowledge Format bundles
-│   └── tests/            # Pytest suite
-├── com_website/          # HTML/CSS/JS frontend (api.js, ws.js, pages)
-├── desktop/              # Electron shell (main.js, preload.js, icons/)
-├── docker/               # Docker Compose for infrastructure
-├── sage_wiki/            # Persistent knowledge base (LLM Wiki)
-└── images/               # Screenshots
+├── backend/
+│   ├── llm/                  provider registry + per-role model binding
+│   ├── agents/
+│   │   ├── registry.py       the cast, as data
+│   │   ├── forum_graph.py    open → statements → exchange → synthesis
+│   │   ├── forum_signals.py  deterministic convergence
+│   │   ├── forum_characters.py  run one character
+│   │   ├── forum_store.py    topics + posts
+│   │   ├── moderator.py oracle.py rag_agent.py sage.py   ← chamber path
+│   │   └── graph.py critique.py session_memory.py
+│   ├── api/                  REST + WebSocket (forum.py, forum_ws.py, llm.py)
+│   ├── db/forum_models.py    topics, posts, topic_intake, llm_roles
+│   └── tests/
+├── com_website/              forum.html, topic.html, llm_settings.html, …
+├── desktop/                  Electron shell
+├── docker/                   compose, nginx, postgres-init, .env.example
+└── sage_wiki/                persistent knowledge base
 ```
 
 ---
 
-## Quick start
+## Tests
 
-### Prerequisites
-- Python 3.12+
-- Node.js 20+ (for the Scout scraper + Electron)
-- Docker + Docker Compose
-- An LLM API key (or a local model via Ollama / LM Studio)
-
-### 1 — Start infrastructure
 ```bash
-docker compose -f docker/docker-compose.yml up -d
+cd backend && pytest -q                                   # 325 unit tests
+pytest -q -m live --run-live --allow-real-db               # + Postgres integration
 ```
 
-### 2 — Python backend
-```bash
-uv venv && source .venv/bin/activate
-uv pip install -r backend/requirements.txt
-(cd backend/agents && npm install)          # Scout scraper deps
-cd backend && uvicorn main:app --port 8734 --reload
-```
-…or use the orchestrator: `python start.py`.
-
-### 3 — Frontend
-Open `com_website/council_landing_page.html` in a browser, **or** run the desktop app:
-```bash
-cd desktop && npm install && npm start
-```
-On first run, the setup wizard guides you through LLM provider selection.
-
-### Configuration
-Copy `backend/.env.example` → `backend/.env` and fill in your provider key, model, and DB credentials. (`.env` is gitignored; the example is tracked.)
+The live suite runs real topics end-to-end against Postgres with the LLM
+stubbed, and verifies both outcome shapes — consensus and plurality.
 
 ---
 
 ## Notes
 
-- The application icon is the **`account_balance`** glyph (a classical council building), rendered into `desktop/icons/`.
-- Agent responses from the Scholar are rendered as **Markdown**.
-- The macOS `.icns` is generated from the PNG source; regenerate a true ICNS on macOS if needed.
+- The old **Chamber** (single-question deliberation) is still present and still
+  works: `/chamber`. The forum is the default surface; the chamber is not
+  removed.
+- Every topic also writes a `Deliberation` record, so Archive, PDF export and
+  verdict filing continue to work unchanged.
+- Two live tests in `test_rag_retrieval.py` fail on a fresh database — they
+  need a seeded corpus. They fail identically on the pre-forum commits.
 
 ## License
 
-Released under the [MIT License](LICENSE) — © 2026 mkaydin.
+[MIT](LICENSE) — © 2026 mkaydin.

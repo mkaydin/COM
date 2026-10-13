@@ -11,128 +11,212 @@
 <script>
   tailwind.config = {
     darkMode: "class",
-    theme: {
-      extend: {
-        colors: {
-          "obsidian": "#1a1a2e",
-          "background": "#141315",
-          "parchment": "#e8d5b7",
-          "runed-gold": "#ffd700",
-          "spectral-blue": "#87ceeb",
-          "ember-glow": "#ff6b6b",
-          "success": "#27ae60",
-          "error": "#c0392b"
-        },
-        fontFamily: {
-          "pixel-display": ["VT323", "monospace"],
-          "pixel-body": ["VT323", "monospace"]
-        }
+    theme: { extend: {
+      colors: {
+        "obsidian":"#1a1a2e","background":"#141315","surface-container":"#201f21",
+        "surface-container-lowest":"#0e0e10","surface-container-highest":"#353436",
+        "parchment":"#e8d5b7","runed-gold":"#ffd700","spectral-blue":"#87ceeb",
+        "ember-glow":"#ff6b6b","mystic-purple":"#9b59b6","success":"#27ae60",
+        "error":"#c0392b","neutral-gray":"#7f8c8d","warning":"#f39c12",
+        "outline-variant":"#47464c"
+      },
+      fontFamily: { "pixel-display":["VT323","monospace"],"pixel-heading":["VT323","monospace"],
+                    "pixel-body":["VT323","monospace"],"pixel-small":["VT323","monospace"] },
+      fontSize: {
+        "pixel-display":["32px",{lineHeight:"1.2",letterSpacing:"1px",fontWeight:"700"}],
+        "pixel-heading":["24px",{lineHeight:"1.3",letterSpacing:"0.5px",fontWeight:"700"}],
+        "pixel-body":["18px",{lineHeight:"1.6",letterSpacing:"0.5px",fontWeight:"400"}],
+        "pixel-small":["14px",{lineHeight:"1.5",letterSpacing:"0px",fontWeight:"400"}]
       }
-    }
+    }}
   };
 </script>
-<script src="api.js"></script>
-<style>
-  body { background-color: #1a1a2e; }
-  .pixel-text { font-family: "VT323", monospace; }
-</style>
+<style> body { background-color: #1a1a2e; } </style>
 </head>
 <body class="bg-obsidian min-h-screen flex items-center justify-center p-4">
-<div class="w-full max-w-md" id="app">
+<div class="w-full max-w-2xl" id="app">
   <div class="text-center mb-8">
-    <h1 class="text-amber-400 text-3xl pixel-text mb-2">COUNCIL OF MINDS</h1>
-    <p class="text-parchment text-base pixel-text opacity-70">First-Run Configuration</p>
+    <h1 class="text-amber-400 text-3xl font-pixel-display text-pixel-display mb-2">COUNCIL OF MINDS</h1>
+    <p class="text-parchment text-base font-pixel-body text-pixel-body opacity-70">First-Run Configuration</p>
   </div>
 
-  <div id="step-model" class="bg-[#201f21] border border-[#353436] rounded p-6">
-    <h2 class="text-amber-400 text-xl pixel-text mb-4">Local Model</h2>
-    <p class="text-parchment text-sm pixel-text mb-4 opacity-70">
-      The Council runs entirely on a local Ollama server. Nothing leaves this machine.
+  <div id="step-provider" class="bg-surface-container border-2 border-[#353436] rounded p-6">
+    <h2 class="text-amber-400 text-xl font-pixel-heading text-pixel-heading mb-1">Model Provider</h2>
+    <p class="text-parchment text-sm font-pixel-small text-pixel-small mb-5 opacity-70">
+      Each character can run on its own model. The defaults are free — you only need a key.
     </p>
 
-    <label class="text-parchment text-sm pixel-text mb-1 block">Model tag</label>
-    <input id="model-input" type="text" class="w-full bg-obsidian border border-[#353436] text-parchment pixel-text p-3 rounded mb-2" value="gemma4:e4b" placeholder="e.g. gemma4:e4b"/>
-    <p class="text-parchment text-xs pixel-text opacity-50 mb-4">Must be pulled first: <code>ollama pull gemma4:e4b</code></p>
+    <div id="provider-list" class="space-y-2 mb-5"></div>
 
-    <div id="model-list" class="text-parchment text-xs pixel-text opacity-60 mb-6"></div>
+    <div id="opencode-fields">
+      <label class="text-parchment text-sm font-pixel-small text-pixel-small uppercase mb-1 block">OpenCode Zen API key</label>
+      <input id="api-key" type="password" autocomplete="off"
+             class="w-full bg-surface-container-lowest border-2 border-[#353436] text-parchment font-pixel-body text-pixel-body p-3 rounded mb-1"
+             placeholder="sk-…"/>
+      <p class="text-parchment text-xs font-pixel-small text-pixel-small opacity-50 mb-4">
+        Get one at <a href="https://opencode.ai/auth" target="_blank" rel="noopener" class="text-spectral-blue underline">opencode.ai/auth</a>.
+        Every default model below is free-tier.
+      </p>
+    </div>
 
-    <button onclick="testConnection()" class="w-full bg-amber-400 text-obsidian pixel-text text-lg py-3 rounded hover:bg-amber-300 transition-colors">Test &amp; Save</button>
+    <div id="ollama-fields" class="hidden">
+      <label class="text-parchment text-sm font-pixel-small text-pixel-small uppercase mb-1 block">Local model tag</label>
+      <input id="ollama-model" type="text"
+             class="w-full bg-surface-container-lowest border-2 border-[#353436] text-parchment font-pixel-body text-pixel-body p-3 rounded mb-1"
+             value="gemma4:e4b"/>
+      <div id="ollama-list" class="text-parchment text-xs font-pixel-small text-pixel-small opacity-60 mb-4"></div>
+    </div>
+
+    <button id="btn-save" class="w-full bg-amber-400 text-obsidian font-pixel-heading text-pixel-heading text-lg py-3 rounded hover:bg-amber-300 transition-colors">
+      Save &amp; Test
+    </button>
+    <p class="text-center text-neutral-gray text-xs font-pixel-small text-pixel-small mt-3">
+      Prefer to configure by hand? <a href="llm_settings.html" class="text-amber-400 underline">Models</a>
+    </p>
   </div>
 
-  <div id="step-status" class="bg-[#201f21] border border-[#353436] rounded p-6 hidden">
-    <h2 class="text-amber-400 text-xl pixel-text mb-4">Checking Setup...</h2>
-    <div id="status-message" class="text-parchment pixel-text mb-4">Testing connection...</div>
+  <div id="step-status" class="bg-surface-container border-2 border-[#353436] rounded p-6 hidden">
+    <h2 class="text-amber-400 text-xl font-pixel-heading text-pixel-heading mb-4">Checking Setup…</h2>
+    <div id="status-message" class="text-parchment font-pixel-body text-pixel-body mb-4">Testing connection…</div>
     <div id="status-spinner" class="flex justify-center mb-4">
       <div class="animate-spin rounded-full h-8 w-8 border-2 border-amber-400 border-t-transparent"></div>
     </div>
-    <button id="btn-enter" onclick="enterCouncil()" class="w-full bg-success text-white pixel-text text-lg py-3 rounded hover:opacity-90 transition-opacity hidden">Enter the Council</button>
-    <button onclick="backToModelStep()" class="w-full border border-[#353436] text-parchment pixel-text py-3 rounded mt-3 hidden" id="btn-retry">Change Model</button>
+    <button id="btn-enter" class="w-full bg-success text-white font-pixel-heading text-pixel-heading text-lg py-3 rounded hover:opacity-90 transition-opacity hidden">Enter the Council</button>
+    <button id="btn-retry" class="w-full border border-[#353436] text-parchment font-pixel-body text-pixel-body py-3 rounded mt-3 hidden">Change Provider</button>
   </div>
 
-  <p class="text-center text-parchment text-xs pixel-text opacity-40 mt-8">Council of Minds v1.0 · All configuration stays local</p>
+  <p class="text-center text-parchment text-xs font-pixel-small text-pixel-small opacity-40 mt-8">Council of Minds v2.0</p>
 </div>
 
+<script src="api.js"></script>
 <script>
-  const DEFAULT_MODEL = 'gemma4:e4b';
+let provider = 'opencode';
 
-  function backToModelStep() {
-    document.getElementById('step-model').classList.remove('hidden');
-    document.getElementById('step-status').classList.add('hidden');
-    loadInstalledModels();
-  }
+function esc(t){const d=document.createElement('div');d.textContent=t??'';return d.innerHTML;}
 
-  async function loadInstalledModels() {
-    const el = document.getElementById('model-list');
-    if (!el) return;
-    try {
-      const res = await fetch(`${window.COM_API_BASE}/api/ollama/status`);
-      if (!res.ok) throw new Error(res.status);
-      const st = await res.json();
-      if (!st.reachable) {
-        el.innerHTML = '<span class="text-error">Ollama is not reachable. Start it with <code>ollama serve</code>.</span>';
-      } else {
-        el.textContent = st.installed.length
-          ? 'Installed: ' + st.installed.join(', ')
-          : 'No models installed yet.';
-      }
-    } catch (e) {
-      el.textContent = 'Could not reach the backend yet — is it starting?';
+async function boot() {
+  renderProviders();
+  await loadOllamaModels();
+  window.COM.ollamaStatus().catch(()=>{});
+}
+
+function renderProviders() {
+  const box = document.getElementById('provider-list');
+  box.innerHTML = [
+    { id: 'opencode', label: 'OpenCode Zen', note: 'Default. Free models, no local hardware.', icon: 'cloud' },
+    { id: 'ollama',   label: 'Ollama (local)', note: 'Optional. Runs on your machine, nothing leaves it.', icon: 'memory' },
+  ].map(p => `
+    <button class="w-full text-left border-2 px-3 py-2 rounded transition-colors ${provider === p.id
+      ? 'border-runed-gold bg-runed-gold/5'
+      : 'border-outline-variant hover:border-amber-400/50'}"
+      onclick="selectProvider('${p.id}')">
+      <div class="flex items-center gap-2">
+        <span class="material-symbols-outlined ${provider === p.id ? 'text-runed-gold' : 'text-neutral-gray'}">${p.icon}</span>
+        <span class="font-pixel-heading text-pixel-heading ${provider === p.id ? 'text-runed-gold' : 'text-parchment'}">${p.label}</span>
+        ${provider === p.id ? '<span class="material-symbols-outlined text-runed-gold ml-auto">check_circle</span>' : ''}
+      </div>
+      <div class="font-pixel-small text-pixel-small text-neutral-gray mt-0.5">${p.note}</div>
+    </button>`).join('');
+
+  document.getElementById('opencode-fields').classList.toggle('hidden', provider !== 'opencode');
+  document.getElementById('ollama-fields').classList.toggle('hidden', provider !== 'ollama');
+}
+
+function selectProvider(id) { provider = id; renderProviders(); }
+
+async function loadOllamaModels() {
+  const el = document.getElementById('ollama-list');
+  try {
+    const st = await window.COM.ollamaStatus();
+    if (!st.reachable) {
+      el.innerHTML = '<span class="text-error">Ollama is not reachable. Start it with <code>ollama serve</code>.</span>';
+    } else {
+      el.textContent = st.installed.length ? 'Installed: ' + st.installed.join(', ') : 'No models installed yet.';
     }
+  } catch {
+    el.textContent = 'Could not reach the backend yet — is it starting?';
   }
-  loadInstalledModels();
+}
 
-  async function testConnection() {
-    const model = document.getElementById('model-input').value.trim() || DEFAULT_MODEL;
-    document.getElementById('step-model').classList.add('hidden');
-    document.getElementById('step-status').classList.remove('hidden');
-    document.getElementById('status-spinner').classList.remove('hidden');
-    document.getElementById('status-message').textContent = 'Checking model ' + model + '...';
-    document.getElementById('btn-enter').classList.add('hidden');
-    document.getElementById('btn-retry').classList.add('hidden');
+async function save() {
+  const msg = document.getElementById('status-message');
+  const spinner = document.getElementById('status-spinner');
+  document.getElementById('btn-enter').classList.add('hidden');
+  document.getElementById('btn-retry').classList.add('hidden');
 
+  if (provider === 'ollama') {
+    const model = document.getElementById('ollama-model').value.trim();
+    if (!model) { msg.innerHTML = '<span class="text-error">Enter a model tag.</span>'; return; }
     try {
-      await window.electronAPI.saveBackendConfig({ llmModel: model });
-      await new Promise(r => setTimeout(r, 2000));
-      if (!await window.electronAPI.isBackendReady()) throw new Error('Backend did not become ready');
-
-      const st = await fetch(`${window.COM_API_BASE}/api/ollama/status`).then(r => r.json());
+      const st = await window.COM.ollamaStatus();
+      if (!st.reachable) throw new Error('Ollama is not reachable — start it with: ollama serve');
       if (!st.model_present) throw new Error(`Model '${model}' is not installed. Run: ollama pull ${model}`);
-
-      document.getElementById('status-spinner').classList.add('hidden');
-      document.getElementById('status-message').innerHTML =
-        '<span class="text-success">Ready.</span><br/><span class="opacity-70">Model: ' + model + '</span>';
-      document.getElementById('btn-enter').classList.remove('hidden');
     } catch (e) {
+      msg.innerHTML = `<span class="text-error">Not ready</span><br/><span class="opacity-70">${esc(e.message)}</span>`;
       document.getElementById('status-spinner').classList.add('hidden');
-      document.getElementById('status-message').innerHTML =
-        '<span class="text-error">Not ready</span><br/><span class="opacity-70">' + e.message + '</span>';
-      backToModelStep();
       document.getElementById('btn-retry').classList.remove('hidden');
+      return;
     }
+    if (window.electronAPI?.saveBackendConfig) {
+      await window.electronAPI.saveBackendConfig({ llmProvider: 'ollama', llmModel: model });
+    }
+    finish(`Ollama · ${model}`);
+    return;
   }
 
-  function enterCouncil() {
-    window.location.href = 'council_landing_page.html';
+  const key = document.getElementById('api-key').value.trim();
+  if (!key) {
+    msg.innerHTML = '<span class="text-error">A key is required.</span>';
+    return;
   }
+
+  if (window.electronAPI?.saveBackendConfig) {
+    await window.electronAPI.saveBackendConfig({ llmProvider: 'opencode', opencodeApiKey: key });
+    msg.innerHTML = 'Key saved. Restarting the backend to verify…';
+    await new Promise(r => setTimeout(r, 2500));
+  } else {
+    msg.innerHTML = 'Set <code>OPENCODE_API_KEY</code> in <code>backend/.env</code>, then reload.';
+  }
+
+  try {
+    const h = await window.COM.health();
+    if (h.llm_ok) { finish(`${h.provider} · ${(h.roles || []).length} models configured`); return; }
+    msg.innerHTML = `<span class="text-warning">Backend is up but the provider is not ready</span><br/>
+      <span class="opacity-70">${esc(h.hint || 'unknown reason')}</span>`;
+    document.getElementById('status-spinner').classList.add('hidden');
+    document.getElementById('btn-retry').classList.remove('hidden');
+  } catch (e) {
+    msg.innerHTML = `<span class="text-error">Not ready</span><br/><span class="opacity-70">${esc(e.message)}</span>`;
+    document.getElementById('status-spinner').classList.add('hidden');
+    document.getElementById('btn-retry').classList.remove('hidden');
+  }
+}
+
+function finish(what) {
+  document.getElementById('status-spinner').classList.add('hidden');
+  document.getElementById('status-message').innerHTML =
+    `<span class="text-success">Ready.</span><br/><span class="opacity-70">${esc(what)}</span>`;
+  document.getElementById('btn-enter').classList.remove('hidden');
+}
+
+function retry() {
+  document.getElementById('step-status').classList.add('hidden');
+  document.getElementById('step-provider').classList.remove('hidden');
+  loadOllamaModels();
+}
+
+function enter() { window.location.href = 'forum.html'; }
+
+document.getElementById('btn-save').onclick = () => {
+  document.getElementById('step-provider').classList.add('hidden');
+  document.getElementById('step-status').classList.remove('hidden');
+  document.getElementById('status-spinner').classList.remove('hidden');
+  document.getElementById('status-message').textContent = 'Verifying…';
+  save();
+};
+document.getElementById('btn-enter').onclick = enter;
+document.getElementById('btn-retry').onclick = retry;
+
+boot();
 </script>
 </body></html>
