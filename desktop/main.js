@@ -12,7 +12,7 @@ const DEFAULT_MODEL = 'big-pickle';
 const DEFAULT_OLLAMA_MODEL = 'gemma4:e4b';
 
 // Stateful services live in Docker; the backend does not.
-const DOCKER_DIR = path.join(__dirname, '..', 'docker');
+const REPO_ROOT = path.join(__dirname, '..');
 const INFRA_SERVICES = ['postgres', 'chromadb'];
 
 const storeSchema = {
@@ -167,9 +167,10 @@ function startInfra() {
     return;
   }
   log('info', 'Starting infrastructure (Docker): ' + INFRA_SERVICES.join(', '));
-  const proc = spawn('docker', ['compose', '-f', path.join(DOCKER_DIR, 'docker-compose.yml'),
-                                'up', '-d', ...INFRA_SERVICES],
-                     { cwd: DOCKER_DIR, stdio: ['ignore', 'pipe', 'pipe'] });
+  // Run from the repo root so compose finds the same root compose.yaml that a
+  // hand-typed `docker compose up -d` finds — one convention, not two.
+  const proc = spawn('docker', ['compose', 'up', '-d', ...INFRA_SERVICES],
+                     { cwd: REPO_ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
   proc.stdout.on('data', (d) => log('info', `[docker] ${d.toString().trim()}`));
   proc.stderr.on('data', (d) => log('warn', `[docker] ${d.toString().trim()}`));
   proc.on('error', (e) => log('warn', `Could not run docker: ${e.message}`));

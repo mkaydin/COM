@@ -32,7 +32,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 DOCKER_DIR = ROOT / "docker"
-COMPOSE = ["docker", "compose", "-f", str(DOCKER_DIR / "docker-compose.yml")]
+
+# Prefer the root compose.yaml, which `include`s docker/docker-compose.yml.
+# That is the same file `docker compose up -d` finds from the repo root, so
+# the launcher and a hand-typed command cannot drift apart.
+_ROOT_COMPOSE = ROOT / "compose.yaml"
+COMPOSE = [
+    "docker", "compose",
+    *([] if _ROOT_COMPOSE.exists() else ["-f", str(DOCKER_DIR / "docker-compose.yml")]),
+]
 
 BACKEND_PORT = int(os.environ.get("BACKEND_PORT", 8734))
 FRONTEND_PORT = int(os.environ.get("FRONTEND_PORT", 8080))

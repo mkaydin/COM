@@ -1,22 +1,26 @@
 # Docker
 
 ```bash
-cp docker/.env.example docker/.env
-docker compose -f docker/docker-compose.yml --profile local up -d
-python start.py                        # -> http://localhost:8080
+docker compose up -d          # infra only, from the repo root
+python start.py               # + host backend
+cd desktop && npm start       # or Electron
 ```
 
-> **The container cannot use the free Zen models.** The default host provider
-> (`opencode-cli`) shells out to an `opencode` binary that this image does not
-> ship. In Docker use `LLM_PROVIDER=ollama` (free, local — needs
-> `--profile local`) or `opencode` (Zen over HTTP, needs a funded account).
-> For the free models, run the backend on the host: `python start.py
-> --no-docker`.
+`docker compose` searches the current directory, so the root `compose.yaml` is
+a thin `include` of `docker/docker-compose.yml` — one definition, two working
+entry points. `-f docker/docker-compose.yml` also still works.
+
+> **Containers cannot use the free Zen models.** The default host provider
+> (`opencode-cli`) shells out to an `opencode` binary, and the CLI also needs
+> its own credential store. That is why the backend runs on the host and this
+> file runs only the stateful services. In Docker use `LLM_PROVIDER=ollama`
+> (free, local — needs `--profile local`) or `opencode` (Zen over HTTP, needs a
+> funded account).
 
 or directly:
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d --build
+docker compose up -d --build              # or: docker compose --profile full up -d --build
 ```
 
 ---
@@ -59,8 +63,8 @@ No `opencode` binary here, so this profile cannot use the free Zen models.
 | `ollama-pull` | `ollama/ollama` | — | one-shot: `ollama pull` for a tag |
 
 ```bash
-docker compose -f docker/docker-compose.yml --profile local up -d
-docker compose -f docker/docker-compose.yml --profile local run --rm ollama-pull
+docker compose --profile local up -d
+docker compose --profile local run --rm ollama-pull
 ```
 
 ### `--profile graph`
@@ -121,7 +125,7 @@ volumes root-owned, so two things need care:
   volume are both created root-owned, and either one makes
   `RotatingFileHandler` fail at import — the backend crash-loops before it can
   serve anything. Logs live on the container filesystem; read them with
-  `docker compose logs backend` or `docker exec com-backend cat /tmp/com-logs/backend.log`.
+  `docker compose --profile full logs backend` or `docker exec com-backend cat /tmp/com-logs/backend.log`.
 
 > structlog writes JSON to `/tmp/com-logs/backend.log`, not to stdout. `docker
 > logs` shows only uvicorn's access log unless `LOG_LEVEL=DEBUG`.
@@ -227,7 +231,7 @@ seconds rather than minutes.
 **Reset everything.**
 ```bash
 python start.py --stop
-docker compose -f docker/docker-compose.yml down -v
+docker compose down -v
 ```
 
 ---

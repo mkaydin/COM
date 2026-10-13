@@ -108,6 +108,44 @@ class TestPortParsing:
         assert start._port_from_docker_env("CHROMA_PORT", 8000) == 8123
 
 
+class TestComposeEntryPoint:
+    """`docker compose up -d` must work from the repository root.
+
+    Compose searches the *current directory* for a compose file. The services
+    are defined in docker/docker-compose.yml, so without a root entry point the
+    obvious command fails with "no configuration file provided" — which is
+    exactly what it did.
+    """
+
+    def test_a_compose_file_exists_at_the_repo_root(self, start):
+        candidates = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"]
+        assert any((start.ROOT / c).exists() for c in candidates), (
+            "no compose file at the repo root - `docker compose up -d` will fail"
+        )
+
+    def test_the_root_file_includes_the_real_definition(self, start):
+        """A thin include, not a second copy: two definitions would drift."""
+        root = start.ROOT / "compose.yaml"
+        if not root.exists():
+            pytest.skip("root compose file is named differently")
+        text = root.read_text()
+        assert "include:" in text
+        assert "docker/docker-compose.yml" in text
+        # It must not redefine services itself.
+        assert "\nservices:" not in text, (
+            "the root file should only include, not re-declare services"
+        )
+
+    def test_the_real_definition_still_exists(self, start):
+        assert (start.DOCKER_DIR / "docker-compose.yml").exists()
+
+    def test_launcher_uses_the_root_entry_point(self, start):
+        """The launcher and a hand-typed command must find the same file."""
+        assert "-f" not in start.COMPOSE or (
+            start.DOCKER_DIR / "docker-compose.yml"
+        ).exists()
+
+
 class TestServiceSelection:
     def test_default_infra_is_state_only(self, start):
         """The backend is deliberately absent: it must run where the opencode

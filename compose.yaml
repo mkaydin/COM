@@ -1,0 +1,27 @@
+# Council of Minds — convenience entry point.
+#
+#   docker compose up -d
+#
+# The real definition lives in docker/docker-compose.yml. This file exists so
+# the obvious command works from the repository root: `docker compose` looks
+# for a compose file in the current directory, and without this one it fails
+# with "no configuration file provided".
+#
+# It is a thin `include`, not a second copy — the services, profiles and paths
+# are defined in exactly one place. Compose resolves the included file's
+# relative paths (./postgres-init, ../sage_wiki, the build contexts) against
+# its own directory, so nothing here has to restate them.
+
+include:
+  - path: docker/docker-compose.yml
+
+# Profiles are declared in the included file. Repeat them here only if you
+# want this entry point to document the common ones inline:
+#
+#   docker compose --profile local up -d     + Ollama
+#   docker compose --profile graph up -d     + Neo4j
+#   docker compose --profile full up -d      + backend & nginx in containers
+#
+# The default stack is state only: postgres, chromadb, searxng. The backend
+# runs on the host (Electron or `python start.py`) so it can reach the free
+# Zen models through the `opencode` CLI. See docs/DOCKER.md.

@@ -183,11 +183,15 @@ Nothing else is required — no API key. The CLI has its own credentials.
 ### Infrastructure only
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d
+docker compose up -d
 ```
 
 postgres, chromadb and searxng. Pair it with a backend you run yourself —
 `python start.py --server`, or Electron.
+
+Run it from the repo root: `compose.yaml` there is a thin `include` of
+`docker/docker-compose.yml`, so `docker compose up -d` works with no `-f`.
+`docker compose -f docker/docker-compose.yml up -d` still works too.
 
 > **Ports.** If 5432/8000/8080/8888 are taken, set `POSTGRES_PORT`,
 > `CHROMA_PORT`, `FRONTEND_PORT` and `SEARXNG_PORT` in `docker/.env`, and
