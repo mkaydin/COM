@@ -74,7 +74,7 @@ async def oracle_node(state: dict) -> dict:
 
     try:
         response = await llm_complete(messages, role="ORACLE", temperature=0.4, max_tokens=max_tok)
-        raw = response.choices[0].message.content
+        raw = response.content
         _reasoning = getattr(response, "reasoning", "")
         data = extract_json(raw)
 

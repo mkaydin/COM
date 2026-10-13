@@ -52,7 +52,7 @@ async def _expand_search_terms(query: str) -> List[str]:
 
     try:
         response = await llm_complete(messages, temperature=0.4, max_tokens=2048)
-        raw = response.choices[0].message.content
+        raw = response.content
         from agents.json_utils import extract_json
         data = extract_json(raw)
         terms = data.get("terms", [])
@@ -184,7 +184,7 @@ async def _synthesize(query: str, search_terms: List[str], summaries: List[str])
 
     try:
         response = await llm_complete(messages, temperature=0.4, max_tokens=16384)
-        content = response.choices[0].message.content or "Analysis unavailable."
+        content = response.content or "Analysis unavailable."
         content = _json_to_markdown(content)
         return content
     except Exception as e:

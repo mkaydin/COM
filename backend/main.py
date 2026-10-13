@@ -86,19 +86,26 @@ async def health():
     llm = await llm_health()
     checks = {
         "status": "ok" if llm.get("ok") else "degraded",
-        "configured": llm.get("ok"),
+        # `configured` is deliberately NOT the same as `llm_ok`: a key can be
+        # present and still unable to serve a single completion. `callable` is
+        # null until POST /api/llm/verify proves it.
+        "configured": llm.get("configured", llm.get("ok")),
+        "callable": llm.get("callable"),
         "provider": llm.get("provider"),
+        "transport": llm.get("transport"),
         "llm_ok": llm.get("ok"),
         "hint": llm.get("hint"),
         "roles": llm.get("roles", []),
         "forum_enabled": settings.forum_enabled,
         "version": "2.0.0",
     }
-    # Ollama-specific keys, kept for the existing UI chips.
+    # Transport-specific detail.
     if llm.get("provider") == "ollama":
         checks["ollama_reachable"] = llm.get("reachable")
         checks["model_present"] = llm.get("model_present")
         checks["installed"] = llm.get("installed", [])
+    elif llm.get("transport") == "cli_provider":
+        checks["binary"] = llm.get("binary")
 
     try:
         from db.postgres import engine

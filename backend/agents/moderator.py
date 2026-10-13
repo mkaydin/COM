@@ -304,7 +304,7 @@ async def moderator_node(state: dict) -> dict:
     try:
         from config import llm_complete
         response = await llm_complete(messages, role="MODERATOR", temperature=0.2, max_tokens=max_tok)
-        raw = response.choices[0].message.content
+        raw = response.content
         data = extract_json(raw)
         moderator_output = ModeratorResponse(**data)
     except Exception as e:

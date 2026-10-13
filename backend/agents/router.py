@@ -23,7 +23,7 @@ async def router_node(state: dict) -> dict:
     try:
         from config import llm_complete
         response = await llm_complete(messages, role="MODERATOR", temperature=0.2, max_tokens=MAX_TOKENS)
-        raw = response.choices[0].message.content
+        raw = response.content
         data = extract_json(raw)
         classification = QueryClassification(**data)
     except Exception as e:

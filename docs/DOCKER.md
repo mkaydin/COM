@@ -1,9 +1,17 @@
 # Docker
 
 ```bash
-cp docker/.env.example docker/.env     # add OPENCODE_API_KEY
+cp docker/.env.example docker/.env
+docker compose -f docker/docker-compose.yml --profile local up -d
 python start.py                        # -> http://localhost:8080
 ```
+
+> **The container cannot use the free Zen models.** The default host provider
+> (`opencode-cli`) shells out to an `opencode` binary that this image does not
+> ship. In Docker use `LLM_PROVIDER=ollama` (free, local — needs
+> `--profile local`) or `opencode` (Zen over HTTP, needs a funded account).
+> For the free models, run the backend on the host: `python start.py
+> --no-docker`.
 
 or directly:
 
@@ -140,6 +148,20 @@ OPENCODE_API_KEY=...
 
 ---
 
+## The provider inside the container
+
+| `LLM_PROVIDER` | free models | key | notes |
+|----------------|-------------|-----|-------|
+| `opencode-cli` | ✅ | no | **unavailable here** — no `opencode` binary |
+| `opencode` | ❌ | yes + billing | Zen over HTTP, fast |
+| `ollama` | ✅ | — | `--profile local`; needs the tag pulled |
+
+Setting `opencode-cli` in Docker produces a health hint that says so
+specifically, rather than complaining about PATH — the binary will never be on
+PATH in that image, so "install the CLI" would be advice that cannot be acted on.
+
+---
+
 ## Troubleshooting
 
 **Port already allocated.** `8080` is a common collision. Override it:
@@ -152,11 +174,15 @@ OPENCODE_API_KEY=...
 an *empty* `pgdata`. On an existing volume:
 `docker exec com-postgres psql -U council -d council -c 'CREATE EXTENSION IF NOT EXISTS vector;'`
 
-**No models / every call fails.** Check the key and the mapping:
+**No models / every call fails.** Check the mapping, then *prove* it — a key
+being present does not mean a model answers:
 ```bash
 curl -s localhost:8734/api/llm/roles | python3 -m json.tool
-curl -s localhost:8734/api/health | python3 -m json.tool
+curl -s localhost:8734/api/health  | python3 -m json.tool
+curl -s -X POST localhost:8734/api/llm/verify -d '{}' | python3 -m json.tool
 ```
+`configured: true` with `callable: null` means nobody has checked. The
+`/verify` response carries a `diagnosis` explaining the failure in plain terms.
 
 **A topic never concludes.** Look for `forum_character_failed` in the backend
 log. `llm_call_with_retry` does not retry auth errors, so this surfaces in
@@ -174,10 +200,9 @@ docker compose -f docker/docker-compose.yml down -v
 
 ```bash
 docker compose -f docker/docker-compose.yml up -d postgres chromadb searxng
-cd backend
-uv pip install -r requirements.txt
-python -m uvicorn main:app --reload
+python start.py --no-docker
 ```
 
-Then open `com_website/forum.html`, or `python start.py --no-docker` which does
-this for you. The Electron shell also spawns the backend directly.
+That runs uvicorn on the host (creating `backend/.env` from the example if
+needed), which is also the only place the free Zen models work. The Electron
+shell spawns the backend directly the same way.

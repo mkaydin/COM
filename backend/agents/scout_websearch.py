@@ -172,7 +172,7 @@ async def summarize_page(page: ScrapedPage, topic: str) -> str:
             {"role": "user", "content": user}
         ]
         response = await llm_complete(messages, temperature=0.3, max_tokens=4096)
-        return response.choices[0].message.content
+        return response.content
     except Exception as e:
         logger.warning("summarization_failed", error=str(e))
         return f"(summarization failed: {e})"

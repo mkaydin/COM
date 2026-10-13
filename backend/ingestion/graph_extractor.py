@@ -42,7 +42,7 @@ async def extract_entities_relationships(text: str) -> dict:
 
     try:
         response = await llm_complete(messages, temperature=0.2, max_tokens=4096)
-        raw = response.choices[0].message.content
+        raw = response.content
         data = extract_json(raw)
         if data:
             return data

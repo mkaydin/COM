@@ -213,7 +213,7 @@ async def run_character(
             temperature=character.temperature,
             max_tokens=min(character.max_tokens, MAX_TOKENS_CAP),
         )
-        raw = response.choices[0].message.content
+        raw = response.content
         data = extract_json(raw)
         if not data:
             raise ValueError("no parseable JSON in character output")

@@ -20,10 +20,12 @@ def _clean_overrides():
 
 
 class TestProviderResolution:
-    def test_default_provider_is_opencode(self):
+    def test_default_provider_is_the_cli(self):
+        """The API refuses free models for standalone clients, so the CLI is
+        the only route to them — that makes it the default."""
         p = providers.get()
-        assert p.id == "opencode"
-        assert "opencode.ai/zen" in p.base_url
+        assert p.id == "opencode-cli"
+        assert p.transport == "cli_provider"
 
     def test_ollama_is_available_and_optional(self):
         p = providers.get("ollama")
@@ -37,12 +39,17 @@ class TestProviderResolution:
         with pytest.raises(providers.ProviderError, match="Unknown LLM provider"):
             providers.get("not-a-provider")
 
-    def test_provider_list_includes_both(self):
-        assert set(providers.available()) == {"opencode", "ollama"}
+    def test_provider_list_includes_all_three(self):
+        assert set(providers.available()) == {"opencode-cli", "opencode", "ollama"}
 
     def test_model_id_gets_the_litellm_prefix(self):
         p = providers.get("opencode")
         assert p.model_id("big-pickle") == "openai/big-pickle"
+
+    def test_cli_provider_takes_the_bare_tag(self):
+        """`openai/big-pickle` is not a model the CLI recognises — it does its
+        own provider/ prefixing."""
+        assert providers.get("opencode-cli").model_id("big-pickle") == "big-pickle"
 
     def test_model_id_is_idempotent(self):
         p = providers.get("opencode")
@@ -146,43 +153,61 @@ class TestFreeModelGuarantee:
 class TestCompletionKwargs:
     def test_kwargs_are_explicit_not_environmental(self):
         """api_base/api_key must be explicit so a stray OPENAI_* cannot redirect."""
-        get_settings().opencode_api_key = "test-key"
-        kwargs = build_kwargs(role="MODERATOR", messages=[{"role": "user", "content": "hi"}])
+        kwargs = build_kwargs(role="MODERATOR", messages=[{"role": "user", "content": "hi"}],
+                              provider=providers.get("opencode"))
         assert kwargs["api_base"] == "https://opencode.ai/zen/v1"
-        assert kwargs["api_key"] == "test-key"
+        assert kwargs["api_key"]
         assert kwargs["model"] == "openai/big-pickle"
 
     def test_kwargs_use_the_roles_model(self):
-        get_settings().opencode_api_key = "test-key"
-        kwargs = build_kwargs(role="SAGE", messages=[])
+        kwargs = build_kwargs(role="SAGE", messages=[], provider=providers.get("opencode"))
         assert kwargs["model"] == "openai/mimo-v2.6-flash-free"
 
     def test_explicit_model_overrides_the_role(self):
-        get_settings().opencode_api_key = "test-key"
-        kwargs = build_kwargs(role="SAGE", messages=[], model="some-other-model")
+        kwargs = build_kwargs(role="SAGE", messages=[], model="some-other-model",
+                              provider=providers.get("opencode"))
         assert kwargs["model"] == "openai/some-other-model"
 
+    def test_cli_kwargs_carry_no_http_fields(self):
+        """The CLI transport has no endpoint and no key to send."""
+        kwargs = build_kwargs(role="MODERATOR", messages=[], provider=providers.get("opencode-cli"))
+        assert "api_base" not in kwargs
+        assert "api_key" not in kwargs
+        assert kwargs["model"] == "big-pickle"
+
     def test_overrides_pass_through(self):
-        get_settings().opencode_api_key = "test-key"
-        kwargs = build_kwargs(role="MODERATOR", messages=[], temperature=0.9, max_tokens=99)
+        kwargs = build_kwargs(role="MODERATOR", messages=[], temperature=0.9, max_tokens=99,
+                              provider=providers.get("opencode"))
         assert kwargs["temperature"] == 0.9
         assert kwargs["max_tokens"] == 99
 
-    def test_missing_credential_is_refused_before_the_call(self):
+    def test_missing_credential_is_refused_before_the_call(self, monkeypatch):
         """Better a clear error than five characters silently failing."""
-        get_settings().opencode_api_key = ""
+        monkeypatch.setattr(get_settings(), "opencode_api_key", "", raising=False)
         with pytest.raises(providers.MissingCredential):
-            build_kwargs(role="MODERATOR", messages=[])
+            build_kwargs(role="MODERATOR", messages=[], provider=providers.get("opencode"))
+
+    def test_cli_provider_needs_no_credential(self, monkeypatch):
+        """The CLI uses its own credential store, so an empty key is not an error."""
+        monkeypatch.setattr(get_settings(), "opencode_api_key", "", raising=False)
+        kwargs = build_kwargs(role="MODERATOR", messages=[], provider=providers.get("opencode-cli"))
+        assert kwargs["model"]
 
     def test_json_mode_only_when_configured(self, monkeypatch):
-        get_settings().opencode_api_key = "test-key"
+        p = providers.get("opencode")
         monkeypatch.setattr(get_settings(), "supports_json_mode", False, raising=False)
-        assert "response_format" not in build_kwargs(role="MODERATOR", messages=[])
+        assert "response_format" not in build_kwargs(role="MODERATOR", messages=[], provider=p)
 
         monkeypatch.setattr(get_settings(), "supports_json_mode", True, raising=False)
-        assert build_kwargs(role="MODERATOR", messages=[])["response_format"] == {
+        assert build_kwargs(role="MODERATOR", messages=[], provider=p)["response_format"] == {
             "type": "json_object"
         }
+
+    def test_json_mode_never_sent_to_the_cli(self, monkeypatch):
+        """`opencode run` has no such flag; sending one would fail the call."""
+        monkeypatch.setattr(get_settings(), "supports_json_mode", True, raising=False)
+        kwargs = build_kwargs(role="MODERATOR", messages=[], provider=providers.get("opencode-cli"))
+        assert "response_format" not in kwargs
 
 
 class TestLegacyConfig:

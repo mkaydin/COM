@@ -18,7 +18,9 @@ Analyst and Historian are new, drawn from `old_docs/character_persona.md`.
 from dataclasses import dataclass, field
 from typing import Optional, Type
 
-from pydantic import BaseModel
+from typing import ClassVar
+
+from pydantic import BaseModel, field_validator
 
 from logging_config import get_logger
 
@@ -254,6 +256,44 @@ Respond with ONLY this JSON:
 # ======================================================================================
 
 
+class _Coerced(BaseModel):
+    """Null-tolerant base for model-authored payloads.
+
+    Small models routinely emit `"answer": null` for a field the prompt did
+    not make mandatory, and a plain `str` field rejects that as a validation
+    error — taking down the whole synthesis over a field the caller treats as
+    optional anyway. Every optional string coerces None to ""; every optional
+    list coerces None to [].
+
+    This is the same defence `agents/schemas.py` already applies to Conflict
+    and Agreement for the same reason.
+    """
+
+    #: Which empty value a null becomes, per field. Anything unlisted becomes
+    #: an empty list. ClassVars, because a leading underscore would make
+    #: Pydantic treat them as private model attributes.
+    string_fields: ClassVar[frozenset[str]] = frozenset()
+    int_fields: ClassVar[frozenset[str]] = frozenset()
+    float_fields: ClassVar[frozenset[str]] = frozenset()
+    bool_fields: ClassVar[frozenset[str]] = frozenset()
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _none_to_empty(cls, v, info):
+        if v is not None:
+            return v
+        name = info.field_name
+        if name in cls.string_fields:
+            return ""
+        if name in cls.int_fields:
+            return 0
+        if name in cls.float_fields:
+            return 0.0
+        if name in cls.bool_fields:
+            return False
+        return []
+
+
 class ForumClaim(BaseModel):
     text: str = ""
     sources: list = []
@@ -273,13 +313,25 @@ class HiddenLink(BaseModel):
     relation: str = ""
 
 
-class CharacterStatement(BaseModel):
+class CharacterStatement(_Coerced):
     """What any character posts — an opening statement or a reply.
 
     Deliberately one schema for the whole cast. The characters differ in
     *what they say*, not in the shape of the envelope; a per-character schema
     would make the thread renderer and the convergence check worse for no gain.
     """
+
+    #: `stance` and `verdict` are strings; everything else here is a list or a
+    #: number. Listing them explicitly matters: a null that lands on the wrong
+    #: branch becomes `[]` and fails on a string field just the same.
+    string_fields: ClassVar[frozenset[str]] = frozenset({"stance", "verdict", "novelty"})
+    #: `reply_to` is a post number; a null becomes 0, which `forum_characters`
+    #: already reads as "no target".
+    int_fields: ClassVar[frozenset[str]] = frozenset({"reply_to"})
+    float_fields: ClassVar[frozenset[str]] = frozenset({"confidence"})
+    bool_fields: ClassVar[frozenset[str]] = frozenset(
+        {"speculation_warning", "insufficient_data"}
+    )
 
     confidence: float = 0.0
     stance: str = "propose"
@@ -299,7 +351,9 @@ class CharacterStatement(BaseModel):
     insufficient_data: bool = False
 
 
-class TopicOpening(BaseModel):
+class TopicOpening(_Coerced):
+    string_fields: ClassVar[frozenset[str]] = frozenset({"title", "framing", "mode", "reasoning"})
+
     title: str = ""
     framing: str = ""
     cast: list[str] = []
@@ -307,7 +361,7 @@ class TopicOpening(BaseModel):
     reasoning: str = ""
 
 
-class Position(BaseModel):
+class Position(_Coerced):
     """One surviving view in a plurality outcome.
 
     `backers` is the point of this model: a position nobody holds is not a
@@ -315,19 +369,27 @@ class Position(BaseModel):
     The Moderator is required to name who stands behind each one.
     """
 
+    string_fields: ClassVar[frozenset[str]] = frozenset({"label", "position"})
+
     label: str = ""
     position: str = ""
     backers: list[str] = []
 
 
-class Dissent(BaseModel):
+class Dissent(_Coerced):
     """A character still objecting to the published outcome."""
+
+    string_fields: ClassVar[frozenset[str]] = frozenset({"author", "objection"})
 
     author: str = ""
     objection: str = ""
 
 
-class ForumSynthesis(BaseModel):
+class ForumSynthesis(_Coerced):
+    string_fields: ClassVar[frozenset[str]] = frozenset(
+        {"mode", "answer", "fault_line", "signals_note"}
+    )
+
     mode: str = "plurality"
     #: Set when mode == "consensus": THE single accepted answer.
     answer: str = ""

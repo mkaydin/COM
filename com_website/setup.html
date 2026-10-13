@@ -48,6 +48,18 @@
 
     <div id="provider-list" class="space-y-2 mb-5"></div>
 
+    <div id="cli-hint" class="hidden bg-surface-container-lowest border-2 border-outline-variant p-3 mb-4">
+      <div class="font-pixel-small text-pixel-small text-parchment mb-1">Why the CLI?</div>
+      <p class="font-pixel-small text-pixel-small text-neutral-gray">
+        Zen's free models refuse direct API calls
+        (<span class="text-warning">"free tier can only be used from within OpenCode"</span>),
+        so the Council reaches them through the <code>opencode</code> client.
+        No API key needed &mdash; but the CLI must be installed
+        (<code>opencode run --model opencode/big-pickle "hi"</code> to check),
+        and each call takes 1.4&ndash;3.2s instead of ~0.4s.
+      </p>
+    </div>
+
     <div id="opencode-fields">
       <label class="text-parchment text-sm font-pixel-small text-pixel-small uppercase mb-1 block">OpenCode Zen API key</label>
       <input id="api-key" type="password" autocomplete="off"
@@ -90,7 +102,7 @@
 
 <script src="api.js"></script>
 <script>
-let provider = 'opencode';
+let provider = 'opencode-cli';
 
 function esc(t){const d=document.createElement('div');d.textContent=t??'';return d.innerHTML;}
 
@@ -103,8 +115,9 @@ async function boot() {
 function renderProviders() {
   const box = document.getElementById('provider-list');
   box.innerHTML = [
-    { id: 'opencode', label: 'OpenCode Zen', note: 'Default. Free models, no local hardware.', icon: 'cloud' },
-    { id: 'ollama',   label: 'Ollama (local)', note: 'Optional. Runs on your machine, nothing leaves it.', icon: 'memory' },
+    { id: 'opencode-cli', label: 'OpenCode CLI (free models)', note: 'Default. Free models via the opencode client. Needs the CLI installed.', icon: 'terminal' },
+    { id: 'opencode', label: 'OpenCode Zen (HTTP)', note: 'Zen over plain HTTP. Needs a funded account.', icon: 'cloud' },
+    { id: 'ollama',   label: 'Ollama (local)', note: 'Free and private. Runs on your machine.', icon: 'memory' },
   ].map(p => `
     <button class="w-full text-left border-2 px-3 py-2 rounded transition-colors ${provider === p.id
       ? 'border-runed-gold bg-runed-gold/5'
@@ -120,6 +133,7 @@ function renderProviders() {
 
   document.getElementById('opencode-fields').classList.toggle('hidden', provider !== 'opencode');
   document.getElementById('ollama-fields').classList.toggle('hidden', provider !== 'ollama');
+  document.getElementById('cli-hint').classList.toggle('hidden', provider !== 'opencode-cli');
 }
 
 function selectProvider(id) { provider = id; renderProviders(); }
@@ -143,6 +157,16 @@ async function save() {
   const spinner = document.getElementById('status-spinner');
   document.getElementById('btn-enter').classList.add('hidden');
   document.getElementById('btn-retry').classList.add('hidden');
+
+  if (provider === 'opencode-cli') {
+    if (window.electronAPI?.saveBackendConfig) {
+      await window.electronAPI.saveBackendConfig({ llmProvider: 'opencode-cli' });
+      await new Promise(r => setTimeout(r, 2500));
+    }
+    const v = await verify('POST', '/api/llm/verify');
+    finish(v.ok ? `free models via the opencode CLI` : v.diagnosis || v.error, v.ok);
+    return;
+  }
 
   if (provider === 'ollama') {
     const model = document.getElementById('ollama-model').value.trim();
@@ -195,11 +219,21 @@ async function save() {
   }
 }
 
-function finish(what) {
+async function verify(method, path) {
+  try {
+    return await window.COM.api(path, { method, body: '{}' });
+  } catch (e) {
+    return { ok: false, error: e.message, diagnosis: null };
+  }
+}
+
+function finish(what, ok = true) {
   document.getElementById('status-spinner').classList.add('hidden');
-  document.getElementById('status-message').innerHTML =
-    `<span class="text-success">Ready.</span><br/><span class="opacity-70">${esc(what)}</span>`;
-  document.getElementById('btn-enter').classList.remove('hidden');
+  document.getElementById('status-message').innerHTML = ok
+    ? `<span class="text-success">Ready.</span><br/><span class="opacity-70">${esc(what)}</span>`
+    : `<span class="text-error">Not usable</span><br/><span class="opacity-70">${esc(what)}</span>`;
+  document.getElementById('btn-enter').classList.toggle('hidden', !ok);
+  document.getElementById('btn-retry').classList.toggle('hidden', ok);
 }
 
 function retry() {

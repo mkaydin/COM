@@ -15,9 +15,12 @@ class Settings(BaseSettings):
     log_dir: str = "/tmp/com-logs"
 
     # --- Provider selection -------------------------------------------------------
-    # "opencode" (OpenCode Zen) is the default; "ollama" is the optional local
-    # provider. See llm/providers.py.
-    llm_provider: str = "opencode"
+    # "opencode-cli"  default — free Zen models via the `opencode` CLI, because
+    #                 the API refuses free models for standalone clients.
+    # "opencode"     Zen over plain HTTP. Needs a funded account.
+    # "ollama"       optional local.
+    # See llm/providers.py.
+    llm_provider: str = "opencode-cli"
     llm_model_default: str = "big-pickle"
 
     # Deprecated single-model setting, kept so an existing `.env` written for
@@ -25,9 +28,13 @@ class Settings(BaseSettings):
     # not, it becomes the default for every role. See `default_model`.
     llm_model: Optional[str] = None
 
-    # --- OpenCode Zen --------------------------------------------------------------
+    # --- OpenCode ------------------------------------------------------------------
+    #: Optional. The CLI uses its own credential store, so a key is not needed for
+    #: the free tier; setting one lets paid models work over the same path.
     opencode_api_key: str = ""
     opencode_base_url: str = "https://opencode.ai/zen/v1"
+    #: Path or name of the OpenCode binary for the `opencode-cli` provider.
+    opencode_cli_bin: str = "opencode"
 
     # --- Ollama (optional local) ---------------------------------------------------
     ollama_host: str = "localhost"

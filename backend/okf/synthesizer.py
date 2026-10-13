@@ -58,7 +58,7 @@ async def synthesize_description(
         from config import llm_complete
         messages = [{"role": "user", "content": prompt}]
         response = await llm_complete(messages, temperature=0.2, max_tokens=256)
-        text = (response.choices[0].message.content or "").strip()
+        text = (response.content or "").strip()
         if not text:
             return _fallback(children)
         return text.splitlines()[0].strip()

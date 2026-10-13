@@ -63,6 +63,12 @@ RUN mkdir -p /sage_wiki \
 # runs that skip compose.
 ENV PYTHONPATH=/app
 
+# NOTE: the `opencode-cli` provider — the default on a host install, and the
+# only route to Zen's free models — is NOT available in this image: it shells
+# out to an `opencode` binary, and adding one plus a credential mount is more
+# machinery than the alternative providers cost. Set LLM_PROVIDER=ollama
+# (free, local) or opencode (needs a funded Zen account) when running here.
+
 EXPOSE 8734
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=5 \

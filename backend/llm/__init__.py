@@ -22,29 +22,43 @@ logger = get_logger(__name__)
 DEFAULT_ROLE = "MODERATOR"
 
 
-def build_kwargs(role: str = DEFAULT_ROLE, **overrides: Any) -> dict:
-    """Assemble LiteLLM kwargs for a role.
+def build_kwargs(
+    role: str = DEFAULT_ROLE,
+    provider: Optional[providers.Provider] = None,
+    **overrides: Any,
+) -> dict:
+    """Assemble completion kwargs for a role.
 
-    `api_base` and `api_key` are always explicit. `response_format` is only
-    sent when the resolved model is known to honour JSON mode; agents rely on
-    `agents.json_utils.extract_json` to parse anything else.
+    `provider` is a named argument, not an override: it selects the transport,
+    and letting it fall into `**overrides` would send a stray `provider=` to
+    the model. Pass it explicitly in tests and tooling to resolve against a
+    provider other than the active one.
+
+    `api_base` and `api_key` are always explicit on LiteLLM transports.
+    `response_format` is only sent when the resolved model is known to honour
+    JSON mode; agents rely on `agents.json_utils.extract_json` for anything else.
     """
     from config import get_settings
 
     s = get_settings()
-    provider = providers.get()
-    providers.require_credential(provider)
+    provider = provider or providers.get()
+
+    # The CLI transport has its own credential story and does not take
+    # api_base/api_key, so only LiteLLM-backed providers need the guard.
+    if not provider.transport:
+        providers.require_credential(provider)
 
     bare = overrides.pop("model", None) or roles.model_for(role, provider)
     routed = provider.model_id(bare)
 
-    kwargs: dict[str, Any] = {
-        "model": routed,
-        "api_base": provider.base_url,
-        "api_key": provider.api_key or providers.PLACEHOLDER_KEY,
-    }
-    if s.supports_json_mode and "response_format" not in overrides:
-        kwargs["response_format"] = {"type": "json_object"}
+    kwargs: dict[str, Any] = {"model": routed}
+    if not provider.transport:
+        kwargs.update({
+            "api_base": provider.base_url,
+            "api_key": provider.api_key or providers.PLACEHOLDER_KEY,
+        })
+        if s.supports_json_mode and "response_format" not in overrides:
+            kwargs["response_format"] = {"type": "json_object"}
     kwargs.update(overrides)
     return kwargs
 
@@ -61,7 +75,6 @@ async def llm_complete(
     Agents must not call `litellm.completion` directly — going through here is
     what keeps provider selection, per-role models and retries in one place.
     """
-    from litellm import completion
     from agents.retry import llm_call_with_retry
 
     kwargs = build_kwargs(
@@ -70,7 +83,31 @@ async def llm_complete(
     logger.debug(
         "llm_call", role=role, model=kwargs["model"], temp=temperature, max_tokens=max_tokens
     )
-    return await llm_call_with_retry(completion, **kwargs)
+
+    provider = providers.get()
+    if provider.transport:
+        import importlib
+
+        module = importlib.import_module(f"llm.{provider.transport}")
+        completion_fn = _cli_completion(module)
+    else:
+        from litellm import completion as completion_fn
+
+    return await llm_call_with_retry(completion_fn, **kwargs)
+
+
+def _cli_completion(module):
+    """Adapt a CLI transport to LiteLLM's `completion(messages=..., **kw)`.
+
+    The CLI transport has no notion of temperature or max_tokens — `opencode
+    run` exposes neither — so those are accepted and ignored rather than
+    passed through as unknown flags.
+    """
+
+    async def _call(**kwargs):
+        return await module.complete(**kwargs)
+
+    return _call
 
 
 # --- health / introspection ---------------------------------------------------------
@@ -96,11 +133,16 @@ async def list_models(provider_id: Optional[str] = None) -> dict:
         "hint": None,
     }
 
-    if provider.id == "opencode":
-        # No model list without a key; the catalogue still stands in.
-        out["reachable"] = bool(provider.api_key)
-        if not provider.api_key:
-            out["hint"] = "Set OPENCODE_API_KEY to list the live catalogue."
+    if provider.id in ("opencode", "opencode-cli"):
+        # The CLI provider resolves models through the opencode binary, not an
+        # HTTP endpoint, so there is nothing to list live — but the free
+        # catalogue still applies, and it is the same one.
+        out["reachable"] = bool(provider.api_key) or provider.id == "opencode-cli"
+        out["hint"] = (
+            None
+            if provider.id == "opencode-cli" or provider.api_key
+            else "Set OPENCODE_API_KEY to list the live catalogue."
+        )
         return out
 
     # ollama: the installed tags are the source of truth.
@@ -133,9 +175,28 @@ async def health() -> dict:
         return {"ok": False, "provider": provider.id, "error": str(e)}
 
     ok = bool(provider.api_key) or not provider.requires_key
-    detail = {"ok": ok, "provider": provider.id, "roles": roles_map}
+    detail = {
+        "ok": ok,
+        "provider": provider.id,
+        "transport": provider.transport or "litellm",
+        "roles": roles_map,
+    }
 
-    if provider.needs_local_model:
+    if provider.transport == "cli_provider":
+        # Reachability is whether the binary exists, not whether an endpoint
+        # answers — the two fail for completely different reasons and the hint
+        # has to say which.
+        from llm import cli_provider
+
+        cli = await cli_provider.health()
+        detail.update({
+            "reachable": cli.get("reachable"),
+            "binary": cli.get("binary"),
+            "hint": None if cli.get("ok") else cli.get("hint"),
+        })
+        ok = ok and bool(cli.get("ok"))
+
+    elif provider.needs_local_model:
         from ollama_client import ollama_status
 
         st = await ollama_status()
@@ -226,7 +287,10 @@ async def test_model(model_id: str, provider_id: Optional[str] = None) -> dict:
             max_tokens=16,
             model=model_id,
         )
-        text = (resp.choices[0].message.content or "").strip()
+        # Reach through the wrapper's own accessor rather than
+        # `resp.choices[0].message.content`: the CLI transport's first choice
+        # is a dict, not an object.
+        text = (resp.content or "").strip()
         return {"ok": bool(text), "model": model_id, "sample": text[:120],
                 "callable": True}
     except Exception as e:

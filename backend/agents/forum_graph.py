@@ -120,7 +120,7 @@ async def open_topic(state: ForumState) -> dict:
         response = await llm_complete(
             messages, role=MODERATOR_ROLE, temperature=0.3, max_tokens=1024
         )
-        data = extract_json(response.choices[0].message.content)
+        data = extract_json(response.content)
     except Exception as e:
         logger.error("forum_open_moderator_failed", error=str(e)[:160])
 
@@ -501,7 +501,7 @@ async def moderator_synthesis(state: ForumState) -> dict:
         response = await llm_complete(
             messages, role=MODERATOR_ROLE, temperature=0.25, max_tokens=3072
         )
-        data = extract_json(response.choices[0].message.content)
+        data = extract_json(response.content)
         if not data:
             raise ValueError("no parseable JSON in moderator output")
         parsed = registry.ForumSynthesis(**data)

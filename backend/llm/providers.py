@@ -4,13 +4,19 @@ Every LLM call in the Council goes through a provider. A provider answers
 three questions: which base URL, which API key, and which LiteLLM model
 prefix to use.
 
-``opencode`` (OpenCode Zen) is the default — it is OpenAI-compatible over
-``/v1/chat/completions``, so LiteLLM's ``openai/`` prefix reaches it by
-overriding ``api_base``. ``ollama`` is the optional local provider and serves
-the same OpenAI-compatible shape.
+Three providers:
 
-Adding a third provider means adding one `Provider` and one branch in
-`resolve()`; nothing else in the codebase needs to change.
+* ``opencode-cli`` — the default. Shells out to the OpenCode CLI. This is the
+  only route to Zen's **free** models, because the API endpoint refuses them
+  with ``FreeTierError`` for any standalone client.
+* ``opencode`` — Zen over plain HTTP. Needs a funded account; fast.
+* ``ollama`` — optional local. Fast, free, private, no key.
+
+``opencode-cli`` and ``ollama`` share the same free-model defaults as
+``opencode``, so switching to either keeps the six-character free cast intact.
+
+Adding a provider means adding one `Provider` and one branch in `BUILDERS`;
+nothing else in the codebase needs to change.
 """
 
 from dataclasses import dataclass, field
@@ -50,11 +56,20 @@ class Provider:
     #: Per-role defaults, kept per-provider so a switch never re-points a
     #: character at a remote model.
     role_defaults: dict = field(default_factory=dict)
+    #: When set, calls go through this transport instead of LiteLLM. The
+    #: value is the submodule under `llm/` implementing `complete()`.
+    transport: Optional[str] = None
 
     def model_id(self, bare: str) -> str:
-        """Prefix a bare model tag for LiteLLM routing."""
+        """Prefix a bare model tag for routing.
+
+        A non-LiteLLM transport (the CLI) takes the bare tag: it does its own
+        prefixing, and `openai/big-pickle` is not a model it recognises.
+        """
         if not bare:
             return ""
+        if self.transport:
+            return bare
         if "/" in bare and bare.split("/", 1)[0] in ("openai", "ollama", "hosted_vllm"):
             return bare
         return f"{self.litellm_prefix}{bare}"
@@ -75,6 +90,25 @@ def _opencode() -> Provider:
     )
 
 
+def _opencode_cli() -> Provider:
+    from config import get_settings
+
+    s = get_settings()
+    return Provider(
+        id="opencode-cli",
+        label="OpenCode CLI (free models)",
+        base_url="opencode://cli",
+        api_key=s.opencode_api_key or "",
+        requires_key=False,
+        transport="cli_provider",
+        role_defaults=catalogue.OPENCODE_ROLE_DEFAULTS,
+        notes=(
+            "Default. Free Zen models via the `opencode` CLI — the API refuses "
+            "them for standalone clients. Slower per call; needs the CLI on PATH."
+        ),
+    )
+
+
 def _ollama() -> Provider:
     from config import get_settings
 
@@ -91,6 +125,7 @@ def _ollama() -> Provider:
 
 
 _BUILDERS = {
+    "opencode-cli": _opencode_cli,
     "opencode": _opencode,
     "ollama": _ollama,
 }
@@ -109,7 +144,7 @@ def get(provider_id: Optional[str] = None) -> Provider:
     """
     from config import get_settings
 
-    pid = (provider_id or get_settings().llm_provider or "opencode").strip().lower()
+    pid = (provider_id or get_settings().llm_provider or "opencode-cli").strip().lower()
     builder = _BUILDERS.get(pid)
     if builder is None:
         raise ProviderError(
@@ -139,7 +174,8 @@ def describe(provider: Provider) -> dict:
         "requires_key": provider.requires_key,
         "needs_local_model": provider.needs_local_model,
         "notes": provider.notes,
-        "active": provider.id == (s.llm_provider or "opencode").lower(),
+        "transport": provider.transport or "litellm",
+        "active": provider.id == (s.llm_provider or "opencode-cli").lower(),
         "free_models": catalogue.free_models_for(provider.id),
         "role_defaults": provider.role_defaults,
     }

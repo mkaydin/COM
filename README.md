@@ -105,7 +105,7 @@ Every binding is overridable per character, at runtime, from
 - **Web intelligence:** SearXNG (meta-search) · Scout scrape / JS render
 - **Frontend:** Vanilla HTML/CSS/JS (Tailwind) · nginx in Docker
 - **Desktop:** Electron
-- **LLM:** OpenCode Zen (**default**, free models) · Ollama (**optional**, local)
+- **LLM:** OpenCode Zen free models via the `opencode` CLI (**default**, no key) · Zen over HTTP · Ollama (local)
 
 ---
 
@@ -127,21 +127,45 @@ docker compose -f docker/docker-compose.yml up -d --build
 Brings up postgres, chromadb, searxng, the backend and an nginx frontend that
 proxies the API and the WebSocket.
 
-### Without Docker
+### The free models, on the host
 
 ```bash
 docker compose -f docker/docker-compose.yml up -d postgres chromadb   # infra only
-cd backend && uv pip install -r requirements.txt && python -m uvicorn main:app --reload
-# then open com_website/forum.html
+pip install opencode-ai                                                # the CLI
+cd backend && pip install -r requirements.txt && python -m uvicorn main:app --reload
+open com_website/forum.html
+```
+
+### Without Docker at all
+
+```bash
+docker compose -f docker/docker-compose.yml up -d postgres chromadb
+python start.py --no-docker          # runs uvicorn here, creates .env if needed
 ```
 
 ### Configuration
 
-Only one value is required:
+Nothing is required:
 
 ```bash
-OPENCODE_API_KEY=...      # https://opencode.ai/auth
+LLM_PROVIDER=opencode-cli     # the default; needs the `opencode` CLI on PATH
 ```
+
+The free models are reached by shelling out to the OpenCode client, because
+**Zen's free tier refuses direct API calls**:
+
+```
+POST /zen/v1/chat/completions  →  FreeTierError:
+  "OpenCode's free tier can only be used from within OpenCode."
+```
+
+`opencode run --model opencode/big-pickle` works, needs no API key, and all six
+default models answer through it. The cost is latency: **1.4–3.2s per call**,
+so a five-character two-round topic takes ~3–5 minutes.
+
+> **The backend must run on the host** (`python start.py --no-docker`) — the
+> Docker image does not ship an `opencode` binary. In Docker use
+> `LLM_PROVIDER=ollama` (free, local) or `opencode` (Zen over HTTP, billed).
 
 Everything else has a working default, and **the default models are all free**.
 See [docs/PROVIDERS.md](docs/PROVIDERS.md).
@@ -205,6 +229,9 @@ stubbed, and verifies both outcome shapes — consensus and plurality.
 
 ## Notes
 
+- **The free models need the OpenCode CLI and a host install.** They are not
+  reachable over the Zen API by any standalone client, which is why the CLI is
+  the default transport rather than a fallback. Expect 1.4–3.2s per call.
 - The old **Chamber** (single-question deliberation) is still present and still
   works: `/chamber`. The forum is the default surface; the chamber is not
   removed.
@@ -212,6 +239,8 @@ stubbed, and verifies both outcome shapes — consensus and plurality.
   verdict filing continue to work unchanged.
 - Two live tests in `test_rag_retrieval.py` fail on a fresh database — they
   need a seeded corpus. They fail identically on the pre-forum commits.
+- `/api/health` reports `configured` and `callable` separately. A key being
+  present does **not** mean a model answers; `POST /api/llm/verify` proves it.
 
 ## License
 

@@ -46,7 +46,7 @@ async def list_providers():
 def settings_provider() -> str:
     from config import get_settings
 
-    return (get_settings().llm_provider or "opencode").lower()
+    return (get_settings().llm_provider or "opencode-cli").lower()
 
 
 @router.get("/roles")

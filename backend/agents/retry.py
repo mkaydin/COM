@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import time
 from functools import wraps
 from logging_config import get_logger
@@ -7,19 +8,76 @@ logger = get_logger(__name__)
 
 
 class LLMResult:
-    """Wrapper that preserves the LiteLLM response and captures reasoning content."""
+    """Wrapper that preserves the provider response and captures reasoning.
+
+    LiteLLM returns an object graph; the CLI transport returns a plain dict
+    with the same shape. Both are accepted so callers can keep using
+    `.choices[0].message.content` without knowing which transport ran.
+    """
+
     def __init__(self, response):
         self.response = response
         self.reasoning = ""
         try:
-            msg = response.choices[0].message
-            self.reasoning = getattr(msg, 'reasoning_content', None) or ""
+            msg = self._first_message()
+            self.reasoning = getattr(msg, "reasoning_content", None) or ""
         except Exception:
             pass
 
     @property
+    def _choices(self):
+        """The response's choices, whether it is an object or a dict."""
+        raw = self.response
+        if isinstance(raw, dict):
+            return raw.get("choices") or []
+        return getattr(raw, "choices", []) or []
+
+    @property
     def choices(self):
-        return self.response.choices
+        return self._choices
+
+    @property
+    def content(self) -> str:
+        """The first choice's text, regardless of transport.
+
+        The single accessor every caller should use: it works whether the
+        provider returned LiteLLM's object graph or the CLI transport's dict.
+        """
+        msg = self._first_message()
+        return (getattr(msg, "content", "") or "") if msg is not None else ""
+
+    def _first_message(self):
+        """The first choice's message, as an object with `.content`."""
+        choices = self._choices
+        if not choices:
+            return None
+        first = choices[0]
+        if isinstance(first, dict):
+            return _DictMessage(first.get("message") or {})
+        return getattr(first, "message", None)
+
+
+class _DictMessage:
+    """Attribute access over a dict-shaped message."""
+
+    __slots__ = ("_data",)
+
+    def __init__(self, data: dict):
+        self._data = data or {}
+
+    @property
+    def content(self) -> str:
+        return self._data.get("content") or ""
+
+    @property
+    def reasoning_content(self):
+        return self._data.get("reasoning_content") or ""
+
+    def __getattr__(self, name):
+        try:
+            return self._data[name]
+        except KeyError as e:
+            raise AttributeError(name) from e
 
 
 def _status_of(e: Exception) -> int:
@@ -63,6 +121,12 @@ async def llm_call_with_retry(completion_fn, max_retries=3, base_delay=1.0, back
                 logger.info("llm_retry", attempt=attempt, delay=delay, model=kwargs.get("model", ""))
                 await asyncio.sleep(delay)
             result = await asyncio.to_thread(completion_fn, **kwargs)
+            # LiteLLM's `completion` is synchronous, so `to_thread` returns the
+            # response directly. The CLI transport is async and `to_thread`
+            # hands back the un-awaited coroutine instead — awaiting here keeps
+            # both kinds of transport working behind one call site.
+            if inspect.isawaitable(result):
+                result = await result
             return LLMResult(result)
         except Exception as e:
             last_error = e

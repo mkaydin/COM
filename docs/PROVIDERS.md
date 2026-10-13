@@ -5,17 +5,65 @@ document is how that works and how to change it.
 
 ## Providers
 
-| id | default | base URL | auth | notes |
-|----|---------|----------|------|-------|
-| `opencode` | ✅ | `https://opencode.ai/zen/v1` | `OPENCODE_API_KEY` | OpenAI-compatible `/chat/completions`. |
-| `ollama` | optional | `http://$OLLAMA_HOST:$OLLAMA_PORT/v1` | placeholder | Local. The tag must be pulled. |
+| id | default | transport | key | notes |
+|----|---------|-----------|-----|-------|
+| `opencode-cli` | ✅ host | shells out to `opencode run` | not needed | **The only route to the free models.** |
+| `opencode` | | HTTP `/chat/completions` | `OPENCODE_API_KEY` | Needs a **funded** account. Fast. |
+| `ollama` | ✅ in Docker | HTTP `/chat/completions` | — | Free, local, private. |
 
-Both are reached through LiteLLM's `openai/` prefix with an explicit
-`api_base` and `api_key`. The environment is never consulted for these — this
-project once talked to whatever proxy happened to be exported in the shell.
+The HTTP providers are reached through LiteLLM's `openai/` prefix with an
+explicit `api_base` and `api_key`. The environment is never consulted for
+these — this project once talked to whatever proxy happened to be exported in
+the shell.
 
 Adding a provider: one `Provider` in `backend/llm/providers.py` and one branch
 in `BUILDERS`. Nothing else changes.
+
+---
+
+## Why the CLI is the default
+
+Zen's free models **cannot** be called over the plain API. Verified on
+2026-10-13 against a valid key:
+
+```
+POST /zen/v1/chat/completions   (all 11 free models)
+  → FreeTierError: "OpenCode's free tier can only be used from within OpenCode."
+
+POST /zen/v1/chat/completions   (paid models, unfunded account)
+  → "Insufficient account funds"
+```
+
+The same models work from the OpenCode client, so `opencode-cli` shells out to
+it. **No API key is required** — the CLI uses its own credential store.
+
+### The trade-off, stated plainly
+
+| | `opencode-cli` | `opencode` (HTTP) |
+|---|---|---|
+| free models | ✅ | ❌ refused |
+| needs a key | no | yes, **and billing** |
+| latency | **1.4–3.2s/call** | ~0.4s/call |
+| needs the CLI on PATH | ✅ | — |
+| works in Docker | ❌ | ✅ |
+
+A five-character, two-round topic makes ~15 calls, so expect **~3–5 minutes**
+rather than ~20 seconds. `FORUM_MAX_ROUNDS=1` and a three-character cast is a
+reasonable first configuration.
+
+### Not available in Docker
+
+The backend image does not ship an `opencode` binary, and adding one plus a
+credential mount is more machinery than the alternatives cost. Inside the
+compose stack:
+
+```bash
+LLM_PROVIDER=ollama     # free, local, no key  (--profile local)
+LLM_PROVIDER=opencode   # Zen over HTTP, billed
+```
+
+If you set `LLM_PROVIDER=opencode-cli` in Docker, the health endpoint says so
+specifically rather than complaining about PATH.
 
 ---
 
@@ -62,9 +110,9 @@ Fully selectable, never default: `claude-sonnet-4-6`, `claude-opus-4-8`,
 ## Configuration
 
 ```bash
-# backend/.env, or docker/.env for the compose stack
-LLM_PROVIDER=opencode
-OPENCODE_API_KEY=...
+# backend/.env — or docker/.env for the compose stack, which cannot use the CLI
+LLM_PROVIDER=opencode-cli
+OPENCODE_API_KEY=        # not needed for the free tier
 OPENCODE_BASE_URL=https://opencode.ai/zen/v1
 
 LLM_MODEL_DEFAULT=big-pickle
@@ -184,7 +232,10 @@ For the optional local provider the same endpoint carries `ollama_reachable`,
 
 | situation | behaviour |
 |-----------|-----------|
-| no API key | raises before the call — one clear error, not five silent ones |
+| CLI not on PATH | raises before the call, naming the right remedy for host vs container |
+| CLI returns no text | raises with the exit code and the tail of stderr |
+| no API key (CLI provider) | fine — the CLI has its own credentials |
+| no API key (HTTP provider) | raises before the call — one clear error, not five silent ones |
 | bad key (401) | **not retried** — fails on the first attempt |
 | rate limit (429) | retried with exponential backoff |
 | server error (5xx) | retried |
@@ -217,15 +268,29 @@ def _my_provider() -> Provider:
 _BUILDERS["myprovider"] = _my_provider
 ```
 
-Then add the settings fields and register the catalogue in `llm/catalogue.py`
-if it has free models. Nothing else in the codebase changes.
+Then add the settings fields, and register the catalogue in
+`llm/catalogue.py` if it has free models.
+
+For a **non-HTTP** transport, set `transport="my_module"` and implement
+`complete(messages, *, model, **kwargs) -> {"choices": [...]}` in
+`llm/my_module.py`. `llm_complete()` detects the transport and routes around
+LiteLLM entirely — no `api_base`, no `api_key`, no `response_format` (a flag the
+CLI has no equivalent for).
 
 ---
 
 ## Tests
 
 `tests/test_provider_registry.py` covers resolution order, per-role override,
-unknown-provider handling, explicit-key enforcement, and:
+unknown-provider handling, explicit-key enforcement, transport-specific kwargs,
+and:
+
+> `test_cli_provider_takes_the_bare_tag` — `openai/big-pickle` is not a model
+> the CLI recognises; it does its own prefixing.
+
+`tests/test_cli_provider.py` covers event parsing, prompt flattening and the
+container-specific remedy. `tests/test_llm_diagnosis.py` covers turning a
+provider error into actionable advice.
 
 > `test_all_defaults_are_free` — the one promise that would quietly cost the
 > user money. Every shipped default must be in the verified free catalogue.

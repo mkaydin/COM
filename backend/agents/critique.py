@@ -105,7 +105,7 @@ async def _critique_as_agent(agent: str, conflict: dict, state: dict) -> dict:
             role=_model_role_for(agent),
             temperature=0.3, max_tokens=MAX_TOK,
         )
-        data = extract_json(resp.choices[0].message.content)
+        data = extract_json(resp.content)
         stance = str(data.get("stance", "hold")).lower().strip()
         if stance not in ("hold", "revise", "concede"):
             stance = "hold"

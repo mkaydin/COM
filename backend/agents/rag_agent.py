@@ -60,7 +60,7 @@ async def rag_node(state: dict) -> dict:
 
     try:
         response = await llm_complete(messages, role="SCHOLAR", temperature=0.3, max_tokens=max_tok)
-        raw = response.choices[0].message.content
+        raw = response.content
         _reasoning = getattr(response, "reasoning", "")
         data = extract_json(raw)
 
