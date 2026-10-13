@@ -76,10 +76,7 @@
   <div class="text-xl font-black text-amber-400 drop-shadow-[0_2px_0_rgba(0,0,0,1)] font-['Be_Vietnam_Pro'] tracking-tighter uppercase">COUNCIL OF MINDS</div>
   <div class="flex gap-3">
     <button class="hover:bg-amber-400/10 hover:text-amber-300 transition-colors text-amber-400 p-2 rounded"><span class="material-symbols-outlined">gavel</span></button>
-    <select id="provider-selector" class="bg-obsidian border border-amber-400/30 text-amber-400 font-pixel-small text-pixel-small px-2 py-1 rounded outline-none cursor-pointer hover:bg-amber-400/10">
-      <!-- GLM option deactivated -->
-      <option value="lm_studio">LM Studio (Local)</option>
-    </select>
+    <span id="model-chip" title="Local model" class="bg-obsidian border border-amber-400/30 text-amber-400 font-pixel-small text-pixel-small px-2 py-1 rounded cursor-default">model&hellip;</span>
     <button class="hover:bg-amber-400/10 hover:text-amber-300 transition-colors text-amber-400 p-2 rounded"><span class="material-symbols-outlined">settings</span></button>
   </div>
 </header>
@@ -228,22 +225,31 @@ const AGENT_COLORS = {
 };
 const AGENT_LABELS = { oracle: 'Oracle', rag: 'Scholar', sage: 'Sage', moderator: 'Moderator' };
 
-// --- Provider switching ---
-async function switchProvider(provider) {
+// --- Local model status ---
+async function refreshModelChip() {
+  const chip = document.getElementById('model-chip');
+  if (!chip) return;
+  chip.classList.remove('text-error', 'border-error/40');
   try {
-    await window.COM.switchProvider(provider);
-    const statusEl = document.getElementById('session-status-text');
-    if (statusEl) { statusEl.textContent = `Switched to ${provider}`; statusEl.className = 'text-success'; }
-  } catch (e) { console.error('Provider switch failed:', e); }
+    const st = await window.COM.ollamaStatus();
+    if (!st.reachable) {
+      chip.textContent = 'ollama offline';
+      chip.classList.add('text-error', 'border-error/40');
+      chip.title = 'Ollama is not reachable — start it with: ollama serve';
+    } else if (!st.model_present) {
+      chip.textContent = st.model + ' missing';
+      chip.classList.add('text-error', 'border-error/40');
+      chip.title = 'Run: ollama pull ' + st.model;
+    } else {
+      chip.textContent = st.model;
+      chip.title = 'Installed: ' + st.installed.join(', ');
+    }
+  } catch (e) {
+    chip.textContent = 'model ?';
+    chip.title = 'Could not reach backend';
+  }
 }
-
-// Auto-load active provider on page load
-(async () => {
-  try {
-    const data = await window.COM.getProviders();
-    document.getElementById('provider-selector').value = data.active;
-  } catch {}
-})();
+refreshModelChip();
 
 // --- Item 5: Agent selector ---
 function selectAgent(agent) {
@@ -400,18 +406,23 @@ function clearChamberState() {
     catch (e) { console.error('Failed to create session:', e); }
   }
 
-  function connectWS() {
-    if (ws) ws.close();
-    ws = new WebSocket(`ws://localhost:8734/ws/sessions/${sessionId}/stream`);
-    ws.onopen = () => { statusText.textContent = 'Connected'; statusText.className = 'text-success'; banner.classList.add('hidden'); };
-    ws.onmessage = (e) => {
-      let msg;
-      try { msg = JSON.parse(e.data); } catch (err) { console.warn('Ignored non-JSON WebSocket frame:', e.data); return; }
-      handleMessage(msg);
-    };
-    ws.onclose = () => { statusText.textContent = 'Disconnected. Reconnecting...'; statusText.className = 'text-error'; banner.classList.remove('hidden'); setTimeout(connectWS, 2000); };
-  }
-  connectWS();
+  // Uses COM.connectStream so the Electron-allocated backend port is respected
+  // and reconnection uses capped exponential backoff instead of a flat 2s retry.
+  ws = window.COM.connectStream(sessionId, {
+    onConnected: () => { statusText.textContent = 'Connected'; statusText.className = 'text-success'; banner.classList.add('hidden'); },
+  });
+  document.body.addEventListener('com:agent_update', (e) => handleMessage(e.detail));
+  document.body.addEventListener('com:router_update', (e) => handleMessage(e.detail));
+  document.body.addEventListener('com:moderator_summary', (e) => handleMessage(e.detail));
+  document.body.addEventListener('com:critique_round', (e) => handleMessage(e.detail));
+  document.body.addEventListener('com:deliberation_started', (e) => handleMessage(e.detail));
+  document.body.addEventListener('com:deliberation_complete', (e) => handleMessage(e.detail));
+  document.body.addEventListener('com:error', (e) => handleMessage(e.detail));
+  document.body.addEventListener('com:disconnected', () => {
+    statusText.textContent = 'Disconnected. Reconnecting...';
+    statusText.className = 'text-error';
+    banner.classList.remove('hidden');
+  });
 
   // --- Restore a past deliberation (from Archive "Continue") so the user can chat further ---
   const continueId = sessionStorage.getItem('com_continue_deliberation_id');
@@ -631,11 +642,11 @@ function clearChamberState() {
   }
 
   function submitVerdict(chosenAgent, verdictType, override) {
-    if (!ws || ws.readyState!==WebSocket.OPEN || !currentDeliberationId) return;
-    const p = { type:'verdict', deliberation_id:currentDeliberationId, verdict_type:verdictType };
+    if (!ws || ws.getState()!==WebSocket.OPEN || !currentDeliberationId) return;
+    const p = { deliberation_id:currentDeliberationId, verdict_type:verdictType };
     if (chosenAgent) p.chosen_agent = chosenAgent;
     if (override) p.user_override = override;
-    ws.send(JSON.stringify(p));
+    ws.sendAction('verdict', p);
     statusText.textContent = `Verdict: ${verdictType}`; statusText.className='text-success';
   }
 
@@ -644,12 +655,8 @@ function clearChamberState() {
   document.getElementById('deliberation-submit').onclick = () => {
     const input = document.getElementById('deliberation-input');
     const query = input.value.trim();
-    if (!query || !ws || ws.readyState!==WebSocket.OPEN) return;
-    const payload = { type:'query', content:query };
-    const provider = document.getElementById('provider-selector').value;
-    payload.provider = provider;
-    if (selectedAgent !== 'all') payload.target_agent = selectedAgent;
-    ws.send(JSON.stringify(payload));
+    if (!query || !ws || ws.getState()!==WebSocket.OPEN) return;
+    ws.sendQuery(query, selectedAgent);
     // Don't clear input — keep query visible until agents respond
   };
 

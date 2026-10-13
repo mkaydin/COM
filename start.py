@@ -32,9 +32,9 @@ def services_healthy():
 
     health_map = {
         "postgres": ("pg_isready -U council -h localhost", None),
-        "redis": ("redis-cli ping", None),
-        "neo4j": ("curl -s http://localhost:7474", None),
         "chromadb": ("curl -s http://localhost:8000/api/v1/heartbeat", None),
+        "ollama": ("curl -s http://localhost:11434/api/tags", None),
+        "searxng": ("curl -s http://localhost:8888", None),
     }
 
     all_ok = True

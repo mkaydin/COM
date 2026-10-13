@@ -1,7 +1,7 @@
 {
   "name": "com-council-of-minds",
   "version": "1.0.0",
-  "description": "Multi-agent AI deliberation system — Council of Minds",
+  "description": "Multi-agent AI deliberation system \u2014 Council of Minds",
   "homepage": "https://github.com/mkaydin/COM",
   "author": {
     "name": "mkaydin",
@@ -30,7 +30,16 @@
     "extraResources": [
       {
         "from": "../backend",
-        "to": "backend"
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!**/.env",
+          "!**/.env.*",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/.pytest_cache/**",
+          "!**/node_modules/**"
+        ]
       }
     ],
     "linux": {

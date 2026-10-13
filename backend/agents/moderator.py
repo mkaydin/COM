@@ -3,8 +3,8 @@ from typing import Any, Optional
 from config import get_settings
 from logging_config import get_logger
 from agents.schemas import ModeratorResponse, Agreement, Conflict
-from agents.prompts import MODERATOR_SYSTEM_PROMPT
-from agents.json_utils import schema_for_prompt, extract_json
+from agents.prompts import LOCAL_MODERATOR_PROMPT
+from agents.json_utils import extract_json
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -264,7 +264,6 @@ def _fallback_synthesis(briefs: dict, signals: dict, deliberation_id: str) -> Mo
 async def moderator_node(state: dict) -> dict:
     logger.info("moderator_synthesizing")
     deliberation_id = state.get("deliberation_id", "")
-    provider = state.get("provider", "lm_studio")
 
     critique_round = state.get("critique_round", 0)
     max_rounds = state.get("max_critique_rounds", 2)
@@ -276,13 +275,8 @@ async def moderator_node(state: dict) -> dict:
 
     session_memory = state.get("session_memory") or ""
 
-    if provider == "lm_studio":
-        from agents.prompts import LOCAL_MODERATOR_PROMPT
-        system_content = LOCAL_MODERATOR_PROMPT
-        max_tok = 4096
-    else:
-        system_content = MODERATOR_SYSTEM_PROMPT + schema_for_prompt(ModeratorResponse)
-        max_tok = 3072
+    system_content = LOCAL_MODERATOR_PROMPT
+    max_tok = 4096
 
     user_content = (
         f"USER QUERY: {state.get('user_query', '')}\n\n"
@@ -309,7 +303,7 @@ async def moderator_node(state: dict) -> dict:
 
     try:
         from config import llm_complete
-        response = await llm_complete(messages, temperature=0.2, max_tokens=max_tok, provider=provider)
+        response = await llm_complete(messages, temperature=0.2, max_tokens=max_tok)
         raw = response.choices[0].message.content
         data = extract_json(raw)
         moderator_output = ModeratorResponse(**data)

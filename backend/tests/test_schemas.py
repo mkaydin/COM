@@ -1,9 +1,7 @@
 import pytest
 from agents.schemas import (
-    QueryClassification, ScoutResponse, ScoutSignal, HistorianClaim, HistorianResponse,
-    DetectiveResponse, CausalChain, HiddenLink,
+    QueryClassification,
     SageResponse, SageAnalogy, ModeratorResponse, DecisionOption, Conflict, Agreement,
-    CompanionResponse, TrustGuidance,
 )
 
 
@@ -23,53 +21,6 @@ class TestQueryClassification:
     def test_valid_general(self):
         q = QueryClassification(query_type="general", confidence=0.5, reasoning="test")
         assert q.query_type == "general"
-
-
-class TestScoutResponse:
-    def test_empty(self):
-        r = ScoutResponse(confidence=0.0, key_signals=[], consensus="", topic="", source_diversity="low", source_reliability="low")
-        assert r.confidence == 0.0
-        assert r.key_signals == []
-
-    def test_with_signals(self):
-        signal = ScoutSignal(signal="test signal", strength="strong", sources=3)
-        r = ScoutResponse(
-            confidence=0.85, key_signals=[signal], consensus="Consensus found",
-            topic="AI", source_diversity="high", source_reliability="medium",
-        )
-        assert r.confidence == 0.85
-        assert len(r.key_signals) == 1
-        assert r.key_signals[0].signal == "test signal"
-
-
-class TestHistorianResponse:
-    def test_empty(self):
-        r = HistorianResponse(confidence=0.0, claims=[], verdict="")
-        assert r.verdict == ""
-
-    def test_with_claims(self):
-        claim = HistorianClaim(text="Claim text", sources=["E1", "E2"])
-        r = HistorianResponse(confidence=0.9, claims=[claim], verdict="Verdict")
-        assert len(r.claims) == 1
-        assert r.claims[0].text == "Claim text"
-        assert r.claims[0].sources == ["E1", "E2"]
-
-
-class TestDetectiveResponse:
-    def test_empty(self):
-        r = DetectiveResponse(confidence=0.0, causal_chains=[], hidden_links=[], inconsistencies=[], verdict="")
-        assert r.verdict == ""
-
-    def test_with_data(self):
-        chain = CausalChain(chain=["A", "B", "C"], evidence_strength=0.8)
-        link = HiddenLink(entity_a="X", entity_b="Y", relation="linked")
-        r = DetectiveResponse(
-            confidence=0.75, causal_chains=[chain], hidden_links=[link],
-            inconsistencies=["Issue 1"], verdict="Analysis complete",
-        )
-        assert len(r.causal_chains) == 1
-        assert r.causal_chains[0].chain == ["A", "B", "C"]
-        assert r.inconsistencies == ["Issue 1"]
 
 
 class TestSageResponse:
@@ -97,24 +48,8 @@ class TestModeratorResponse:
         assert r.conflicts[0].topic == "Test"
 
 
-class TestCompanionResponse:
-    def test_empty(self):
-        c = CompanionResponse(translation="", summary="", recommended_agent="", recommendation_reason="")
-        assert c.translation == ""
-
-    def test_with_data(self):
-        guidance = TrustGuidance(agent="sage", trust_level="high", reason="good")
-        c = CompanionResponse(
-            translation="Simple", summary="Brief", recommended_agent="sage",
-            recommendation_reason="good", trust_guidance=[guidance],
-            clarifying_questions=["What is X?"],
-        )
-        assert len(c.clarifying_questions) == 1
-        assert c.recommended_agent == "sage"
-
-
-class TestGLMCoercion:
-    """Tests that schemas tolerate real GLM output quirks."""
+class TestLegacyAgentFieldCoercion:
+    """Older records name Scout/Historian/Detective; those fields still coerce."""
 
     def test_conflict_float_scout(self):
         c = Conflict(topic="t", scout=0.85)
@@ -133,9 +68,9 @@ class TestGLMCoercion:
         d = DecisionOption(**{"label": "X", "action": "Y", "risk": "low"})
         assert d.action == "Y"
 
-    def test_trust_guidance_no_agent(self):
-        t = TrustGuidance(trust_level="high", reason="good")
-        assert t.agent == ""
+    def test_conflict_coerces_numbers_for_live_agents_too(self):
+        c = Conflict(topic="t", oracle=0.7, rag=0.6)
+        assert c.oracle == "0.7" and c.rag == "0.6"
 
     def test_moderator_decision_space_dict(self):
         m = ModeratorResponse(decision_space={"conservative": {"action": "do A", "risk": "low"}})

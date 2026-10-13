@@ -11,7 +11,7 @@ Uses a Node.js subprocess for Lightpanda/Puppeteer (scout_scraper.mjs).
 Python handles parsing, filtering, and LLM summarization.
 """
 
-import subprocess
+import asyncio
 import os
 import signal
 from bs4 import BeautifulSoup
@@ -19,6 +19,7 @@ from typing import Optional
 from pydantic import BaseModel
 from config import get_settings
 from logging_config import get_logger
+from agents.url_guard import UnsafeURLError, ensure_public_url
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -55,35 +56,53 @@ class ScrapedPage(BaseModel):
     length: int
 
 
-def _render_html(url: str) -> str:
-    """Call Lightpanda+Puppeteer via Node.js subprocess, return rendered HTML.
-    Uses process group to prevent zombie processes on timeout.
+async def _render_html(url: str) -> str:
+    """Call Lightpanda+Puppeteer via Node.js, return rendered HTML.
+
+    Async subprocess: a synchronous communicate() here would stall the whole
+    FastAPI event loop for up to 45s on a single slow page. The process group
+    is still used so the timeout can reap the whole tree.
     """
     try:
-        proc = subprocess.Popen(
-            ["node", SCRAPER_SCRIPT, url],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            preexec_fn=os.setsid,
+        proc = await asyncio.create_subprocess_exec(
+            "node", SCRAPER_SCRIPT, url,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,
         )
-        try:
-            stdout, stderr = proc.communicate(timeout=45)
-            if proc.returncode != 0:
-                logger.warning("scraper_failed", url=url, stderr=stderr[:200])
-                return ""
-            return stdout
-        except subprocess.TimeoutExpired:
-            logger.warning("scraper_timeout", url=url)
-            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            proc.wait(timeout=5)
-            return ""
     except FileNotFoundError:
         logger.error("node_not_found", hint="Install Node.js to use Lightpanda scraping")
         return ""
     except Exception as e:
         logger.error("scraper_error", error=str(e))
         return ""
+
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=45)
+    except asyncio.TimeoutError:
+        logger.warning("scraper_timeout", url=url)
+        _kill_process_group(proc)
+        return ""
+
+    if proc.returncode != 0:
+        logger.warning("scraper_failed", url=url, stderr=(stderr or b"").decode("utf-8", "replace")[:200])
+        return ""
+    return stdout.decode("utf-8", "replace")
+
+
+def _kill_process_group(proc) -> None:
+    """SIGTERM the scraper's process group, then reap it."""
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+    except (ProcessLookupError, PermissionError):
+        proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except Exception:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            proc.kill()
 
 
 def _parse_html(html: str) -> str:
@@ -117,9 +136,16 @@ async def scrape_page(url: str) -> ScrapedPage:
     """
     Lightpanda → rendered HTML → BeautifulSoup → clean text.
     """
+    # URLs arrive from search results, so they are untrusted input.
+    try:
+        ensure_public_url(url)
+    except UnsafeURLError as e:
+        logger.warning("scrape_blocked_url", url=url[:100], reason=str(e))
+        return ScrapedPage(url=url, title="(blocked)", text="", length=0)
+
     logger.info("scraping", url=url[:100])
 
-    html = _render_html(url)
+    html = await _render_html(url)
     if not html:
         logger.warning("empty_html", url=url[:100])
         return ScrapedPage(url=url, title="(scrape failed)", text="", length=0)

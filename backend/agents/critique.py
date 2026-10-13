@@ -73,7 +73,7 @@ Do not invent evidence.
 """
 
 
-async def _critique_as_agent(agent: str, conflict: dict, state: dict, provider: str) -> dict:
+async def _critique_as_agent(agent: str, conflict: dict, state: dict) -> dict:
     opponents = [a for a in _participants(conflict) if a != agent]
     opp_text = "\n".join(f"- {AGENT_DISPLAY[o]}: {_agent_position(conflict, o)}" for o in opponents) or "- (none stated)"
     prompt = CRITIQUE_PROMPT.format(
@@ -88,7 +88,7 @@ async def _critique_as_agent(agent: str, conflict: dict, state: dict, provider: 
     try:
         resp = await llm_complete(
             [{"role": "user", "content": prompt}],
-            temperature=0.3, max_tokens=MAX_TOK, provider=provider,
+            temperature=0.3, max_tokens=MAX_TOK,
         )
         data = extract_json(resp.choices[0].message.content)
         stance = str(data.get("stance", "hold")).lower().strip()
@@ -117,7 +117,6 @@ def _is_resolved(stances: list) -> bool:
 
 async def critique_round_node(state: dict) -> dict:
     round_num = state.get("critique_round", 0) + 1
-    provider = state.get("provider", "lm_studio")
     unresolved = state.get("unresolved_conflicts", []) or []
     max_rounds = state.get("max_critique_rounds", 2)
 
@@ -133,7 +132,7 @@ async def critique_round_node(state: dict) -> dict:
     tasks, meta = [], []
     for ci, conflict in enumerate(critiquable):
         for agent in _participants(conflict):
-            tasks.append(_critique_as_agent(agent, conflict, state, provider))
+            tasks.append(_critique_as_agent(agent, conflict, state))
             meta.append(ci)
 
     results = await asyncio.gather(*tasks) if tasks else []

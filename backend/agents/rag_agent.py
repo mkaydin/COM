@@ -15,7 +15,7 @@ import asyncio
 from config import get_settings, llm_complete
 from logging_config import get_logger
 from agents.schemas import RagResponse, RagCitation
-from agents.json_utils import schema_for_prompt, extract_json
+from agents.json_utils import extract_json
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -23,7 +23,6 @@ settings = get_settings()
 
 async def rag_node(state: dict) -> dict:
     query = state.get("user_query", "")
-    provider = state.get("provider", "lm_studio")
     logger.info("rag_processing", query=query[:80])
 
     # 1. Unified retrieval (OKF → Wiki → vector fallback).
@@ -47,13 +46,9 @@ async def rag_node(state: dict) -> dict:
         all_results = retrieval_result.get("all", [])
         citations_raw = _build_citations(all_results)
 
-    # 3. Select prompt + call LLM.
-    if provider == "lm_studio":
-        system_prompt = LOCAL_RAG_PROMPT
-        max_tok = 8192
-    else:
-        system_prompt = RAG_SYSTEM_PROMPT + schema_for_prompt(RagResponse)
-        max_tok = 8192
+    # 3. Call LLM.
+    system_prompt = LOCAL_RAG_PROMPT
+    max_tok = 8192
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -64,7 +59,7 @@ async def rag_node(state: dict) -> dict:
     ]
 
     try:
-        response = await llm_complete(messages, temperature=0.3, max_tokens=max_tok, provider=provider)
+        response = await llm_complete(messages, temperature=0.3, max_tokens=max_tok)
         raw = response.choices[0].message.content
         _reasoning = getattr(response, "reasoning", "")
         data = extract_json(raw)
@@ -129,29 +124,6 @@ def _build_citations(results: list[dict]) -> list[RagCitation]:
 
 
 # === Prompts ===
-
-RAG_SYSTEM_PROMPT = """You are the RAG agent — the raw evidence specialist for the Council of Minds.
-
-Your job: answer the query using the retrieved knowledge, citing source_url and
-trust_tier for every factual claim. You are the agent that goes deep into
-primary sources — PDFs, scraped pages, and search results.
-
-CORE PHILOSOPHY:
-- Evidence first. Every claim must trace back to a retrieved source.
-- Trust matters. A peer_reviewed paper carries more weight than an ai_summary.
-  Always tell the user which tier your evidence comes from.
-- Gaps are data. If the retrieval didn't cover an aspect of the query, say so.
-
-OUTPUT RULES:
-- Write a thorough answer using ## headings and bullet points.
-- For each major claim, cite inline: [Source: title (trust_tier)].
-- List all sources in the citations array with their trust_tier.
-- Set insufficient_data=true when retrieval has no relevant coverage.
-- Set gaps to list aspects of the query the retrieval couldn't cover.
-
-OUTPUT FORMAT: Structured JSON matching RagResponse schema.
-"""
-
 
 LOCAL_RAG_PROMPT = """You are the RAG agent. Answer using the retrieved knowledge. Cite sources.
 

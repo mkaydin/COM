@@ -44,8 +44,11 @@ async def _run_deliberation(deliberation_id: str, session_id: str, query: str):
         final_state = await graph.ainvoke(initial_state)
         total_latency = int((time_module.time() - start_time) * 1000)
 
+        # Must match the state keys the graph actually produces — a mismatch
+        # here silently drops the Oracle and Scholar responses from the archive.
         agent_map = {
-            "scout": final_state.get("scout_response"),
+            "oracle": final_state.get("oracle_response"),
+            "rag": final_state.get("rag_response"),
             "sage": final_state.get("sage_response"),
             "moderator": final_state.get("moderator_synthesis"),
         }

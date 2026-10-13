@@ -72,7 +72,31 @@ def list_concepts(bundle_root: Path | None = None) -> list[dict[str, Any]]:
 # --- semantic retrieval (sentence-transformers, cached) ----------------------
 
 _st_model = None
-_concept_cache: dict[str, Any] = {"root": None, "ids": [], "embeddings": None}
+_concept_cache: dict[str, Any] = {"root": None, "ids": [], "embeddings": None, "mtime": None}
+
+
+def invalidate_concept_cache(bundle_root: Path | None = None) -> None:
+    """Drop the cached concept index.
+
+    Must be called after anything writes into the bundle (e.g. filing a
+    deliberation), otherwise the new concepts are invisible to semantic
+    retrieval until the process restarts — which would defeat the whole
+    point of the bundle compounding.
+    """
+    if bundle_root is not None and _concept_cache["root"] not in (None, Path(bundle_root).resolve()):
+        return
+    _concept_cache.update(root=None, ids=[], embeddings=None, mtime=None)
+
+
+def _bundle_fingerprint(root: Path) -> float:
+    """Cheap change detector: newest mtime across the bundle tree."""
+    newest = 0.0
+    for p in root.rglob("*.md"):
+        try:
+            newest = max(newest, p.stat().st_mtime)
+        except OSError:
+            continue
+    return newest
 
 
 def _get_st_model():
@@ -91,7 +115,12 @@ def _concept_text(c: dict[str, Any]) -> str:
 
 def _ensure_index(bundle_root: Path) -> None:
     root = Path(bundle_root).resolve()
-    if _concept_cache["root"] == root and _concept_cache["embeddings"] is not None:
+    fingerprint = _bundle_fingerprint(root)
+    if (
+        _concept_cache["root"] == root
+        and _concept_cache["embeddings"] is not None
+        and _concept_cache["mtime"] == fingerprint
+    ):
         return
     concepts = list_concepts(root)
     model = _get_st_model()
@@ -102,6 +131,7 @@ def _ensure_index(bundle_root: Path) -> None:
         ids=[c["id"] for c in concepts],
         embeddings=np.asarray(emb, dtype=np.float32),
         concepts=concepts,
+        mtime=fingerprint,
     )
 
 

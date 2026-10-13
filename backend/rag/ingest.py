@@ -9,6 +9,7 @@ Dedupe rules (spec §2.3):
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import uuid
 from datetime import datetime, timezone
@@ -129,7 +130,7 @@ async def ingest(
 
     # --- Embed (batch) ---
     texts_to_embed = [c.text for c in raw_chunks]
-    embeddings = _embed(texts_to_embed)
+    embeddings = await asyncio.to_thread(_embed, texts_to_embed)
 
     # --- Resolve trust tier ---
     if trust_tier is None:

@@ -1,11 +1,10 @@
 import json, re
-from litellm import completion
 from config import get_settings
 from logging_config import get_logger
 from agents.schemas import SageResponse
-from agents.prompts import SAGE_SYSTEM_PROMPT
+from agents.prompts import LOCAL_SAGE_PROMPT
 from agents.sage_wiki import search_wiki, load_index
-from agents.json_utils import schema_for_prompt, extract_json
+from agents.json_utils import extract_json
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -45,15 +44,8 @@ async def sage_node(state: dict) -> dict:
     if rag_context:
         full_context += "\n\n" + rag_context
 
-    # Select prompt based on provider
-    provider = state.get("provider", "lm_studio")
-    if provider == "lm_studio":
-        from agents.prompts import LOCAL_SAGE_PROMPT
-        system_content = LOCAL_SAGE_PROMPT
-        max_tok = 4096
-    else:
-        system_content = SAGE_SYSTEM_PROMPT + schema_for_prompt(SageResponse)
-        max_tok = 4096
+    system_content = LOCAL_SAGE_PROMPT
+    max_tok = 4096
 
     messages = [
         {"role": "system", "content": system_content},
@@ -62,7 +54,7 @@ async def sage_node(state: dict) -> dict:
 
     try:
         from config import llm_complete
-        response = await llm_complete(messages, temperature=0.7, max_tokens=max_tok, provider=provider)
+        response = await llm_complete(messages, temperature=0.7, max_tokens=max_tok)
         raw = response.choices[0].message.content
         _reasoning = getattr(response, 'reasoning', '')
         data = extract_json(raw)

@@ -93,6 +93,7 @@ class Verdict(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     deliberation_id = Column(UUID(as_uuid=True), ForeignKey("deliberations.id"), unique=True, nullable=False)
     chosen_response_id = Column(UUID(as_uuid=True), ForeignKey("agent_responses.id"), nullable=True)
+    chosen_agent = Column(String(64), nullable=True)
     user_override = Column(Text, nullable=True)
     verdict_type = Column(String(32), nullable=False)
 

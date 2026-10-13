@@ -6,6 +6,10 @@ from pathlib import Path
 from rag.chunker import chunk_document, _estimate_tokens, _split_sections
 
 
+# Writes to Postgres and loads the embedder.
+pytestmark = pytest.mark.live
+
+
 # --- §2.4 Structure-aware chunking ------------------------------------------
 
 class TestChunker:

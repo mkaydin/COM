@@ -41,11 +41,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# The Council is a local desktop app: the backend binds to loopback and the UI
+# is loaded via file:// or from a local dev server. `allow_origins=["*"]` with
+# `allow_credentials=True` is rejected by browsers anyway, and would open the
+# API to any origin if it were not.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"^(https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?|null|file://.*)$",
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -63,12 +67,17 @@ app.include_router(websocket_router)
 
 @app.get("/api/health")
 async def health():
+    from ollama_client import llm_health
+
+    llm = await llm_health()
     checks = {
-        "status": "ok",
-        "configured": bool(settings.llm_api_key),
-        "llm_provider": settings.llm_provider,
+        "status": "ok" if llm["ok"] else "degraded",
+        "configured": llm["ok"],
         "llm_model": settings.llm_model,
-        "llm_ok": bool(settings.llm_api_key),
+        "llm_ok": llm["ok"],
+        "ollama_reachable": llm["reachable"],
+        "model_present": llm["model_present"],
+        "hint": llm["hint"],
         "version": "1.0.0",
     }
 
@@ -87,42 +96,13 @@ async def health():
 @app.get("/api/health/ready")
 async def ready():
     checks = await health()
-    all_ok = checks.get("postgres_ok", False)
+    all_ok = checks.get("postgres_ok", False) and checks.get("llm_ok", False)
     return {"ready": all_ok, "checks": checks}
 
 
-@app.get("/api/providers")
-async def list_providers():
-    """List all available LLM providers and which is active."""
-    from config import PROVIDERS, get_settings
-    s = get_settings()
-    return {
-        "active": s.active_provider,
-        "providers": {
-            key: {
-                "label": p["label"],
-                "model": p["llm_model"],
-                "base": p["llm_api_base"],
-                "supports_json_mode": p["supports_json_mode"],
-            }
-            for key, p in PROVIDERS.items()
-        },
-    }
+@app.get("/api/ollama/status")
+async def ollama_status():
+    """Installed models on the local Ollama server and whether ours is present."""
+    from ollama_client import ollama_status as _status
+    return await _status()
 
-
-from pydantic import BaseModel
-
-
-class ProviderSwitchRequest(BaseModel):
-    provider: str
-
-
-@app.post("/api/providers/switch")
-async def switch_provider_endpoint(req: ProviderSwitchRequest):
-    """Switch the active LLM provider at runtime."""
-    from config import switch_provider as do_switch, PROVIDERS
-    from fastapi import HTTPException
-    if req.provider not in PROVIDERS:
-        raise HTTPException(status_code=400, detail=f"Unknown provider: {req.provider}. Available: {list(PROVIDERS.keys())}")
-    p = do_switch(req.provider)
-    return {"status": "switched", "provider": req.provider, "model": p["llm_model"]}

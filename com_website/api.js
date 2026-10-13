@@ -1,17 +1,28 @@
 (() => {
   window.COM_API_BASE = 'http://localhost:8734';
 
-  if (window.electronAPI?.getBackendPort) {
-    Promise.resolve(window.electronAPI.getBackendPort()).then(port => {
-      if (typeof port === 'number' && port > 0) {
-        window.COM_API_BASE = `http://localhost:${port}`;
-      }
-    }).catch(() => {});
-  }
+  // Electron allocates the backend port at runtime, so resolving it is async.
+  // Every request awaits `ready` before reading COM_API_BASE — otherwise a
+  // request fired during page load races the port lookup and hits the default.
+  const ready = (async () => {
+    if (window.electronAPI?.getBackendPort) {
+      try {
+        const port = await window.electronAPI.getBackendPort();
+        if (typeof port === 'number' && port > 0) {
+          window.COM_API_BASE = `http://localhost:${port}`;
+        }
+      } catch {}
+    }
+  })();
+
+  const apiBase = () => window.COM_API_BASE;
 
   window.COM = {
+    ready,
+
     async api(path, opts = {}) {
-      const url = `${window.COM_API_BASE}${path}`;
+      await ready;
+      const url = `${apiBase()}${path}`;
       let res;
       try {
         res = await fetch(url, {
@@ -19,7 +30,7 @@
           ...opts
         });
       } catch (netErr) {
-        throw new Error(`Cannot reach backend at ${window.COM_API_BASE} — is the server running? (${netErr.message || netErr})`);
+        throw new Error(`Cannot reach backend at ${apiBase()} — is the server running? (${netErr.message || netErr})`);
       }
       const raw = await res.text().catch(() => '');
       // No-content responses: nothing to parse (prevents "Unexpected end of JSON input")
@@ -81,7 +92,9 @@
         const name = fp.split('/').pop() || fp.split('\\').pop();
         formData.append('file', blob, name);
       }
-      return fetch(`${window.COM_API_BASE}/api/documents/upload`, {
+      await ready;
+      const url = `${apiBase()}/api/documents/upload`;
+      return fetch(url, {
         method: 'POST',
         body: formData
       }).then(r => r.ok ? r.json() : Promise.reject(r));
@@ -111,20 +124,16 @@
 
     isReady: () => window.COM.api('/api/health/ready'),
 
-    getProviders: () => window.COM.api('/api/providers'),
+    ollamaStatus: () => window.COM.api('/api/ollama/status'),
 
-    switchProvider: (provider) =>
-      window.COM.api('/api/providers/switch', {
-        method: 'POST',
-        body: JSON.stringify({ provider }),
-      }),
-
-    divination: (query, provider = 'glm') =>
-      fetch(`${window.COM_API_BASE}/api/divination/search`, {
+    divination: async (query) => {
+      await ready;
+      return fetch(`${apiBase()}/api/divination/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, provider }),
-      }).then(r => r.ok ? r.json() : Promise.reject(r)),
+        body: JSON.stringify({ query }),
+      }).then(r => r.ok ? r.json() : Promise.reject(r));
+    },
 
     saveDivination: (data) =>
       window.COM.api('/api/divination/save', {

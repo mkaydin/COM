@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from uuid import UUID, uuid4
@@ -38,7 +38,15 @@ async def list_documents(
     limit: int = 50,
     db: AsyncSession = Depends(get_db)
 ):
-    query = select(Document).where(~Document.source_type.endswith('_chunk')).order_by(Document.created_at.desc()).limit(limit)
+    # `NOT (source_type LIKE '%_chunk')` evaluates to NULL — not TRUE — when
+    # source_type is NULL, so those rows were silently dropped. Exclude chunk
+    # rows explicitly and keep everything else.
+    query = (
+        select(Document)
+        .where(or_(Document.source_type.is_(None), Document.source_type.notlike("%_chunk")))
+        .order_by(Document.created_at.desc())
+        .limit(limit)
+    )
     if source_type:
         query = query.where(Document.source_type == source_type)
     result = await db.execute(query)

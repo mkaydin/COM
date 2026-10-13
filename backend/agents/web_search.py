@@ -19,7 +19,8 @@ from logging_config import get_logger
 logger = get_logger(__name__)
 settings = get_settings()
 
-SEARXNG_URL = "http://localhost:8888"
+SEARXNG_URL = get_settings().searxng_url
+MAX_REDIRECTS = 5
 
 STRIP_SELECTORS = [
     "script", "style", "nav", "footer", "header", "noscript",
@@ -83,28 +84,52 @@ async def scrape_with_httpx(url: str) -> Optional[str]:
     """Fast path: fetch HTML via httpx, parse with BeautifulSoup.
 
     Works for static pages. Returns None if content is too thin (likely JS-rendered).
+    Redirects are walked manually so each hop is re-checked against the private
+    network blocklist.
     """
     import httpx
+    from agents.url_guard import UnsafeURLError, ensure_public_url
 
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            resp = await client.get(url, headers={"User-Agent": "CouncilOfMinds-Scout/1.0"})
-            resp.raise_for_status()
-            html = resp.text
-    except Exception:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
+            current = url
+            html = None
+            for _ in range(MAX_REDIRECTS + 1):
+                ensure_public_url(current)
+                resp = await client.get(current, headers={"User-Agent": "CouncilOfMinds-Scout/1.0"})
+                if resp.is_redirect:
+                    location = resp.headers.get("location")
+                    if not location:
+                        return None
+                    current = str(resp.url.join(location))
+                    continue
+                resp.raise_for_status()
+                html = resp.text
+                break
+    except (UnsafeURLError, httpx.HTTPError) as e:
+        logger.warning("httpx_scrape_skipped", url=url[:80], error=str(e))
         return None
 
+    if html is None:
+        return None
     return _parse_html(html)
 
 
-def scrape_with_lightpanda(url: str) -> Optional[str]:
+async def scrape_with_lightpanda(url: str) -> Optional[str]:
     """Slow path: render with Lightpanda + Puppeteer, then parse.
 
     Used as fallback for JS-heavy pages (SPAs, dynamic content).
     """
+    from agents.url_guard import UnsafeURLError, ensure_public_url
+    try:
+        ensure_public_url(url)
+    except UnsafeURLError as e:
+        logger.warning("lightpanda_scrape_blocked", url=url[:80], reason=str(e))
+        return None
+
     try:
         from agents.scout_websearch import _render_html, _parse_html as scout_parse
-        html = _render_html(url)
+        html = await _render_html(url)
         if not html:
             return None
         return scout_parse(html)
@@ -163,7 +188,7 @@ async def scrape_page(url: str) -> Optional[str]:
         return text
 
     logger.info("falling_back_to_lightpanda", url=url[:60])
-    text = scrape_with_lightpanda(url)
+    text = await scrape_with_lightpanda(url)
     return text
 
 

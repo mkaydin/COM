@@ -44,52 +44,19 @@
     <p class="text-parchment text-base pixel-text opacity-70">First-Run Configuration</p>
   </div>
 
-  <div id="step-provider" class="bg-[#201f21] border border-[#353436] rounded p-6">
-    <h2 class="text-amber-400 text-xl pixel-text mb-4">Step 1: Choose LLM Provider</h2>
-    <p class="text-parchment text-sm pixel-text mb-4 opacity-70">Select the AI provider that powers the Council's agents.</p>
+  <div id="step-model" class="bg-[#201f21] border border-[#353436] rounded p-6">
+    <h2 class="text-amber-400 text-xl pixel-text mb-4">Local Model</h2>
+    <p class="text-parchment text-sm pixel-text mb-4 opacity-70">
+      The Council runs entirely on a local Ollama server. Nothing leaves this machine.
+    </p>
 
-    <div class="space-y-3 mb-6">
-      <label class="flex items-center gap-3 p-3 border border-[#353436] rounded cursor-pointer hover:border-amber-400 transition-colors" data-provider="openai">
-        <input type="radio" name="provider" value="openai" checked class="text-amber-400"/>
-        <div>
-          <span class="text-parchment pixel-text">OpenAI</span>
-          <span class="text-parchment text-xs opacity-50 block">GPT-4o, GPT-4o-mini</span>
-        </div>
-      </label>
-      <label class="flex items-center gap-3 p-3 border border-[#353436] rounded cursor-pointer hover:border-amber-400 transition-colors" data-provider="anthropic">
-        <input type="radio" name="provider" value="anthropic" class="text-amber-400"/>
-        <div>
-          <span class="text-parchment pixel-text">Anthropic</span>
-          <span class="text-parchment text-xs opacity-50 block">Claude 3.5 Sonnet, Claude 3 Opus</span>
-        </div>
-      </label>
-      <label class="flex items-center gap-3 p-3 border border-[#353436] rounded cursor-pointer hover:border-amber-400 transition-colors" data-provider="ollama">
-        <input type="radio" name="provider" value="ollama" class="text-amber-400"/>
-        <div>
-          <span class="text-parchment pixel-text">Ollama (Local)</span>
-          <span class="text-parchment text-xs opacity-50 block">Llama 3, Mistral, Phi-3 — runs offline</span>
-        </div>
-      </label>
-    </div>
+    <label class="text-parchment text-sm pixel-text mb-1 block">Model tag</label>
+    <input id="model-input" type="text" class="w-full bg-obsidian border border-[#353436] text-parchment pixel-text p-3 rounded mb-2" value="gemma4:e4b" placeholder="e.g. gemma4:e4b"/>
+    <p class="text-parchment text-xs pixel-text opacity-50 mb-4">Must be pulled first: <code>ollama pull gemma4:e4b</code></p>
 
-    <button id="btn-next" onclick="stepTwo()" class="w-full bg-amber-400 text-obsidian pixel-text text-lg py-3 rounded hover:bg-amber-300 transition-colors">Next</button>
-  </div>
+    <div id="model-list" class="text-parchment text-xs pixel-text opacity-60 mb-6"></div>
 
-  <div id="step-apikey" class="bg-[#201f21] border border-[#353436] rounded p-6 hidden">
-    <h2 class="text-amber-400 text-xl pixel-text mb-4">Step 2: API Key</h2>
-    <p class="text-parchment text-sm pixel-text mb-4 opacity-70">Enter your API key. It will be stored encrypted on this device.</p>
-
-    <label class="text-parchment text-sm pixel-text mb-1 block">API Key</label>
-    <input id="apikey-input" type="password" class="w-full bg-obsidian border border-[#353436] text-parchment pixel-text p-3 rounded mb-2" placeholder="sk-..."/>
-    <p class="text-parchment text-xs pixel-text opacity-50 mb-4" id="provider-note">Provider: OpenAI</p>
-
-    <label class="text-parchment text-sm pixel-text mb-1 block">Model</label>
-    <input id="model-input" type="text" class="w-full bg-obsidian border border-[#353436] text-parchment pixel-text p-3 rounded mb-6" value="gpt-4o" placeholder="e.g. gpt-4o"/>
-
-    <div class="flex gap-3">
-      <button onclick="stepOne()" class="flex-1 border border-[#353436] text-parchment pixel-text py-3 rounded hover:border-amber-400 transition-colors">Back</button>
-      <button onclick="testConnection()" class="flex-1 bg-amber-400 text-obsidian pixel-text py-3 rounded hover:bg-amber-300 transition-colors">Test & Save</button>
-    </div>
+    <button onclick="testConnection()" class="w-full bg-amber-400 text-obsidian pixel-text text-lg py-3 rounded hover:bg-amber-300 transition-colors">Test &amp; Save</button>
   </div>
 
   <div id="step-status" class="bg-[#201f21] border border-[#353436] rounded p-6 hidden">
@@ -99,69 +66,67 @@
       <div class="animate-spin rounded-full h-8 w-8 border-2 border-amber-400 border-t-transparent"></div>
     </div>
     <button id="btn-enter" onclick="enterCouncil()" class="w-full bg-success text-white pixel-text text-lg py-3 rounded hover:opacity-90 transition-opacity hidden">Enter the Council</button>
-    <button onclick="stepTwo()" class="w-full border border-[#353436] text-parchment pixel-text py-3 rounded mt-3 hidden" id="btn-retry">Retry</button>
+    <button onclick="backToModelStep()" class="w-full border border-[#353436] text-parchment pixel-text py-3 rounded mt-3 hidden" id="btn-retry">Change Model</button>
   </div>
 
   <p class="text-center text-parchment text-xs pixel-text opacity-40 mt-8">Council of Minds v1.0 · All configuration stays local</p>
 </div>
 
 <script>
-  let selectedProvider = 'openai';
-  let defaultModels = { openai: 'gpt-4o', anthropic: 'claude-3-5-sonnet-20241022', ollama: 'llama3:8b' };
+  const DEFAULT_MODEL = 'gemma4:e4b';
 
-  document.querySelectorAll('input[name="provider"]').forEach(r => {
-    r.addEventListener('change', () => {
-      selectedProvider = r.value;
-      document.getElementById('model-input').value = defaultModels[r.value];
-      document.getElementById('provider-note').textContent = 'Provider: ' + {openai:'OpenAI',anthropic:'Anthropic',ollama:'Ollama'}[r.value];
-    });
-  });
-
-  function stepOne() {
-    document.getElementById('step-provider').classList.remove('hidden');
-    document.getElementById('step-apikey').classList.add('hidden');
+  function backToModelStep() {
+    document.getElementById('step-model').classList.remove('hidden');
     document.getElementById('step-status').classList.add('hidden');
+    loadInstalledModels();
   }
 
-  function stepTwo() {
-    document.getElementById('step-provider').classList.add('hidden');
-    document.getElementById('step-apikey').classList.remove('hidden');
-    document.getElementById('step-status').classList.add('hidden');
-    document.getElementById('provider-note').textContent = 'Provider: ' + {openai:'OpenAI',anthropic:'Anthropic',ollama:'Ollama'}[selectedProvider];
+  async function loadInstalledModels() {
+    const el = document.getElementById('model-list');
+    if (!el) return;
+    try {
+      const res = await fetch(`${window.COM_API_BASE}/api/ollama/status`);
+      if (!res.ok) throw new Error(res.status);
+      const st = await res.json();
+      if (!st.reachable) {
+        el.innerHTML = '<span class="text-error">Ollama is not reachable. Start it with <code>ollama serve</code>.</span>';
+      } else {
+        el.textContent = st.installed.length
+          ? 'Installed: ' + st.installed.join(', ')
+          : 'No models installed yet.';
+      }
+    } catch (e) {
+      el.textContent = 'Could not reach the backend yet — is it starting?';
+    }
   }
+  loadInstalledModels();
 
   async function testConnection() {
-    document.getElementById('step-apikey').classList.add('hidden');
+    const model = document.getElementById('model-input').value.trim() || DEFAULT_MODEL;
+    document.getElementById('step-model').classList.add('hidden');
     document.getElementById('step-status').classList.remove('hidden');
     document.getElementById('status-spinner').classList.remove('hidden');
-    document.getElementById('status-message').textContent = 'Testing connection to ' + selectedProvider + '...';
+    document.getElementById('status-message').textContent = 'Checking model ' + model + '...';
     document.getElementById('btn-enter').classList.add('hidden');
     document.getElementById('btn-retry').classList.add('hidden');
 
-    const apiKey = document.getElementById('apikey-input').value;
-    const model = document.getElementById('model-input').value || defaultModels[selectedProvider];
-
     try {
-      await window.electronAPI.saveBackendConfig({
-        llmProvider: selectedProvider,
-        llmApiKey: apiKey,
-        llmModel: model
-      });
-
+      await window.electronAPI.saveBackendConfig({ llmModel: model });
       await new Promise(r => setTimeout(r, 2000));
+      if (!await window.electronAPI.isBackendReady()) throw new Error('Backend did not become ready');
 
-      const ready = await window.electronAPI.isBackendReady();
+      const st = await fetch(`${window.COM_API_BASE}/api/ollama/status`).then(r => r.json());
+      if (!st.model_present) throw new Error(`Model '${model}' is not installed. Run: ollama pull ${model}`);
 
-      if (ready) {
-        document.getElementById('status-spinner').classList.add('hidden');
-        document.getElementById('status-message').innerHTML = '<span class="text-success">Connection successful!</span><br/><span class="opacity-70">Provider: ' + selectedProvider + '<br/>Model: ' + model + '</span>';
-        document.getElementById('btn-enter').classList.remove('hidden');
-      } else {
-        throw new Error('Backend did not become ready');
-      }
+      document.getElementById('status-spinner').classList.add('hidden');
+      document.getElementById('status-message').innerHTML =
+        '<span class="text-success">Ready.</span><br/><span class="opacity-70">Model: ' + model + '</span>';
+      document.getElementById('btn-enter').classList.remove('hidden');
     } catch (e) {
       document.getElementById('status-spinner').classList.add('hidden');
-      document.getElementById('status-message').innerHTML = '<span class="text-error">Connection failed</span><br/><span class="opacity-70">' + e.message + '</span>';
+      document.getElementById('status-message').innerHTML =
+        '<span class="text-error">Not ready</span><br/><span class="opacity-70">' + e.message + '</span>';
+      backToModelStep();
       document.getElementById('btn-retry').classList.remove('hidden');
     }
   }

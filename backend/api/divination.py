@@ -15,7 +15,7 @@ from fastapi import APIRouter, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional, List
 from logging_config import get_logger
-from config import get_settings, llm_complete, DIVINATION_PROVIDERS
+from config import get_settings, llm_complete
 
 router = APIRouter(prefix="/api/divination", tags=["divination"])
 logger = get_logger(__name__)
@@ -23,7 +23,6 @@ logger = get_logger(__name__)
 
 class DivinationRequest(BaseModel):
     query: str
-    provider: str = "glm"
 
 
 class DivinationResult(BaseModel):
@@ -41,37 +40,7 @@ class DivinationSaveRequest(BaseModel):
     summaries: List[dict] = []
 
 
-async def _with_provider(provider: str, coro_fn, *args, **kwargs):
-    """Run a coroutine with a temporarily switched provider, then restore."""
-    s = get_settings()
-    original = s.active_provider
-
-    if provider != original and provider in DIVINATION_PROVIDERS:
-        p = DIVINATION_PROVIDERS[provider]
-        s.llm_model = p["llm_model"]
-        s.llm_api_key = p["llm_api_key"]
-        s.llm_api_base = p["llm_api_base"]
-        s.supports_json_mode = p["supports_json_mode"]
-        import os
-        os.environ["OPENAI_API_KEY"] = p["llm_api_key"]
-        os.environ["OPENAI_API_BASE"] = p["llm_api_base"]
-        logger.info(f"divination_provider_temp provider={provider}")
-
-    try:
-        return await coro_fn(*args, **kwargs)
-    finally:
-        if provider != original:
-            orig_p = DIVINATION_PROVIDERS.get(original, DIVINATION_PROVIDERS["glm"])
-            s.llm_model = orig_p["llm_model"]
-            s.llm_api_key = orig_p["llm_api_key"]
-            s.llm_api_base = orig_p["llm_api_base"]
-            s.supports_json_mode = orig_p["supports_json_mode"]
-            import os
-            os.environ["OPENAI_API_KEY"] = orig_p["llm_api_key"]
-            os.environ["OPENAI_API_BASE"] = orig_p["llm_api_base"]
-
-
-async def _expand_search_terms(query: str, provider: str) -> List[str]:
+async def _expand_search_terms(query: str) -> List[str]:
     """Use LLM to analyze a query and generate 3-4 expanded search terms."""
     messages = [
         {"role": "system", "content": (
@@ -82,7 +51,7 @@ async def _expand_search_terms(query: str, provider: str) -> List[str]:
     ]
 
     try:
-        response = await _with_provider(provider, llm_complete, messages, temperature=0.4, max_tokens=2048)
+        response = await llm_complete(messages, temperature=0.4, max_tokens=2048)
         raw = response.choices[0].message.content
         from agents.json_utils import extract_json
         data = extract_json(raw)
@@ -191,7 +160,7 @@ def _json_to_markdown(text: str) -> str:
     return text
 
 
-async def _synthesize(query: str, search_terms: List[str], summaries: List[str], provider: str) -> str:
+async def _synthesize(query: str, search_terms: List[str], summaries: List[str]) -> str:
     """Use LLM to synthesize gathered intelligence into a comprehensive response."""
     context = "\n\n".join(summaries) if summaries else "(No web sources found — using parametric knowledge)"
 
@@ -214,7 +183,7 @@ async def _synthesize(query: str, search_terms: List[str], summaries: List[str],
     ]
 
     try:
-        response = await _with_provider(provider, llm_complete, messages, temperature=0.4, max_tokens=16384)
+        response = await llm_complete(messages, temperature=0.4, max_tokens=16384)
         content = response.choices[0].message.content or "Analysis unavailable."
         content = _json_to_markdown(content)
         return content
@@ -226,16 +195,16 @@ async def _synthesize(query: str, search_terms: List[str], summaries: List[str],
 @router.post("/search")
 async def divination_search(req: DivinationRequest):
     """Main divination endpoint: expand → search → synthesize."""
-    logger.info("divination_start", query=req.query[:80], provider=req.provider)
+    logger.info("divination_start", query=req.query[:80])
 
     # Step 1: Expand search terms
-    search_terms = await _expand_search_terms(req.query, req.provider)
+    search_terms = await _expand_search_terms(req.query)
 
     # Step 2: Gather intelligence
     sources, summaries_list, summaries = await _gather_intelligence(search_terms)
 
     # Step 3: Synthesize
-    synthesis = await _synthesize(req.query, search_terms, summaries, req.provider)
+    synthesis = await _synthesize(req.query, search_terms, summaries)
 
     return DivinationResult(
         original_query=req.query,

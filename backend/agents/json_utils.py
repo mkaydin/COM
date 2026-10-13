@@ -1,109 +1,163 @@
+"""Tolerant JSON extraction from small local models.
+
+Small models rarely emit clean JSON. They wrap it in ``` fences, prepend a
+```<think>``` block, trail a sentence of commentary, or get cut off at the
+token limit mid-object. Every agent funnels its output through `extract_json`,
+so this is the single most failure-prone function in the Council — and a silent
+failure here looks like "the agent returned nothing", not like a parse error.
+"""
 import json
 import re
 from typing import Type
+
 from pydantic import BaseModel
+
+# Reasoning blocks that must be discarded before looking for the answer object.
+_REASONING_BLOCKS = re.compile(
+    r"<(think|thinking|analysis|scratchpad)\b[^>]*>.*?</\1\s*>",
+    re.IGNORECASE | re.DOTALL,
+)
+_FENCE = re.compile(r"```(?:json|JSON)?\s*(.*?)\s*```", re.DOTALL)
+
+
+def _iter_json_candidates(text: str):
+    """Yield every balanced top-level `{...}` in `text`, longest first.
+
+    Scans for brace balance while respecting string literals and escapes, so a
+    `}` inside a quoted value does not terminate the object early. Later
+    candidates are yielded first because a model that thinks out loud puts its
+    reasoning object *before* the real answer.
+    """
+    found: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        if text[i] != "{":
+            i += 1
+            continue
+        depth = 0
+        in_string = False
+        escaped = False
+        for j in range(i, n):
+            ch = text[j]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif ch == "\\":
+                    escaped = True
+                elif ch == '"':
+                    in_string = False
+                continue
+            if ch == '"':
+                in_string = True
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    found.append(text[i:j + 1])
+                    break
+        else:
+            # Unbalanced: a truncated final object. Emit the remainder so the
+            # repair pass below has something to close.
+            found.append(text[i:])
+            break
+        i = j + 1
+    return list(reversed(found))
+
+
+def _try_parse(fragment: str) -> dict | None:
+    fragment = fragment.strip()
+    if not fragment:
+        return None
+    try:
+        value = json.loads(fragment)
+    except json.JSONDecodeError:
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _close_truncated(fragment: str) -> str | None:
+    """Best-effort repair of a JSON object cut off mid-stream.
+
+    Drops a dangling key or trailing comma, then closes open strings/braces.
+    """
+    s = fragment.strip()
+    if not s.startswith("{"):
+        return None
+
+    # Strip trailing commas before a closing bracket: {"a": 1,} and [1, 2,]
+    # are what small models emit constantly, and are not valid JSON.
+    prev = None
+    while prev != s:
+        prev = s
+        s = re.sub(r",(\s*[}\]])", r"\1", s)
+
+    # Remove a trailing partial token: a dangling key or a bare comma.
+    s = re.sub(r",\s*$", "", s)
+    s = re.sub(r'"[^"]*"\s*:\s*$', "", s)
+    s = re.sub(r"[,{]\s*$", "", s)
+
+    # The opening brace is already part of `s`, so the stack starts empty and
+    # is rebuilt from the scan below.
+    stack: list[str] = []
+    in_string = False
+    escaped = False
+    for ch in s:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            stack.append("}")
+        elif ch == "[":
+            stack.append("]")
+        elif ch in "}]" and stack:
+            stack.pop()
+
+    if in_string:
+        s += '"'
+    repaired = s + "".join(reversed(stack))
+    return _try_parse(repaired)
 
 
 def extract_json(raw: str) -> dict:
     """Extract a JSON object from raw LLM output.
 
-    Handles:
-    - Markdown code fences (```json ... ```)
-    - Leading/trailing prose around the JSON
-    - Nested braces
+    Returns `{}` if nothing parseable is present, so callers can rely on a
+    dict and fall back to their degraded response.
     """
     if not raw:
         return {}
 
-    fence_match = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', raw)
-    if fence_match:
-        try:
-            return json.loads(fence_match.group(1))
-        except json.JSONDecodeError:
-            pass
+    # 1. Drop reasoning blocks; some models emit them before the answer.
+    cleaned = _REASONING_BLOCKS.sub("", raw)
 
-    brace_match = re.search(r'\{[\s\S]*\}', raw)
-    if brace_match:
-        try:
-            return json.loads(brace_match.group(0))
-        except json.JSONDecodeError:
-            for i in range(len(brace_match.group(0)), 0, -1):
-                fragment = brace_match.group(0)[:i]
-                if fragment.rstrip().endswith('}'):
-                    try:
-                        return json.loads(fragment)
-                    except json.JSONDecodeError:
-                        continue
+    # 2. Fenced blocks are high-signal — try each, longest first.
+    for candidate in sorted(_FENCE.findall(cleaned), key=len, reverse=True):
+        parsed = _try_parse(candidate)
+        if parsed is not None:
+            return parsed
+
+    # 3. Balanced scan over the whole (fence-stripped) text, last object first.
+    candidates = _iter_json_candidates(cleaned)
+    for candidate in candidates:
+        parsed = _try_parse(candidate)
+        if parsed is not None:
+            return parsed
+
+    # 4. Repair pass for objects truncated by the token limit.
+    for candidate in candidates:
+        repaired = _close_truncated(candidate)
+        if repaired is not None:
+            return repaired
 
     return {}
-
-
-def _resolve_ref(ref: str, root_schema: dict) -> dict:
-    """Resolve a $ref like '#/$defs/CausalChain' to its schema dict."""
-    parts = ref.lstrip("#/").split("/")
-    node = root_schema
-    for part in parts:
-        node = node.get(part, {})
-    return node
-
-
-def _describe_field(field_info: dict, root_schema: dict, indent: int = 1) -> str:
-    """Describe a single field's type, expanding nested objects."""
-    pad = "  " * indent
-
-    if "$ref" in field_info:
-        nested = _resolve_ref(field_info["$ref"], root_schema)
-        return _describe_object(nested, root_schema, indent)
-
-    field_type = field_info.get("type", "any")
-
-    if field_type == "array":
-        items = field_info.get("items", {})
-        if "$ref" in items:
-            nested = _resolve_ref(items["$ref"], root_schema)
-            inner = _describe_object(nested, root_schema, indent + 1)
-            return f"[\n{inner}\n{pad}]"
-        item_type = items.get("type", "any")
-        if "enum" in items:
-            item_type = f"one of {items['enum']}"
-        return f"[<{item_type}>]"
-
-    if field_type == "object":
-        return _describe_object(field_info, root_schema, indent)
-
-    if field_type == "string" and "enum" in field_info:
-        return f"one of {field_info['enum']}"
-
-    return f"<{field_type}>"
-
-
-def _describe_object(obj_schema: dict, root_schema: dict, indent: int) -> str:
-    """Describe an object schema with its fields."""
-    pad = "  " * indent
-
-    if "$ref" in obj_schema:
-        obj_schema = _resolve_ref(obj_schema["$ref"], root_schema)
-
-    props = obj_schema.get("properties", {})
-    if not props:
-        return f"{pad}{{}}"
-
-    required = set(obj_schema.get("required", []))
-    lines = [f"{pad}{{"]
-    for fname, finfo in props.items():
-        if fname == "agent":
-            continue
-        type_desc = _describe_field(finfo, root_schema, indent + 1)
-        req = "(required)" if fname in required else "(optional)"
-        default = finfo.get("default")
-        if default is not None:
-            req += f" default: {json.dumps(default)}"
-        desc = finfo.get("description", "")
-        if desc:
-            req += f" — {desc}"
-        lines.append(f'{pad}  "{fname}": {type_desc} {req}')
-    lines.append(f"{pad}}}")
-    return "\n".join(lines)
 
 
 def schema_hint(model: Type[BaseModel]) -> str:
@@ -114,13 +168,3 @@ def schema_hint(model: Type[BaseModel]) -> str:
     """
     schema = model.model_json_schema()
     return _describe_object(schema, schema, 0)
-
-
-def schema_for_prompt(model: Type[BaseModel]) -> str:
-    """Full prompt block showing the required JSON structure."""
-    return (
-        f"\n\nYou MUST respond with ONLY a valid JSON object matching this exact structure "
-        f"(no markdown, no code fences, no prose before or after). "
-        f"Use the EXACT field names shown:\n"
-        f"{schema_hint(model)}"
-    )

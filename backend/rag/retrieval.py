@@ -34,6 +34,17 @@ _GAP_THRESHOLD = 3
 _gap_tracker: dict[str, int] = {}
 
 
+async def _embed_query(query: str) -> list[float]:
+    """Embed `query` off the event loop.
+
+    sentence-transformers encode is CPU-bound and the first call loads the
+    model; running it inline would stall every concurrent request for seconds.
+    """
+    return await asyncio.to_thread(
+        lambda: _get_embedder().encode([query], normalize_embeddings=True)[0].tolist()
+    )
+
+
 def _query_hash(query: str) -> str:
     return hashlib.sha256(query.lower().strip().encode()).hexdigest()[:16]
 
@@ -206,7 +217,7 @@ async def retrieve(
     has_curated_match = len(curated) > 0
 
     # 3. Fall back to vector search over rag_chunks.
-    query_vec = _get_embedder().encode([query], normalize_embeddings=True)[0].tolist()
+    query_vec = await _embed_query(query)
     raw_results = await _vector_search(db, query_vec, top_k=top_k)
 
     # 4. Gap detection (spec §4.5): track queries with no curated match.
@@ -311,7 +322,7 @@ async def retrieve_raw_context(
     Returns a formatted string with trust_tier annotations, or "" on failure.
     """
     try:
-        query_vec = _get_embedder().encode([query], normalize_embeddings=True)[0].tolist()
+        query_vec = await _embed_query(query)
         raw = await _vector_search(db, query_vec, top_k=top_k)
         if not raw:
             return ""

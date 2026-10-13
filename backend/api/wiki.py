@@ -1,8 +1,6 @@
 """Sage Wiki API endpoints — ingest sources, lint wiki, view pages."""
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional
 from pathlib import Path
 
 from logging_config import get_logger
@@ -10,8 +8,38 @@ from logging_config import get_logger
 router = APIRouter(prefix="/api/wiki", tags=["wiki"])
 logger = get_logger(__name__)
 
-WIKI_ROOT = Path(__file__).parent.parent.parent / "sage_wiki"
-WIKI_DIR = WIKI_ROOT / "wiki"
+WIKI_ROOT = Path(__file__).resolve().parent.parent.parent / "sage_wiki"
+WIKI_DIR = (WIKI_ROOT / "wiki").resolve()
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+
+# Rejected outright, rather than merely resolved-and-checked: a path segment
+# that is absolute, or contains traversal, has no legitimate use here.
+_ILLEGAL_SEGMENTS = {"", ".", ".."}
+_SUFFIXES = {".md", ".markdown", ".txt"}
+
+
+def _resolve_within(base: Path, rel_path: str, *, suffixes: set[str] | None = None) -> Path:
+    """Resolve `rel_path` under `base`, rejecting anything that escapes it.
+
+    Guards against `../` traversal, absolute paths, and symlinks pointing
+    outside the tree.
+    """
+    candidate = Path(rel_path)
+    if candidate.is_absolute():
+        raise HTTPException(status_code=400, detail="Path must be relative")
+    if "\x00" in rel_path:
+        # Raises ValueError from the OS layer otherwise, which would surface
+        # as a 500 rather than a 400.
+        raise HTTPException(status_code=400, detail="Invalid path")
+    if any(part in _ILLEGAL_SEGMENTS for part in candidate.parts):
+        raise HTTPException(status_code=400, detail="Path traversal not allowed")
+
+    resolved = (base / candidate).resolve()
+    if resolved != base and base not in resolved.parents:
+        raise HTTPException(status_code=400, detail="Path escapes the wiki directory")
+    if suffixes and resolved.suffix.lower() not in suffixes:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+    return resolved
 
 
 class WikiIngestRequest(BaseModel):
@@ -46,7 +74,7 @@ async def list_wiki_pages():
     if not WIKI_DIR.exists():
         return {"pages": [], "total": 0}
 
-    for md_file in WIKI_DIR.rglob("*.md"):
+    for md_file in sorted(WIKI_DIR.rglob("*.md")):
         if md_file.name in ("index.md", "log.md"):
             continue
         rel = str(md_file.relative_to(WIKI_DIR))
@@ -72,7 +100,7 @@ async def list_wiki_pages():
 @router.get("/page")
 async def get_wiki_page(path: str):
     """Get a specific wiki page by path."""
-    full_path = WIKI_DIR / path
+    full_path = _resolve_within(WIKI_DIR, path, suffixes=_SUFFIXES)
     if not full_path.exists() or not full_path.is_file():
         raise HTTPException(status_code=404, detail="Wiki page not found")
     return {"path": path, "content": full_path.read_text()}
@@ -80,10 +108,14 @@ async def get_wiki_page(path: str):
 
 @router.post("/ingest")
 async def ingest_to_wiki(body: WikiIngestRequest):
-    """Ingest a source file into the Sage wiki."""
+    """Ingest a source file into the Sage wiki.
+
+    The source must live inside the repo (or the raw-data drop folder) — this
+    endpoint must not become an arbitrary-file-read primitive.
+    """
+    source = _resolve_within(BACKEND_DIR.parent, body.source_path, suffixes=_SUFFIXES)
     from agents.sage_wiki import ingest_source
-    result = await ingest_source(body.source_path, body.title)
-    return result
+    return await ingest_source(str(source), body.title)
 
 
 @router.post("/lint")

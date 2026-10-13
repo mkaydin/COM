@@ -45,25 +45,29 @@ async def submit_verdict(body: VerdictCreate, background_tasks: BackgroundTasks,
         id=str(uuid4()),
         deliberation_id=UUID(body.deliberation_id),
         chosen_response_id=chosen_response_id,
+        chosen_agent=body.chosen_agent,
         user_override=body.user_override,
         verdict_type=body.verdict_type,
     )
     db.add(verdict)
 
     deliberation.status = "completed"
-    await db.commit()
-    await db.refresh(verdict)
 
-    # Gather agent summaries for the OKF filing (run before returning).
-    query = deliberation.query or ""
+    # Collect everything the OKF filing needs *before* committing, so a failure
+    # here can never 500 a verdict that was already accepted by the user.
+    query = deliberation.user_query or ""
     agent_rows = (await db.execute(
         select(AgentResponse).where(AgentResponse.deliberation_id == body.deliberation_id)
     )).scalars().all()
     agent_summaries = {
-        r.agent_name: (r.response_data or {}).get("verdict", "")
-        or str((r.response_data or {}).get("consensus", ""))[:500]
+        r.agent_name: str((r.response_json or {}).get("verdict", ""))
+        or str((r.response_json or {}).get("answer", ""))
+        or str((r.response_json or {}).get("consensus", ""))[:500]
         for r in agent_rows
     }
+
+    await db.commit()
+    await db.refresh(verdict)
 
     verdict_text = body.user_override or f"{body.verdict_type} (chosen: {body.chosen_agent or 'none'})"
 
@@ -106,6 +110,7 @@ async def get_verdict(deliberation_id: str, db: AsyncSession = Depends(get_db)):
         "id": str(verdict.id),
         "deliberation_id": str(verdict.deliberation_id),
         "chosen_response_id": str(verdict.chosen_response_id) if verdict.chosen_response_id else None,
+        "chosen_agent": verdict.chosen_agent,
         "user_override": verdict.user_override,
         "verdict_type": verdict.verdict_type,
         "created_at": str(verdict.created_at),

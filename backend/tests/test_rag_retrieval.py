@@ -5,6 +5,10 @@ from rag.retrieval import _format_for_context, _query_hash, _gap_tracker, get_ga
 from rag.ingest import TRUST_WEIGHTS
 
 
+# Writes to Postgres and loads the embedder.
+pytestmark = pytest.mark.live
+
+
 class TestFormatContext:
     def test_empty_results(self):
         ctx = _format_for_context([])
@@ -115,25 +119,31 @@ class TestVectorSearchIntegration:
             await db.execute(text("DELETE FROM rag_chunks WHERE title LIKE 'TESTSUP_%'"))
             await db.commit()
 
-            # Ingest v1, then supersede with v2.
+            # Ingest v1 and record exactly which rows it produced.
             await ingest(db, content="# V1\n\nUnique supersede test content alpha beta.\n",
                          title="TESTSUP_doc", source_type="user_upload")
+            v1_ids = {
+                str(r[0]) for r in (await db.execute(
+                    text("SELECT id FROM rag_chunks WHERE title = 'TESTSUP_doc' AND superseded_by IS NULL")
+                )).fetchall()
+            }
+            assert v1_ids, "ingest produced no v1 chunks to supersede"
+
+            # Ingesting the same title again must supersede, not duplicate.
             await ingest(db, content="# V2\n\nUpdated supersede test content alpha beta gamma.\n",
                          title="TESTSUP_doc", source_type="user_upload")
+
+            still_live = (await db.execute(text(
+                "SELECT count(*) FROM rag_chunks WHERE id = ANY(:ids) AND superseded_by IS NULL"
+            ), {"ids": list(v1_ids)})).fetchone()[0]
+            assert still_live == 0, f"{still_live} v1 chunks were not superseded"
 
             # Search for content that matches.
             qvec = _get_embedder().encode(["supersede test content alpha beta"], normalize_embeddings=True)[0].tolist()
             results = await _vector_search(db, qvec, top_k=10)
 
-            # Only non-superseded chunks should appear.
-            for r in results:
-                assert "TESTSUP_" not in r["title"] or r["trust_tier"] != ""
-
-            # Check directly: v1 chunks should be superseded.
-            v1 = (await db.execute(text(
-                "SELECT count(*) FROM rag_chunks WHERE title = 'TESTSUP_doc' AND superseded_by IS NOT NULL"
-            ))).fetchone()
-            assert v1[0] > 0  # v1 chunks are superseded
+            leaked = v1_ids & {r["id"] for r in results}
+            assert not leaked, f"superseded chunks leaked into results: {leaked}"
 
             await db.execute(text("DELETE FROM rag_chunks WHERE title LIKE 'TESTSUP_%'"))
             await db.commit()

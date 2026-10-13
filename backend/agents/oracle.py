@@ -19,7 +19,7 @@ import asyncio
 from config import get_settings, llm_complete
 from logging_config import get_logger
 from agents.schemas import OracleResponse, OracleClaim
-from agents.json_utils import schema_for_prompt, extract_json
+from agents.json_utils import extract_json
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -33,7 +33,6 @@ async def _retrieve_from_bundle(query: str, top_k: int = 5):
 
 async def oracle_node(state: dict) -> dict:
     query = state.get("user_query", "")
-    provider = state.get("provider", "lm_studio")
     logger.info("oracle_processing", query=query[:80])
 
     # 1. Retrieve relevant concepts from the OKF bundle.
@@ -61,13 +60,9 @@ async def oracle_node(state: dict) -> dict:
     if rag_context:
         full_context += "\n\n" + rag_context
 
-    # 3. Select prompt + call LLM.
-    if provider == "lm_studio":
-        system_prompt = LOCAL_ORACLE_PROMPT
-        max_tok = 8192
-    else:
-        system_prompt = ORACLE_SYSTEM_PROMPT + schema_for_prompt(OracleResponse)
-        max_tok = 8192
+    # 3. Call LLM.
+    system_prompt = LOCAL_ORACLE_PROMPT
+    max_tok = 8192
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -78,7 +73,7 @@ async def oracle_node(state: dict) -> dict:
     ]
 
     try:
-        response = await llm_complete(messages, temperature=0.4, max_tokens=max_tok, provider=provider)
+        response = await llm_complete(messages, temperature=0.4, max_tokens=max_tok)
         raw = response.choices[0].message.content
         _reasoning = getattr(response, "reasoning", "")
         data = extract_json(raw)
@@ -118,29 +113,6 @@ async def oracle_node(state: dict) -> dict:
 
 
 # === Prompts ===
-
-ORACLE_SYSTEM_PROMPT = """You are the ORACLE — the OKF knowledge custodian of the Council of Minds.
-
-Your job: read the retrieved OKF concepts from the knowledge bundle and produce
-an evidence-grounded synthesis. You are the institutional memory of the Council.
-
-CORE PHILOSOPHY:
-- Knowledge compounds. Every filed deliberation enriches the bundle.
-- Ground every claim in a retrieved concept when possible; cite by concept id.
-- Distinguish what the bundle KNOWS (filed concepts) from what it LACKS.
-- When the bundle has no relevant coverage, say so — set insufficient_data=true.
-
-OUTPUT RULES:
-- Build claims from the retrieved concept bodies; set evidence_type="documented"
-  for claims directly supported by a concept, "inferred" for synthesis across
-  concepts.
-- Cite concept ids in each claim's `sources` (e.g. "deliberations/foo_bar").
-- Set graph_entities_found is already filled — ignore it.
-- If concepts is empty, set insufficient_data=true and explain the gap.
-
-OUTPUT FORMAT: Structured JSON matching OracleResponse schema.
-"""
-
 
 LOCAL_ORACLE_PROMPT = """You are the Oracle. Read the knowledge bundle concepts and respond with JSON.
 

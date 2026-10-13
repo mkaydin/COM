@@ -23,15 +23,16 @@ async def test_agents_list(client):
     assert resp.status_code == 200
     data = resp.json()
     assert isinstance(data, list)
-    assert len(data) >= 5
+    # The Council is exactly three deliberating agents plus the Moderator.
+    assert {a["name"] for a in data} == {"oracle", "rag", "sage", "moderator"}
 
 
 @pytest.mark.asyncio
 async def test_agent_by_name(client):
-    resp = await client.get("/api/agents/scout")
+    resp = await client.get("/api/agents/oracle")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["name"] == "scout"
+    assert data["name"] == "oracle"
 
 
 @pytest.mark.asyncio

@@ -1,12 +1,5 @@
 from typing import Optional, List, Annotated, Literal, Any
 from pydantic import BaseModel, Field, field_validator
-from langgraph.graph.message import add_messages
-
-
-class ScoutSignal(BaseModel):
-    signal: str
-    strength: str = Field(description="strong | moderate | emerging")
-    sources: int = Field(default=1, ge=0)
 
 
 class ConflictFinding(BaseModel):
@@ -27,36 +20,6 @@ class SourceCitation(BaseModel):
     type: str = Field(description="article | forum | github | paper | news | docs")
     recency: Optional[str] = None
     reliability: str = Field(description="high | medium | low | unverified")
-
-
-class ScoutResponse(BaseModel):
-    agent: str = Field(default="scout")
-    confidence: float = Field(ge=0.0, le=100.0)
-    reasoning_type: str = Field(default="reconnaissance")
-    topic: str
-    key_signals: List[ScoutSignal]
-    consensus: str
-    conflicting_information: List[ConflictFinding] = Field(default_factory=list)
-    temporal_notes: List[TemporalNote] = Field(default_factory=list)
-    source_diversity: str = Field(description="high | medium | low")
-    source_reliability: str
-    weak_signals: List[str] = Field(default_factory=list)
-    sources: List[SourceCitation] = Field(default_factory=list)
-
-
-class HistorianClaim(BaseModel):
-    text: str
-    sources: List[Any] = Field(default_factory=list)
-
-
-class HistorianResponse(BaseModel):
-    agent: str = Field(default="historian")
-    confidence: float = Field(ge=0.0, le=100.0)
-    reasoning_type: str = Field(default="evidence")
-    claims: List[HistorianClaim]
-    verdict: str
-    uncertainties: List[str] = Field(default_factory=list)
-    insufficient_data: bool = False
 
 
 class CausalChain(BaseModel):
@@ -89,16 +52,6 @@ class OracleResponse(BaseModel):
     evidence_sources: int = Field(default=0)
     graph_entities_found: int = Field(default=0)
     insufficient_data: bool = False
-
-
-class DetectiveResponse(BaseModel):
-    agent: str = Field(default="detective")
-    confidence: float = Field(ge=0.0, le=100.0)
-    reasoning_type: str = Field(default="inference")
-    causal_chains: List[CausalChain] = Field(default_factory=list)
-    hidden_links: List[HiddenLink] = Field(default_factory=list)
-    inconsistencies: List[str] = Field(default_factory=list)
-    verdict: str
 
 
 class SageAnalogy(BaseModel):
@@ -150,7 +103,8 @@ class Conflict(BaseModel):
     oracle: Optional[str] = None
     rag: Optional[str] = None
     sage: Optional[str] = None
-    # legacy fields — older prompts/data may still emit these
+    # legacy fields — retained only to read conflicts stored by older
+    # versions, which named Scout/Historian/Detective instead of Oracle/Scholar.
     scout: Optional[str] = None
     historian: Optional[str] = None
     detective: Optional[str] = None
@@ -239,41 +193,9 @@ class ModeratorResponse(BaseModel):
         return v
 
 
-class TrustGuidance(BaseModel):
-    agent: str = Field(default="")
-    trust_level: str = Field(default="medium", description="high | medium | low")
-    reason: str = Field(default="")
-
-    @field_validator("agent", mode="before")
-    @classmethod
-    def coerce_agent(cls, v: Any) -> str:
-        if v is None:
-            return ""
-        return str(v)
-
-
-class CompanionResponse(BaseModel):
-    agent: str = Field(default="companion")
-    deliberation_id: Optional[str] = None
-    translation: str
-    trust_guidance: List[TrustGuidance] = Field(default_factory=list)
-    clarifying_questions: List[str] = Field(default_factory=list)
-    summary: str
-    recommended_agent: str = Field(default="sage")
-    recommendation_reason: str = Field(default="")
-
-
 class QueryClassification(BaseModel):
     query_type: Literal["factual", "relational", "strategic", "general"]
     confidence: float = Field(ge=0.0, le=100.0)
     reasoning: str
 
 
-ALL_RESPONSE_SCHEMAS = {
-    "scout": ScoutResponse,
-    "historian": HistorianResponse,
-    "detective": DetectiveResponse,
-    "sage": SageResponse,
-    "moderator": ModeratorResponse,
-    "companion": CompanionResponse,
-}

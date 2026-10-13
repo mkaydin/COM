@@ -1,9 +1,19 @@
 import asyncio
+import os
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
 from alembic import context
-from db.models import Base
+
+# Run from any cwd: make `backend/` importable so db.models resolves.
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from db.models import Base  # noqa: E402
+from config import get_settings  # noqa: E402
 
 config = context.config
 if config.config_file_name is not None:
@@ -12,8 +22,13 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+def database_url() -> str:
+    """Settings win over alembic.ini, which only carries a dev default."""
+    return os.environ.get("POSTGRES_URL") or get_settings().postgres_url
+
+
 def run_migrations_offline():
-    url = config.get_main_option("sqlalchemy.url")
+    url = database_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -31,10 +46,7 @@ def do_run_migrations(connection):
 
 
 async def run_migrations_online():
-    connectable = create_async_engine(
-        config.get_main_option("sqlalchemy.url"),
-        poolclass=pool.NullPool,
-    )
+    connectable = create_async_engine(database_url(), poolclass=pool.NullPool)
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
     await connectable.dispose()

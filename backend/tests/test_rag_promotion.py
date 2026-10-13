@@ -1,5 +1,14 @@
+
+_PURGE_PROMOS = (
+    "DELETE FROM rag_promotion_candidates WHERE chunk_id IN "
+    "(SELECT id FROM rag_chunks WHERE title LIKE 'TESTPROMO_%')"
+)
 """Tests for the RAG promotion queue (spec §2.6, §4.5, §5)."""
 import pytest
+
+
+# Writes to Postgres and loads the embedder.
+pytestmark = pytest.mark.live
 
 
 class TestPromotionQueue:
@@ -19,7 +28,7 @@ class TestPromotionQueue:
 
         engine = self._make_engine()
         async with AsyncSession(engine, expire_on_commit=False) as db:
-            await db.execute(text("DELETE FROM rag_promotion_candidates WHERE 1=1"))
+            await db.execute(text(_PURGE_PROMOS))
             await db.execute(text("DELETE FROM rag_chunks WHERE title LIKE 'TESTPROMO_%'"))
             await db.commit()
 
@@ -45,7 +54,7 @@ class TestPromotionQueue:
             assert pending[0]["chunk_title"] == "TESTPROMO_doc"
             assert pending[0]["reason"] == "manual"
 
-            await db.execute(text("DELETE FROM rag_promotion_candidates WHERE 1=1"))
+            await db.execute(text(_PURGE_PROMOS))
             await db.execute(text("DELETE FROM rag_chunks WHERE title LIKE 'TESTPROMO_%'"))
             await db.commit()
         await engine.dispose()
@@ -60,7 +69,7 @@ class TestPromotionQueue:
 
         engine = self._make_engine()
         async with AsyncSession(engine, expire_on_commit=False) as db:
-            await db.execute(text("DELETE FROM rag_promotion_candidates WHERE 1=1"))
+            await db.execute(text(_PURGE_PROMOS))
             await db.execute(text("DELETE FROM rag_chunks WHERE title LIKE 'TESTPROMO_IDEM_%'"))
             await db.commit()
 
@@ -75,7 +84,7 @@ class TestPromotionQueue:
             assert c1["status"] == "created"
             assert c2["status"] == "exists"
 
-            await db.execute(text("DELETE FROM rag_promotion_candidates WHERE 1=1"))
+            await db.execute(text(_PURGE_PROMOS))
             await db.execute(text("DELETE FROM rag_chunks WHERE title LIKE 'TESTPROMO_IDEM_%'"))
             await db.commit()
         await engine.dispose()
@@ -89,7 +98,7 @@ class TestPromotionQueue:
 
         engine = self._make_engine()
         async with AsyncSession(engine, expire_on_commit=False) as db:
-            await db.execute(text("DELETE FROM rag_promotion_candidates WHERE 1=1"))
+            await db.execute(text(_PURGE_PROMOS))
             await db.execute(text("DELETE FROM rag_chunks WHERE title LIKE 'TESTPROMO_REJ_%'"))
             await db.commit()
 
@@ -108,7 +117,7 @@ class TestPromotionQueue:
             pending = await list_pending(db)
             assert not any(p["candidate_id"] == cand["candidate_id"] for p in pending)
 
-            await db.execute(text("DELETE FROM rag_promotion_candidates WHERE 1=1"))
+            await db.execute(text(_PURGE_PROMOS))
             await db.execute(text("DELETE FROM rag_chunks WHERE title LIKE 'TESTPROMO_REJ_%'"))
             await db.commit()
         await engine.dispose()
@@ -123,7 +132,7 @@ class TestPromotionQueue:
 
         engine = self._make_engine()
         async with AsyncSession(engine, expire_on_commit=False) as db:
-            await db.execute(text("DELETE FROM rag_promotion_candidates WHERE 1=1"))
+            await db.execute(text(_PURGE_PROMOS))
             await db.execute(text("DELETE FROM rag_chunks WHERE title LIKE 'TESTPROMO_APP_%'"))
             await db.commit()
 
@@ -163,7 +172,7 @@ class TestPromotionQueue:
             if okf_path.exists():
                 os.unlink(okf_path)
 
-            await db.execute(text("DELETE FROM rag_promotion_candidates WHERE 1=1"))
+            await db.execute(text(_PURGE_PROMOS))
             await db.execute(text("DELETE FROM rag_chunks WHERE title LIKE 'TESTPROMO_APP_%'"))
             await db.commit()
         await engine.dispose()
@@ -178,7 +187,7 @@ class TestPromotionQueue:
 
         engine = self._make_engine()
         async with AsyncSession(engine, expire_on_commit=False) as db:
-            await db.execute(text("DELETE FROM rag_promotion_candidates WHERE 1=1"))
+            await db.execute(text(_PURGE_PROMOS))
             await db.execute(text("DELETE FROM rag_chunks WHERE title LIKE 'TESTPROMO_GAP_%'"))
             await db.commit()
 
@@ -199,7 +208,7 @@ class TestPromotionQueue:
             gap_cands = [p for p in pending if p["reason"] == "gap_detection"]
             assert len(gap_cands) >= 3
 
-            await db.execute(text("DELETE FROM rag_promotion_candidates WHERE 1=1"))
+            await db.execute(text(_PURGE_PROMOS))
             await db.execute(text("DELETE FROM rag_chunks WHERE title LIKE 'TESTPROMO_GAP_%'"))
             await db.commit()
         await engine.dispose()

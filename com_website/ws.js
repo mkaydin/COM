@@ -1,15 +1,18 @@
 (() => {
   window.COM = window.COM || {};
 
-  let _wsPort = 8734;
-  if (window.electronAPI?.getBackendPort) {
-    Promise.resolve(window.electronAPI.getBackendPort()).then(port => {
-      if (typeof port === 'number' && port > 0) _wsPort = port;
-    }).catch(() => {});
+  // Derive the WebSocket endpoint from the HTTP base that api.js already
+  // resolved, so Electron's dynamic backend port is respected and there is
+  // only one source of truth for it.
+  async function wsBase() {
+    if (window.COM.ready) await window.COM.ready;
+    const base = window.COM_API_BASE || 'http://localhost:8734';
+    return base.replace(/^http/, 'ws');
   }
 
   window.COM.connectStream = function(sessionId, handlers = {}) {
-    const url = `ws://localhost:${_wsPort}/ws/sessions/${sessionId}/stream`;
+    let url = null;
+    const urlReady = wsBase().then(b => { url = `${b}/ws/sessions/${sessionId}/stream`; });
 
     let ws = null;
     let reconnectTimer = null;
@@ -23,6 +26,7 @@
     };
 
     function connect() {
+      if (!url) return; // still resolving the port; a reconnect will pick it up
       ws = new WebSocket(url);
 
       ws.onopen = () => {
@@ -35,8 +39,16 @@
         const msg = JSON.parse(e.data);
 
         switch (msg.type) {
+          case 'deliberation_started':
+            on.onDeliberationStarted?.(msg.deliberation_id, msg.query);
+            emit('deliberation_started', msg);
+            break;
+          case 'router_update':
+            on.onRouterUpdate?.(msg.query_type);
+            emit('router_update', msg);
+            break;
           case 'agent_update':
-            on.onAgentUpdate?.(msg.agent, msg.status, msg.partial, msg.confidence, msg.sources);
+            on.onAgentUpdate?.(msg.agent, msg.status, msg.response, msg.confidence);
             emit('agent_update', msg);
             break;
           case 'agent_response':
@@ -61,7 +73,11 @@
             break;
           case 'deliberation_complete':
             on.onComplete?.(msg.deliberation_id);
-            emit('complete', msg);
+            emit('deliberation_complete', msg);
+            break;
+          case 'verdict_saved':
+            on.onVerdictSaved?.(msg.verdict_type);
+            emit('verdict_saved', msg);
             break;
         }
       };
@@ -86,11 +102,15 @@
     }
 
     connect();
+    // If the port had not resolved yet, connect for real once it has.
+    urlReady.then(() => { if (!ws) connect(); });
 
     return {
-      sendQuery(query) {
+      sendQuery(query, targetAgent = null) {
         if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'query', content: query }));
+          const msg = { type: 'query', content: query };
+          if (targetAgent && targetAgent !== 'all') msg.target_agent = targetAgent;
+          ws.send(JSON.stringify(msg));
         }
       },
 

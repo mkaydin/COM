@@ -30,8 +30,7 @@ async def deliberation_stream(websocket: WebSocket, session_id: str):
             if msg.get("type") == "query":
                 query = msg.get("content", "")
                 target_agent = msg.get("target_agent", None)
-                provider = msg.get("provider", "glm")
-                await _run_streaming_deliberation(websocket, session_id, query, target_agent, provider)
+                await _run_streaming_deliberation(websocket, session_id, query, target_agent)
 
             elif msg.get("type") == "verdict":
                 await _handle_verdict(websocket, session_id, msg)
@@ -40,7 +39,7 @@ async def deliberation_stream(websocket: WebSocket, session_id: str):
         logger.info("ws_disconnected", session_id=session_id)
 
 
-async def _run_streaming_deliberation(websocket: WebSocket, session_id: str, query: str, target_agent: str = None, provider: str = "glm"):
+async def _run_streaming_deliberation(websocket: WebSocket, session_id: str, query: str, target_agent: str = None):
     """Run the LangGraph workflow with streaming, sending updates via WebSocket."""
     import time as time_module
     from agents.graph import get_graph
@@ -94,7 +93,6 @@ async def _run_streaming_deliberation(websocket: WebSocket, session_id: str, que
         "current_round": 1,
         "status": "running",
         "target_agent": target_agent,
-        "provider": provider,
         "session_memory": session_memory,
     }
 
@@ -145,7 +143,6 @@ async def _send_node_update(websocket: WebSocket, node_name: str, node_output: d
         await websocket.send_text(json.dumps({
             "type": "router_update",
             "query_type": node_output.get("query_type", "general"),
-            "agent_priority": node_output.get("agent_priority", []),
         }))
 
     elif node_name in AGENT_NODES:
@@ -168,13 +165,6 @@ async def _send_node_update(websocket: WebSocket, node_name: str, node_output: d
             "should_critique": node_output.get("should_critique", False),
             "unresolved_conflicts": node_output.get("unresolved_conflicts", []),
             "post_critique": node_output.get("post_critique", False),
-        }))
-
-    elif node_name == "companion":
-        notes = node_output.get("companion_notes", {})
-        await websocket.send_text(json.dumps({
-            "type": "companion_note",
-            "content": notes,
         }))
 
     elif node_name == "critique":
@@ -284,15 +274,13 @@ async def _handle_verdict(websocket: WebSocket, session_id: str, msg: dict):
             verdict = Verdict(
                 id=uuid.uuid4(),
                 deliberation_id=UUID(deliberation_id),
+                chosen_agent=chosen_agent,
                 user_override=user_override,
                 verdict_type=verdict_type,
             )
             db.add(verdict)
 
             deliberation.status = "completed"
-            if chosen_agent:
-                deliberation.query_type = chosen_agent
-
             await db.commit()
 
         await websocket.send_text(json.dumps({

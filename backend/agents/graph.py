@@ -21,11 +21,8 @@ class CouncilState(TypedDict, total=False):
 
     oracle_response: Optional[dict]
     rag_response: Optional[dict]
-    historian_response: Optional[dict]
-    detective_response: Optional[dict]
     sage_response: Optional[dict]
     moderator_synthesis: Optional[dict]
-    companion_notes: Optional[dict]
 
     critique_round: int
     max_critique_rounds: int
@@ -37,7 +34,6 @@ class CouncilState(TypedDict, total=False):
     should_critique: bool
 
     query_type: str
-    agent_priority: List[str]
 
     session_memory: str
 

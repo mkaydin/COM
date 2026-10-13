@@ -1,21 +1,39 @@
-const { app, BrowserWindow, dialog, ipcMain, Notification, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Notification, Tray, Menu, nativeImage, safeStorage } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const Store = require('electron-store');
 
-const store = new Store({
-  encryptionKey: 'com-council-key-v1',
-  schema: {
-    pythonPath: { type: 'string', default: 'python3' },
-    backendPort: { type: 'number', default: 8734 },
-    llmProvider: { type: 'string', default: '' },
-    llmApiKey: { type: 'string', default: '' },
-    llmApiBase: { type: 'string', default: '' },
-    llmModel: { type: 'string', default: '' },
-    configured: { type: 'boolean', default: false }
+const DEFAULT_MODEL = 'gemma4:e4b';
+
+const storeSchema = {
+  pythonPath: { type: 'string', default: 'python3' },
+  backendPort: { type: 'number', default: 8734 },
+  llmModel: { type: 'string', default: DEFAULT_MODEL },
+  ollamaHost: { type: 'string', default: 'localhost' },
+  ollamaPort: { type: 'number', default: 11434 },
+  configured: { type: 'boolean', default: false }
+};
+
+let store;
+
+function getStore() {
+  if (store) return store;
+  // Back the store with the OS keychain rather than a hardcoded literal key.
+  const opts = { schema: storeSchema };
+  try {
+    if (safeStorage.isEncryptionAvailable()) {
+      opts.encryptionKey = safeStorage.getSelectedStorageBackend() === 'basic_text'
+        ? 'com-council'
+        : safeStorage.encryptString('com-council').toString('base64');
+    }
+  } catch (e) {
+    // No keychain available — fall back to an unencrypted store. It holds no
+    // credentials, only paths, ports and the model tag.
   }
-});
+  store = new Store(opts);
+  return store;
+}
 
 let mainWindow = null;
 let pythonProcess = null;
@@ -44,38 +62,46 @@ function getBackendDir() {
   return path.join(__dirname, '..', 'backend');
 }
 
-function writeBackendEnv() {
+function writeBackendEnv(overrides = {}) {
   const envPath = path.join(getBackendDir(), '.env');
 
-  if (fs.existsSync(envPath)) {
-    log('info', 'Backend .env already exists, preserving');
-    return;
+  // Managed keys are (re)written from the app's settings; every other line is
+  // preserved verbatim, so a hand-edited POSTGRES_URL or a comment survives.
+  // Values in `overrides` win; `force` is not needed because these keys are
+  // owned by the app.
+  const managed = {
+    BACKEND_PORT: String(getStore().get('backendPort')),
+    LLM_MODEL: overrides.llmModel || getStore().get('llmModel') || DEFAULT_MODEL,
+    OLLAMA_HOST: overrides.ollamaHost || getStore().get('ollamaHost') || 'localhost',
+    OLLAMA_PORT: String(overrides.ollamaPort || getStore().get('ollamaPort') || 11434),
+    LOG_LEVEL: 'INFO',
+    LOG_DIR: LOG_DIR
+  };
+
+  const existing = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8').split(/\r?\n/) : [];
+  const out = [];
+  const seen = new Set();
+
+  for (const line of existing) {
+    const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+    if (!m) { if (line !== '' || out.length) out.push(line); continue; }
+    const key = m[1];
+    if (Object.prototype.hasOwnProperty.call(managed, key)) {
+      if (!seen.has(key)) { out.push(`${key}=${managed[key]}`); seen.add(key); }
+    } else {
+      out.push(line);
+    }
+  }
+  for (const [k, v] of Object.entries(managed)) {
+    if (!seen.has(k)) out.push(`${k}=${v}`);
   }
 
-  const port = store.get('backendPort');
-  const envContent = [
-    `BACKEND_PORT=${port}`,
-    `LLM_PROVIDER=openai`,
-    `LLM_MODEL=openai/glm-4.6`,
-    `LLM_API_KEY=your-api-key`,
-    `LLM_API_BASE=https://api.z.ai/api/coding/paas/v4`,
-    `POSTGRES_URL=postgresql+asyncpg://council:council_dev@localhost:5432/council`,
-    `NEO4J_URL=bolt://localhost:7687`,
-    `NEO4J_USER=neo4j`,
-    `NEO4J_PASSWORD=council_dev`,
-    `REDIS_URL=redis://localhost:6379/0`,
-    `CHROMA_HOST=localhost`,
-    `CHROMA_PORT=8000`,
-    `LOG_LEVEL=INFO`,
-    `LOG_DIR=${LOG_DIR}`
-  ].join('\n');
-
-  fs.writeFileSync(envPath, envContent);
-  log('info', 'Created default .env');
+  fs.writeFileSync(envPath, out.join('\n').replace(/\n+$/, '\n'));
+  log('info', `Backend .env written (model=${managed.LLM_MODEL})`);
 }
 
 function getPythonPath() {
-  const stored = store.get('pythonPath');
+  const stored = getStore().get('pythonPath');
   if (stored && stored !== 'python3' && fs.existsSync(stored)) {
     return stored;
   }
@@ -105,7 +131,7 @@ async function startPythonBackend() {
     pythonProcess = null;
   }
 
-  const port = store.get('backendPort');
+  const port = getStore().get('backendPort');
 
   // Check if a backend is already running on the port
   try {
@@ -151,7 +177,7 @@ async function startPythonBackend() {
 }
 
 async function waitForBackend(maxRetries = 30, interval = 1000) {
-  const port = store.get('backendPort');
+  const port = getStore().get('backendPort');
   for (let i = 0; i < maxRetries; i++) {
     try {
       const res = await fetch(`http://localhost:${port}/api/health`);
@@ -160,8 +186,8 @@ async function waitForBackend(maxRetries = 30, interval = 1000) {
         restartAttempts = 0;
         log('info', `Backend healthy (configured=${data.configured})`);
 
-        if (data.configured && !store.get('configured')) {
-          store.set('configured', true);
+        if (data.configured && !getStore().get('configured')) {
+          getStore().set('configured', true);
           log('info', 'Backend already configured, skipping setup wizard');
         }
 
@@ -239,9 +265,9 @@ ipcMain.handle('file:save', async (_, filePath, dataBase64) => {
   }
 });
 
-ipcMain.handle('store:get', (_, key) => store.get(key));
-ipcMain.handle('store:set', (_, key, value) => store.set(key, value));
-ipcMain.handle('store:delete', (_, key) => store.delete(key));
+ipcMain.handle('store:get', (_, key) => getStore().get(key));
+ipcMain.handle('store:set', (_, key, value) => getStore().set(key, value));
+ipcMain.handle('store:delete', (_, key) => getStore().delete(key));
 
 ipcMain.handle('notification:show', (_, { title, body }) => {
   if (Notification.isSupported()) {
@@ -249,10 +275,10 @@ ipcMain.handle('notification:show', (_, { title, body }) => {
   }
 });
 
-ipcMain.handle('backend:getPort', () => store.get('backendPort'));
+ipcMain.handle('backend:getPort', () => getStore().get('backendPort'));
 ipcMain.handle('backend:isReady', async () => {
   try {
-    const res = await fetch(`http://localhost:${store.get('backendPort')}/api/health`);
+    const res = await fetch(`http://localhost:${getStore().get('backendPort')}/api/health`);
     return res.ok;
   } catch { return false; }
 });
@@ -263,12 +289,11 @@ ipcMain.handle('backend:restart', async () => {
 });
 
 ipcMain.handle('backend:saveConfig', async (_, config) => {
-  if (config.llmProvider) store.set('llmProvider', config.llmProvider);
-  if (config.llmApiKey) store.set('llmApiKey', config.llmApiKey);
-  if (config.llmApiBase) store.set('llmApiBase', config.llmApiBase);
-  if (config.llmModel) store.set('llmModel', config.llmModel);
-  store.set('configured', true);
-  writeBackendEnv();
+  if (config.llmModel) getStore().set('llmModel', config.llmModel);
+  if (config.ollamaHost) getStore().set('ollamaHost', config.ollamaHost);
+  if (config.ollamaPort) getStore().set('ollamaPort', Number(config.ollamaPort));
+  getStore().set('configured', true);
+  writeBackendEnv({ llmModel: config.llmModel });
   await startPythonBackend();
   return true;
 });
@@ -334,7 +359,7 @@ app.whenReady().then(async () => {
   const healthy = await waitForBackend();
 
   if (mainWindow && !mainWindow.isDestroyed()) {
-    const configured = store.get('configured');
+    const configured = getStore().get('configured');
     let targetPage = 'council_landing_page.html';
 
     if (!healthy) {
