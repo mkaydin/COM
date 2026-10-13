@@ -17,7 +17,7 @@ services:
     container_name: com-postgres
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-council}
       POSTGRES_USER: ${POSTGRES_USER:-council}
@@ -37,7 +37,7 @@ services:
     container_name: com-chromadb
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${CHROMA_PORT:-8000}:8000"
     environment:
       IS_PERSISTENT: "TRUE"
       PERSIST_DIRECTORY: /chroma/data
@@ -58,9 +58,11 @@ services:
     container_name: com-searxng
     restart: unless-stopped
     ports:
-      - "8888:8080"
+      # Divination is optional and 8888 collides easily, so the host port is
+      # configurable. The container port never changes.
+      - "${SEARXNG_PORT:-8888}:8080"
     environment:
-      SEARXNG_BASE_URL: http://localhost:8888/
+      SEARXNG_BASE_URL: http://localhost:${SEARXNG_PORT:-8888}/
       UWSGI_WORKERS: ${SEARXNG_WORKERS:-4}
       UWSGI_THREADS: ${SEARXNG_THREADS:-4}
     volumes:
