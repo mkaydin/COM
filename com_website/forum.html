@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Council of Minds — The Forum</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700;900&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="styles.css" rel="stylesheet"/>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "obsidian": "#1a1a2e","background": "#141315","surface": "#141315","surface-dim": "#141315",
+          "surface-container": "#201f21","surface-container-low": "#1c1b1d","surface-container-lowest": "#0e0e10",
+          "surface-container-high": "#2a2a2b","surface-container-highest": "#353436","surface-variant": "#353436",
+          "surface-bright": "#3a393b","surface-tint": "#c6c4df","parchment": "#e8d5b7","on-surface": "#e5e1e3",
+          "on-surface-variant": "#c8c5cd","on-background": "#e5e1e3","runed-gold": "#ffd700","spectral-blue": "#87ceeb",
+          "ember-glow": "#ff6b6b","mystic-purple": "#9b59b6","warning": "#f39c12","success": "#27ae60",
+          "error": "#c0392b","neutral-gray": "#7f8c8d","outline": "#929097","outline-variant": "#47464c"
+        },
+        fontFamily: {
+          "pixel-display": ["VT323", "monospace"],
+          "pixel-heading": ["VT323", "monospace"],
+          "pixel-body": ["VT323", "monospace"],
+          "pixel-small": ["VT323", "monospace"]
+        },
+        fontSize: {
+          "pixel-display": ["32px", { lineHeight: "1.2", letterSpacing: "1px", fontWeight: "700" }],
+          "pixel-heading": ["24px", { lineHeight: "1.3", letterSpacing: "0.5px", fontWeight: "700" }],
+          "pixel-body": ["18px", { lineHeight: "1.6", letterSpacing: "0.5px", fontWeight: "400" }],
+          "pixel-small": ["14px", { lineHeight: "1.5", letterSpacing: "0px", fontWeight: "400" }]
+        }
+      }
+    }
+  };
+</script>
+<style>
+  .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: #1c1b1d; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: #ffd700; border: 2px solid #1c1b1d; }
+  .topic-row { transition: background-color .15s ease, transform .15s ease; }
+  .topic-row:hover { background-color: rgba(255,215,0,.05); transform: translateX(2px); }
+  .cast-chip { transition: all .15s ease; }
+  .cast-chip.on { border-width: 2px; }
+</style>
+</head>
+<body class="bg-surface-dim text-on-surface font-pixel-body min-h-screen">
+
+<header class="sticky top-0 w-full z-50 flex justify-between items-center px-4 h-16 bg-obsidian border-b-2 border-amber-400/30">
+  <div class="text-xl font-black text-amber-400 font-['Be_Vietnam_Pro'] tracking-tighter uppercase">Council of Minds</div>
+  <div class="flex gap-3 items-center">
+    <span id="provider-chip" class="bg-obsidian border border-amber-400/30 text-amber-400 font-pixel-small text-pixel-small px-2 py-1 rounded">…</span>
+    <span id="forum-chip" class="bg-obsidian border border-amber-400/30 text-amber-400 font-pixel-small text-pixel-small px-2 py-1 rounded">forum</span>
+  </div>
+</header>
+
+<div class="flex">
+<nav class="hidden md:flex sticky top-16 h-[calc(100vh-4rem)] w-64 shrink-0 flex-col pt-6 bg-obsidian border-r-2 border-slate-800 font-['Be_Vietnam_Pro'] uppercase text-xs font-medium tracking-widest">
+  <div class="px-4 mb-6">
+    <div class="flex items-center gap-3 mb-3">
+      <div class="w-10 h-10 bg-surface-container-highest rounded flex items-center justify-center"><span class="material-symbols-outlined text-runed-gold">forum</span></div>
+      <div>
+        <div class="font-pixel-heading text-pixel-heading text-runed-gold leading-none">The Forum</div>
+        <div class="font-pixel-small text-pixel-small text-on-surface-variant">Topics &amp; Deliberation</div>
+      </div>
+    </div>
+    <button id="new-topic-btn" class="w-full mt-2 bg-runed-gold text-obsidian font-pixel-body text-pixel-body py-2 px-4 rounded border-2 border-transparent hover:bg-parchment transition-colors flex items-center justify-center gap-2">
+      <span class="material-symbols-outlined">add</span>New Topic
+    </button>
+  </div>
+  <div class="flex-1 overflow-y-auto">
+    <ul class="space-y-1" id="nav-links"></ul>
+  </div>
+  <div class="mt-auto mb-4 border-t-2 border-slate-800 pt-4" id="cast-nav"></div>
+</nav>
+
+<main class="flex-1 min-w-0 px-4 py-6 max-w-[1200px] mx-auto">
+
+  <div class="flex flex-wrap items-center gap-3 mb-6">
+    <h1 class="font-pixel-display text-pixel-display text-runed-gold">TOPICS</h1>
+    <div class="ml-auto flex items-center gap-2">
+      <select id="filter-status" class="bg-obsidian border-2 border-neutral-gray text-parchment font-pixel-small text-pixel-small px-2 py-1 rounded">
+        <option value="">All statuses</option>
+        <option value="open">Open</option>
+        <option value="debating">Debating</option>
+        <option value="concluded">Concluded</option>
+        <option value="archived">Archived</option>
+      </select>
+      <select id="filter-outcome" class="bg-obsidian border-2 border-neutral-gray text-parchment font-pixel-small text-pixel-small px-2 py-1 rounded">
+        <option value="">Any outcome</option>
+        <option value="consensus">Consensus</option>
+        <option value="plurality">Plurality</option>
+      </select>
+      <button id="refresh-btn" class="bg-obsidian border-2 border-neutral-gray text-parchment p-2 rounded hover:border-runed-gold hover:text-runed-gold transition-colors" title="Refresh"><span class="material-symbols-outlined">refresh</span></button>
+    </div>
+  </div>
+
+  <div id="stats-bar" class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6"></div>
+
+  <div id="topic-list" class="space-y-2">
+    <div class="text-center py-12 text-neutral-gray font-pixel-body text-pixel-body">Loading topics…</div>
+  </div>
+
+  <div class="mt-10">
+    <h2 class="font-pixel-heading text-pixel-heading text-parchment border-b-2 border-runed-gold inline-block pb-1 mb-4">THE CAST</h2>
+    <div id="cast-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+  </div>
+</main>
+</div>
+
+<!-- ============ NEW TOPIC MODAL ============ -->
+<div id="topic-modal" class="hidden fixed inset-0 z-[60] bg-black/70 flex items-center justify-center p-4">
+  <div class="w-full max-w-2xl bg-surface-container border-2 border-runed-gold p-5 max-h-[90vh] overflow-y-auto custom-scrollbar">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="font-pixel-heading text-pixel-heading text-runed-gold uppercase flex items-center gap-2">
+        <span class="material-symbols-outlined">campaign</span>Open a Topic
+      </h2>
+      <button onclick="closeModal()" class="text-neutral-gray hover:text-error"><span class="material-symbols-outlined">close</span></button>
+    </div>
+
+    <label class="block text-parchment font-pixel-small text-pixel-small uppercase mb-1">The Question</label>
+    <textarea id="topic-question" rows="4"
+      class="w-full bg-surface-container-lowest border-2 border-neutral-gray focus:border-runed-gold text-parchment font-pixel-body text-pixel-body p-3 rounded mb-4 outline-none"
+      placeholder="What should the Council work through?"></textarea>
+
+    <div class="grid md:grid-cols-2 gap-4 mb-4">
+      <div>
+        <label class="block text-parchment font-pixel-small text-pixel-small uppercase mb-1">Outcome</label>
+        <select id="topic-mode" class="w-full bg-surface-container-lowest border-2 border-neutral-gray text-parchment font-pixel-small text-pixel-small p-2 rounded">
+          <option value="auto">Let the Moderator decide</option>
+          <option value="consensus">Seek one accepted answer</option>
+          <option value="diverse">Expect different answers</option>
+        </select>
+        <p class="text-neutral-gray font-pixel-small text-pixel-small mt-1 opacity-70">
+          "One answer" needs the cast to genuinely converge. "Different answers" preserves a real disagreement.
+        </p>
+      </div>
+      <div>
+        <label class="block text-parchment font-pixel-small text-pixel-small uppercase mb-1">Rounds</label>
+        <select id="topic-rounds" class="w-full bg-surface-container-lowest border-2 border-neutral-gray text-parchment font-pixel-small text-pixel-small p-2 rounded">
+          <option value="1">1 — quick</option>
+          <option value="2" selected>2 — standard</option>
+          <option value="3">3 — thorough</option>
+        </select>
+        <p class="text-neutral-gray font-pixel-small text-pixel-small mt-1 opacity-70">More rounds = more free-tier model calls.</p>
+      </div>
+    </div>
+
+    <label class="block text-parchment font-pixel-small text-pixel-small uppercase mb-1">Invite the cast</label>
+    <div id="cast-picker" class="flex flex-wrap gap-2 mb-4"></div>
+    <p class="text-neutral-gray font-pixel-small text-pixel-small mb-4 opacity-70">Leave all off to let the Moderator invite whoever suits the question.</p>
+
+    <label class="block text-parchment font-pixel-small text-pixel-small uppercase mb-1">Tags (comma separated)</label>
+    <input id="topic-tags" type="text"
+      class="w-full bg-surface-container-lowest border-2 border-neutral-gray text-parchment font-pixel-small text-pixel-small p-2 rounded mb-4"
+      placeholder="architecture, ethics"/>
+
+    <div id="modal-error" class="hidden text-error font-pixel-small text-pixel-small mb-3"></div>
+
+    <div class="flex gap-3">
+      <button id="submit-topic" class="flex-1 bg-runed-gold text-obsidian font-pixel-heading text-pixel-heading py-2 rounded hover:bg-parchment transition-colors">Open Topic</button>
+      <button onclick="closeModal()" class="px-6 bg-obsidian border-2 border-neutral-gray text-parchment font-pixel-body text-pixel-body py-2 rounded hover:border-error hover:text-error transition-colors">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="api.js"></script>
+<script src="forum.js"></script>
+<script>
+// ---------------- nav (shared across pages) ----------------
+const NAV = [
+  ['council_landing_page.html', 'home', 'Home'],
+  ['forum.html', 'forum', 'Forum', true],
+  ['council_chamber.html', 'castle', 'Chamber'],
+  ['history.html', 'history', 'Archive'],
+  ['runic_library.html', 'auto_stories', 'Library'],
+  ['divination.html', 'auto_awesome', 'Divination'],
+  ['agent_profiles.html', 'people', 'Characters'],
+  ['llm_settings.html', 'tune', 'Models'],
+];
+function renderNav() {
+  document.getElementById('nav-links').innerHTML = NAV.map(([href, icon, label, active]) =>
+    `<li><a href="${href}" class="flex items-center px-4 py-3 gap-3 ${active
+      ? 'text-amber-400 border-l-3 border-amber-400 bg-amber-400/5'
+      : 'text-slate-400 hover:text-amber-300'}"><span class="material-symbols-outlined">${icon}</span>${label}</a></li>`
+  ).join('');
+}
+
+// ---------------- state ----------------
+let CAST = [];
+let selectedCast = new Set();
+
+const STANCE_COLORS = {
+  propose: 'spectral-blue', support: 'success', challenge: 'error',
+  question: 'warning', concede: 'neutral-gray', open: 'mystic-purple', synthesize: 'runed-gold'
+};
+const OUTCOME_META = {
+  consensus: { icon: 'check_circle', color: 'success', label: 'Consensus' },
+  plurality: { icon: 'call_split', color: 'warning', label: 'Plurality' },
+};
+const STATUS_COLORS = { open: 'spectral-blue', debating: 'warning', concluded: 'success', archived: 'neutral-gray' };
+
+function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t ?? ''; return d.innerHTML; }
+function castColor(key) { const c = CAST.find(x => x.key === key); return c ? c.color : 'neutral-gray'; }
+function castIcon(key) { const c = CAST.find(x => x.key === key); return c ? c.icon : 'person'; }
+function castName(key) { const c = CAST.find(x => x.key === key); return c ? c.display_name : key; }
+
+// ---------------- boot ----------------
+async function boot() {
+  renderNav();
+  await loadCast();
+  await Promise.all([loadStatus(), loadTopics()]);
+}
+
+async function loadCast() {
+  try {
+    const res = await window.COM.forumCast();
+    CAST = res.cast || [];
+    renderCastPicker();
+    renderCastGrid();
+  } catch (e) { console.error('cast load failed', e); }
+}
+
+async function loadStatus() {
+  const fc = document.getElementById('forum-chip');
+  try {
+    const st = await window.COM.forumStatus();
+    fc.textContent = st.enabled ? `${st.cast.length} characters` : 'forum off';
+    fc.className = st.enabled
+      ? 'bg-obsidian border border-amber-400/30 text-success font-pixel-small text-pixel-small px-2 py-1 rounded'
+      : 'bg-obsidian border border-error/40 text-error font-pixel-small text-pixel-small px-2 py-1 rounded';
+  } catch { fc.textContent = 'forum ?'; }
+
+  const pc = document.getElementById('provider-chip');
+  try {
+    const h = await window.COM.health();
+    const provider = h.provider || '?';
+    const roles = h.roles || [];
+    const free = roles.filter(r => r.is_free).length;
+    pc.textContent = `${provider}${roles.length ? ` · ${free}/${roles.length} free` : ''}`;
+    pc.title = roles.map(r => `${r.role}: ${r.model}`).join('\n');
+    pc.className = h.llm_ok
+      ? 'bg-obsidian border border-success/40 text-success font-pixel-small text-pixel-small px-2 py-1 rounded'
+      : 'bg-obsidian border border-error/40 text-error font-pixel-small text-pixel-small px-2 py-1 rounded';
+  } catch { pc.textContent = 'model ?'; }
+}
+
+async function loadTopics() {
+  const list = document.getElementById('topic-list');
+  const status = document.getElementById('filter-status').value;
+  const outcome = document.getElementById('filter-outcome').value;
+
+  let qs = new URLSearchParams({ limit: '60' });
+  if (status) qs.set('status', status);
+  if (outcome) qs.set('outcome', outcome);
+
+  try {
+    const res = await window.COM.api(`/api/forum/topics?${qs}`);
+    list.innerHTML = (res.topics || []).length
+      ? res.topics.map(renderTopicRow).join('')
+      : `<div class="text-center py-12 text-neutral-gray">
+           <span class="material-symbols-outlined text-[48px]">forum</span>
+           <p class="font-pixel-heading text-pixel-heading mt-2">No topics yet</p>
+           <p class="font-pixel-small text-pixel-small opacity-70">Open one, or let the API feed one in.</p>
+         </div>`;
+  } catch (e) {
+    list.innerHTML = `<div class="text-error font-pixel-body text-pixel-body">Could not load topics: ${escapeHtml(e.message)}</div>`;
+  }
+
+  loadStats();
+}
+
+async function loadStats() {
+  const bar = document.getElementById('stats-bar');
+  try {
+    const s = await window.COM.forumStats();
+    const cards = [
+      ['Topics', s.topics, 'forum', 'runed-gold'],
+      ['Concluded', s.concluded, 'task_alt', 'success'],
+      ['Consensus', s.consensus, 'check_circle', 'spectral-blue'],
+      ['Plurality', s.plurality, 'call_split', 'warning'],
+      ['API queued', s.intake_queued, 'cloud_upload', s.intake_queued ? 'ember-glow' : 'neutral-gray'],
+    ];
+    bar.innerHTML = cards.map(([label, value, icon, color]) => `
+      <div class="bg-surface-container border-2 border-${color}/40 p-3">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="material-symbols-outlined text-${color}" style="font-size:18px">${icon}</span>
+          <span class="font-pixel-small text-pixel-small uppercase text-neutral-gray">${label}</span>
+        </div>
+        <div class="font-pixel-heading text-pixel-heading text-${color}">${value ?? 0}</div>
+      </div>`).join('');
+  } catch { bar.innerHTML = ''; }
+}
+
+function renderTopicRow(t) {
+  const om = OUTCOME_META[t.outcome];
+  const sc = STATUS_COLORS[t.status] || 'neutral-gray';
+  const cast = (t.cast || []).map(k =>
+    `<span class="material-symbols-outlined text-${castColor(k)}" title="${escapeHtml(castName(k))}" style="font-size:16px">${castIcon(k)}</span>`
+  ).join('');
+
+  const badge = t.outcome
+    ? `<span class="inline-flex items-center gap-1 border border-${om.color}/40 text-${om.color} px-2 py-0.5 text-[11px] uppercase rounded">
+         <span class="material-symbols-outlined" style="font-size:13px">${om.icon}</span>${om.label}</span>`
+    : `<span class="inline-flex items-center gap-1 border border-${sc}/40 text-${sc} px-2 py-0.5 text-[11px] uppercase rounded">
+         <span class="material-symbols-outlined animate-pulse" style="font-size:13px">${t.status === 'debating' ? 'forum' : 'radio_button_unchecked'}</span>${t.status}</span>`;
+
+  const tags = (t.tags || []).map(tag =>
+    `<span class="border border-outline-variant text-neutral-gray px-1 text-[10px] uppercase rounded">${escapeHtml(tag)}</span>`).join(' ');
+
+  const when = t.created_at ? new Date(t.created_at).toLocaleString() : '';
+
+  return `
+  <div class="topic-row bg-surface-container border-2 border-outline-variant hover:border-runed-gold/50 p-3 cursor-pointer"
+       onclick="openTopic('${t.id}')">
+    <div class="flex items-start gap-3">
+      <div class="min-w-0 flex-1">
+        <div class="flex flex-wrap items-center gap-2 mb-1">
+          ${badge}
+          <span class="border border-outline-variant text-neutral-gray px-1 text-[10px] uppercase rounded">${escapeHtml(t.origin)}</span>
+          ${tags}
+        </div>
+        <h3 class="font-pixel-heading text-pixel-heading text-parchment truncate">${escapeHtml(t.title)}</h3>
+        <p class="font-pixel-small text-pixel-small text-on-surface-variant opacity-80 truncate">${escapeHtml(t.question)}</p>
+      </div>
+      <div class="flex flex-col items-end gap-1 shrink-0">
+        <div class="flex gap-1">${cast}</div>
+        <span class="font-pixel-small text-pixel-small text-neutral-gray">${when}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderCastGrid() {
+  document.getElementById('cast-grid').innerHTML = CAST.map(c => `
+    <div class="bg-surface-container border-2 border-${c.color}/40 p-3">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="material-symbols-outlined text-${c.color}">${c.icon}</span>
+        <div class="min-w-0">
+          <div class="font-pixel-heading text-pixel-heading text-${c.color} leading-none">${escapeHtml(c.display_name)}</div>
+          <div class="font-pixel-small text-pixel-small text-neutral-gray uppercase">${escapeHtml(c.archetype)}</div>
+        </div>
+      </div>
+      <p class="font-pixel-small text-pixel-small text-on-surface-variant mb-2">${escapeHtml(c.description)}</p>
+      <div class="flex items-center justify-between border-t border-outline-variant pt-1">
+        <span class="font-pixel-small text-pixel-small text-neutral-gray" title="${escapeHtml((c.voice_rules||[]).join(' · '))}">
+          ${(c.knowledge || []).join(', ') || 'reasoning'}</span>
+        <span class="font-pixel-small text-pixel-small text-${c.color}" title="Model for this character">
+          ${escapeHtml(c.model || '—')}</span>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('cast-nav').innerHTML =
+    `<div class="px-4 font-pixel-small text-pixel-small text-neutral-gray uppercase">${CAST.length} characters</div>`;
+}
+
+function renderCastPicker() {
+  document.getElementById('cast-picker').innerHTML = CAST.map(c => `
+    <button class="cast-chip bg-obsidian border border-${c.color}/50 text-${c.color}/60 px-3 py-1 font-pixel-small text-pixel-small uppercase"
+            onclick="toggleCast('${c.key}', this)">
+      <span class="material-symbols-outlined align-middle" style="font-size:14px">${c.icon}</span> ${escapeHtml(c.display_name)}
+    </button>`).join('');
+}
+
+function toggleCast(key, el) {
+  const c = CAST.find(x => x.key === key);
+  if (selectedCast.has(key)) {
+    selectedCast.delete(key);
+    el.className = `cast-chip bg-obsidian border border-${c.color}/50 text-${c.color}/60 px-3 py-1 font-pixel-small text-pixel-small uppercase`;
+  } else {
+    selectedCast.add(key);
+    el.className = `cast-chip on bg-obsidian border-${c.color} text-${c.color} px-3 py-1 font-pixel-small text-pixel-small uppercase`;
+  }
+}
+
+function openModal() {
+  document.getElementById('topic-modal').classList.remove('hidden');
+  document.getElementById('topic-question').focus();
+}
+function closeModal() {
+  document.getElementById('topic-modal').classList.add('hidden');
+  document.getElementById('modal-error').classList.add('hidden');
+}
+
+async function submitTopic() {
+  const question = document.getElementById('topic-question').value.trim();
+  const err = document.getElementById('modal-error');
+  err.classList.add('hidden');
+
+  if (!question) {
+    err.textContent = 'A topic needs a question.';
+    err.classList.remove('hidden');
+    return;
+  }
+
+  const btn = document.getElementById('submit-topic');
+  btn.disabled = true;
+  btn.textContent = 'Opening…';
+
+  try {
+    const tags = document.getElementById('topic-tags').value
+      .split(',').map(s => s.trim()).filter(Boolean);
+    const res = await window.COM.openTopic({
+      question,
+      mode: document.getElementById('topic-mode').value,
+      max_rounds: parseInt(document.getElementById('topic-rounds').value, 10),
+      cast: [...selectedCast],
+      tags,
+      stream: true,
+    });
+    window.location.href = `topic.html?id=${res.topic_id}`;
+  } catch (e) {
+    err.textContent = e.message;
+    err.classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = 'Open Topic';
+  }
+}
+
+function openTopic(id) { window.location.href = `topic.html?id=${id}`; }
+
+// ---------------- wiring ----------------
+document.getElementById('new-topic-btn').onclick = openModal;
+document.getElementById('submit-topic').onclick = submitTopic;
+document.getElementById('refresh-btn').onclick = loadTopics;
+document.getElementById('filter-status').onchange = loadTopics;
+document.getElementById('filter-outcome').onchange = loadTopics;
+document.getElementById('topic-question').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) submitTopic();
+});
+document.getElementById('topic-modal').addEventListener('click', e => {
+  if (e.target.id === 'topic-modal') closeModal();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+boot();
+</script>
+</body></html>

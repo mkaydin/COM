@@ -1,90 +1,178 @@
 #!/usr/bin/env python3
-"""Startup orchestrator: ensures Docker services are running, then starts the backend."""
+"""Startup orchestrator.
+
+Brings up the Docker stack, waits for it to be healthy, then tells you where
+COM is. The backend runs inside a container, so this no longer starts uvicorn
+directly — that is the point of the `backend` service.
+
+    python start.py                 # default stack -> http://localhost:8080
+    python start.py --local         # + Ollama (optional local provider)
+    python start.py --graph         # + Neo4j
+    python start.py --no-docker     # skip Docker, run the backend on the host
+    python start.py --stop          # bring the stack down
+"""
+import argparse
+import os
+import shutil
+import signal
 import subprocess
 import sys
 import time
-import os
-import signal
+import urllib.error
+import urllib.request
+from pathlib import Path
 
-DOCKER_DIR = os.path.join(os.path.dirname(__file__), "docker")
-BACKEND_DIR = os.path.join(os.path.dirname(__file__), "backend")
+ROOT = Path(__file__).resolve().parent
+DOCKER_DIR = ROOT / "docker"
+COMPOSE = ["docker", "compose", "-f", str(DOCKER_DIR / "docker-compose.yml")]
+
+FRONTEND_PORT = int(os.environ.get("FRONTEND_PORT", 8080))
+BACKEND_PORT = int(os.environ.get("BACKEND_PORT", 8734))
 
 
-def run(cmd, cwd=None, check=False):
-    return subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True, check=check)
+def run(cmd, cwd=None, check=False, env=None):
+    return subprocess.run(cmd, shell=isinstance(cmd, str), cwd=cwd,
+                          capture_output=True, text=True, check=check, env=env)
 
 
-def docker_available():
+def docker_available() -> bool:
+    if not shutil.which("docker"):
+        return False
+    return run(["docker", "info"]).returncode == 0
+
+
+def probe(url: str, timeout: float = 2.0) -> bool:
     try:
-        result = run("docker info")
-        return result.returncode == 0
-    except Exception:
+        with urllib.request.urlopen(url, timeout=timeout) as r:
+            return 200 <= r.status < 400
+    except (urllib.error.URLError, OSError, ValueError):
         return False
 
 
-def services_healthy():
+def wait_for(label: str, url: str, attempts: int = 40, delay: float = 2.0) -> bool:
+    print(f"  waiting for {label} ({url}) ...", flush=True)
+    for _ in range(attempts):
+        if probe(url):
+            print(f"  {label}: OK")
+            return True
+        time.sleep(delay)
+    print(f"  {label}: TIMED OUT")
+    return False
+
+
+def compose(*args, profiles=()):
+    cmd = list(COMPOSE)
+    for p in profiles:
+        cmd += ["--profile", p]
+    cmd += list(args)
+    return run(cmd)
+
+
+def banner(text: str):
+    print(f"\n=== {text} ===\n")
+
+
+def up(profiles):
+    banner("Starting the Council of Minds")
+    args = ["up", "-d"]
+    if "--build" in sys.argv or os.environ.get("COM_BUILD"):
+        args.append("--build")
+    if profiles:
+        args.append("--wait")
+    result = compose(*args, profiles=profiles)
+    if result.returncode != 0:
+        print(result.stdout[-2000:])
+        print(result.stderr[-2000:])
+        return False
+    print("  containers started\n")
+    return True
+
+
+def report():
+    banner("Ready")
+    print(f"  Forum       http://localhost:{FRONTEND_PORT}/forum.html")
+    print(f"  Backend API http://localhost:{BACKEND_PORT}/api/health")
+    print(f"  Models      http://localhost:{FRONTEND_PORT}/llm_settings.html")
+    print()
+    print("  Models default to free-tier. Check the key with:")
+    print(f"    curl -s localhost:{BACKEND_PORT}/api/llm/roles | python3 -m json.tool")
+    print()
+    print("  Follow logs:  docker compose -f docker/docker-compose.yml logs -f backend")
+    print("  Stop:         python start.py --stop")
+
+
+def host_mode():
+    """Run uvicorn directly, for development without Docker."""
+    banner("Running the backend on this host (no Docker)")
+    venv = ROOT / ".venv" / "bin" / "python"
+    python = str(venv) if venv.exists() else sys.executable
+    env = dict(os.environ)
+    env.setdefault("PYTHONUNBUFFERED", "1")
+    # The .env in backend/ is gitignored; copy the example if there is none.
+    backend = ROOT / "backend"
+    if not (backend / ".env").exists():
+        shutil.copy(backend / ".env.example", backend / ".env")
+        print(f"  created backend/.env from the example")
+
+    print(f"  backend  http://localhost:{BACKEND_PORT}")
+    print(f"  frontend file://{ROOT / 'com_website' / 'forum.html'}")
+    print("  (the frontend file:// view needs a running backend)\n")
     try:
-        import httpx
-        resp = httpx.get("http://localhost:5432", timeout=2)
-        return True
-    except Exception:
-        pass
+        subprocess.run([python, "-m", "uvicorn", "main:app",
+                        "--host", "127.0.0.1", "--port", str(BACKEND_PORT),
+                        "--reload"], cwd=backend, env=env)
+    except KeyboardInterrupt:
+        print("\n  backend stopped.")
 
-    health_map = {
-        "postgres": ("pg_isready -U council -h localhost", None),
-        "chromadb": ("curl -s http://localhost:8000/api/v1/heartbeat", None),
-        "ollama": ("curl -s http://localhost:11434/api/tags", None),
-        "searxng": ("curl -s http://localhost:8888", None),
-    }
 
-    all_ok = True
-    for name, (cmd, _) in health_map.items():
-        try:
-            result = run(cmd)
-            ok = result.returncode == 0
-        except Exception:
-            ok = False
-        status = "OK" if ok else "DOWN"
-        print(f"  {name:12s} [{status}]")
-        all_ok = all_ok and ok
-    return all_ok
+def stop():
+    banner("Stopping")
+    result = compose("down")
+    if result.returncode != 0:
+        print(result.stderr[-2000:])
+    else:
+        print("  stack down (volumes kept — use `docker compose down -v` to wipe)")
 
 
 def main():
-    print("=== Council of Minds — Startup ===\n")
+    ap = argparse.ArgumentParser(description="Council of Minds launcher")
+    ap.add_argument("--local", action="store_true", help="include the local Ollama provider")
+    ap.add_argument("--graph", action="store_true", help="include Neo4j")
+    ap.add_argument("--no-docker", action="store_true", help="run the backend on this host")
+    ap.add_argument("--stop", action="store_true", help="bring the stack down")
+    ap.add_argument("--build", action="store_true", help="force an image rebuild")
+    args = ap.parse_args()
+
+    if args.stop:
+        stop()
+        return
+
+    if args.no_docker:
+        host_mode()
+        return
 
     if not docker_available():
-        print("[WARN] Docker not available. Services must be running externally.")
-        print("       Install Docker and run: docker compose -f docker/docker-compose.yml up -d\n")
-    else:
-        print("[1/3] Starting Docker services...")
-        result = run("docker compose up -d --wait", cwd=DOCKER_DIR)
-        if result.returncode != 0:
-            print(f"[ERROR] Docker compose failed:\n{result.stderr}")
-            sys.exit(1)
-        print("       Services started.\n")
+        print("[WARN] Docker is not available.")
+        print("       Install it, or run: python start.py --no-docker\n")
+        host_mode()
+        return
 
-    print("[2/3] Waiting for services to be healthy...")
-    for attempt in range(30):
-        if services_healthy():
-            print("       All services healthy.\n")
-            break
-        time.sleep(2)
-    else:
-        print("[WARN] Some services may not be fully ready.\n")
+    profiles = []
+    if args.local:
+        profiles.append("local")
+    if args.graph:
+        profiles.append("graph")
 
-    print("[3/3] Starting Python backend...")
-    backend_port = os.environ.get("BACKEND_PORT", "8734")
+    if not up(profiles):
+        sys.exit(1)
 
-    try:
-        subprocess.run(
-            [sys.executable, "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", backend_port],
-            cwd=BACKEND_DIR,
-            check=True,
-        )
-    except KeyboardInterrupt:
-        print("\n[INFO] Backend stopped.")
+    wait_for("backend", f"http://localhost:{BACKEND_PORT}/api/health", attempts=90, delay=2)
+    wait_for("frontend", f"http://localhost:{FRONTEND_PORT}/forum.html", attempts=20, delay=1)
+    report()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(130)

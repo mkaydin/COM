@@ -1,0 +1,39 @@
+# Build contexts. Keeps node_modules, venvs, data corpora and secrets out of
+# the image layers — the backend build context is the repo root, so without
+# this it would ship the .venv and every scraped document.
+
+.git
+.gitignore
+**/node_modules
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+.venv
+.venv*
+venv
+env
+
+# Secrets
+.env
+.env.*
+!**/.env.example
+**/.env
+**/.env.*
+!**/.env.example
+docker/.env
+
+# Data corpora — large, regenerable, not app source
+raw_data
+google-okf
+images
+old_docs
+
+# NOTE: `com_website` is deliberately NOT excluded. The frontend image copies
+# it from this same build context, so ignoring it produced an nginx with an
+# empty document root and a 404 on every page. The backend image does not need
+# it, but the small size is not worth two diverging ignore files.
+
+# Electron shell — not used by any image
+desktop

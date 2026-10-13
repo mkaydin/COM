@@ -16,7 +16,7 @@ from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Header, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select as sa_select, select
 from pydantic import BaseModel, Field
 from uuid import UUID
 
@@ -202,8 +202,13 @@ async def open_topic(body: TopicCreate, background_tasks: BackgroundTasks,
     logger.info("forum_topic_requested", topic_id=topic["id"], cast=cast, mode=mode)
 
     if body.stream:
+        # Live path: the graph's per-post events are published to every socket
+        # watching this topic, so the thread renders as it is written rather
+        # than only after a client reconnects and replays it.
+        from api.forum_ws import run_topic_streaming
+
         background_tasks.add_task(
-            _run_and_respond,
+            run_topic_streaming,
             topic["id"], body.question, cast=cast, mode=mode, tags=body.tags,
             origin="user", session_id=body.session_id, max_rounds=body.max_rounds,
         )
@@ -481,8 +486,12 @@ async def intake_question(
     )
     await link_intake_to_topic(db, UUID(claimed["id"]), UUID(topic["id"]))
 
+    # Same live-streaming path as a UI-opened topic, so an API-fed question
+    # is watchable over the WebSocket while it runs.
+    from api.forum_ws import run_topic_streaming
+
     background_tasks.add_task(
-        _run_and_respond, topic["id"], claimed["question"], cast=cast,
+        run_topic_streaming, topic["id"], claimed["question"], cast=cast,
         mode=opts.get("mode", "auto"), tags=opts.get("tags") or [],
         origin="api", session_id=None, max_rounds=opts.get("max_rounds"),
     )
@@ -529,8 +538,10 @@ async def drain_intake(limit: int = Query(default=5, ge=1, le=50),
         )
         await link_intake_to_topic(db, UUID(claimed["id"]), UUID(topic["id"]))
         if background_tasks is not None:
+            from api.forum_ws import run_topic_streaming
+
             background_tasks.add_task(
-                _run_and_respond, topic["id"], claimed["question"], cast=cast,
+                run_topic_streaming, topic["id"], claimed["question"], cast=cast,
                 mode=opts.get("mode", "auto"), tags=opts.get("tags") or [],
                 origin="api", session_id=None, max_rounds=opts.get("max_rounds"),
             )
@@ -559,19 +570,22 @@ async def forum_stats(db: AsyncSession = Depends(get_db)):
     from sqlalchemy import func as sa_func
     from db.forum_models import TopicIntake
 
-    total = int(await db.scalar(sa_func.count(Topic.id)) or 0)
-    concluded = int(await db.scalar(
-        sa_func.count(Topic.id).where(Topic.status == "concluded")) or 0)
-    consensus = int(await db.scalar(
-        sa_func.count(Topic.id).where(Topic.outcome == "consensus")) or 0)
-    plurality = int(await db.scalar(
-        sa_func.count(Topic.id).where(Topic.outcome == "plurality")) or 0)
-    posts = int(await db.scalar(sa_func.count(Post.id)) or 0)
-    queued = int(await db.scalar(
-        sa_func.count(TopicIntake.id).where(TopicIntake.status == "queued")) or 0)
+    async def _count(model, *where):
+        # `count(...).where(...)` is not valid SQLAlchemy — the filter has to
+        # go through a select().
+        return int(await db.scalar(
+            sa_select(sa_func.count(model.id)).where(*where)
+        ) or 0)
+
+    topics = await _count(Topic)
+    concluded = await _count(Topic, Topic.status == "concluded")
+    consensus = await _count(Topic, Topic.outcome == "consensus")
+    plurality = await _count(Topic, Topic.outcome == "plurality")
+    posts = await _count(Post)
+    queued = await _count(TopicIntake, TopicIntake.status == "queued")
 
     return {
-        "topics": total,
+        "topics": topics,
         "concluded": concluded,
         "consensus": consensus,
         "plurality": plurality,

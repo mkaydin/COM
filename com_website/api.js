@@ -140,5 +140,80 @@
         method: 'POST',
         body: JSON.stringify(data),
       }),
+
+    // --- Forum ---------------------------------------------------------------
+
+    /** The character registry, with each character's live model binding. */
+    forumCast: () => window.COM.api('/api/forum/cast'),
+
+    forumStatus: () => window.COM.api('/api/forum/status'),
+
+    forumStats: () => window.COM.api('/api/forum/stats'),
+
+    /** Open a topic. `stream:true` returns immediately; `false` blocks for the outcome. */
+    openTopic: (opts) =>
+      window.COM.api('/api/forum/topics', {
+        method: 'POST',
+        body: JSON.stringify(opts),
+      }),
+
+    listTopics: (params = {}) => {
+      const qs = new URLSearchParams(params).toString();
+      return window.COM.api(`/api/forum/topics${qs ? '?' + qs : ''}`);
+    },
+
+    getTopic: (id, sinceSeq = null) =>
+      window.COM.api(`/api/forum/topics/${id}${sinceSeq != null ? `?since_seq=${sinceSeq}` : ''}`),
+
+    getTopicPosts: (id, sinceSeq = null) =>
+      window.COM.api(`/api/forum/topics/${id}/posts${sinceSeq != null ? `?since_seq=${sinceSeq}` : ''}`),
+
+    replyToTopic: (id, body, triggerRound = true) =>
+      window.COM.api(`/api/forum/topics/${id}/posts`, {
+        method: 'POST',
+        body: JSON.stringify({ body, trigger_round: triggerRound }),
+      }),
+
+    closeTopic: (id) => window.COM.api(`/api/forum/topics/${id}/close`, { method: 'POST' }),
+
+    reopenTopic: (id) => window.COM.api(`/api/forum/topics/${id}/reopen`, { method: 'POST' }),
+
+    deleteTopic: (id) => window.COM.api(`/api/forum/topics/${id}`, { method: 'DELETE' }),
+
+    patchTopic: (id, data) =>
+      window.COM.api(`/api/forum/topics/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+    /** Submit a question from an external system (see docs/FORUM.md). */
+    intake: (data, key) =>
+      window.COM.api('/api/forum/intake', {
+        method: 'POST',
+        headers: key ? { 'X-COM-Key': key } : {},
+        body: JSON.stringify(data),
+      }),
+
+    listIntake: (status = 'queued') => window.COM.api(`/api/forum/intake?status=${status}`),
+
+    // --- LLM ------------------------------------------------------------------
+
+    llmProviders: () => window.COM.api('/api/llm/providers'),
+
+    llmRoles: () => window.COM.api('/api/llm/roles'),
+
+    setLlmRole: (role, modelId) =>
+      window.COM.api('/api/llm/roles', {
+        method: 'POST',
+        body: JSON.stringify({ role, model_id: modelId }),
+      }),
+
+    clearLlmRole: (role) => window.COM.api(`/api/llm/roles/${role}`, { method: 'DELETE' }),
+
+    llmModels: (provider) =>
+      window.COM.api(`/api/llm/models${provider ? `?provider=${provider}` : ''}`),
+
+    testLlmModel: (modelId, provider) =>
+      window.COM.api('/api/llm/test', {
+        method: 'POST',
+        body: JSON.stringify({ model_id: modelId, provider }),
+      }),
   };
 })();

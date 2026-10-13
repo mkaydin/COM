@@ -53,6 +53,9 @@ docker/pgdata/
 docker/neo4jdata/
 docker/neo4jlogs/
 docker/chromadata/
+# docker/.env holds OPENCODE_API_KEY and DB passwords.
+docker/.env
+!docker/.env.example
 
 # ===== Logs =====
 *.log

@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Council of Minds — Models</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700;900&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="styles.css" rel="stylesheet"/>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: { extend: {
+      colors: {
+        "obsidian":"#1a1a2e","background":"#141315","surface":"#141315","surface-dim":"#141315",
+        "surface-container":"#201f21","surface-container-low":"#1c1b1d","surface-container-lowest":"#0e0e10",
+        "surface-container-high":"#2a2a2b","surface-container-highest":"#353436","surface-variant":"#353436",
+        "parchment":"#e8d5b7","on-surface":"#e5e1e3","on-surface-variant":"#c8c5cd","runed-gold":"#ffd700",
+        "spectral-blue":"#87ceeb","ember-glow":"#ff6b6b","mystic-purple":"#9b59b6","warning":"#f39c12",
+        "success":"#27ae60","error":"#c0392b","neutral-gray":"#7f8c8d","outline":"#929097","outline-variant":"#47464c"
+      },
+      fontFamily: { "pixel-display":["VT323","monospace"],"pixel-heading":["VT323","monospace"],
+                    "pixel-body":["VT323","monospace"],"pixel-small":["VT323","monospace"] },
+      fontSize: {
+        "pixel-display":["32px",{lineHeight:"1.2",letterSpacing:"1px",fontWeight:"700"}],
+        "pixel-heading":["24px",{lineHeight:"1.3",letterSpacing:"0.5px",fontWeight:"700"}],
+        "pixel-body":["18px",{lineHeight:"1.6",letterSpacing:"0.5px",fontWeight:"400"}],
+        "pixel-small":["14px",{lineHeight:"1.5",letterSpacing:"0px",fontWeight:"400"}]
+      }
+    }}
+  };
+</script>
+<style>
+  .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: #1c1b1d; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: #ffd700; border: 2px solid #1c1b1d; }
+</style>
+</head>
+<body class="bg-surface-dim text-on-surface font-pixel-body min-h-screen">
+
+<header class="sticky top-0 w-full z-50 flex justify-between items-center px-4 h-16 bg-obsidian border-b-2 border-amber-400/30">
+  <a href="forum.html" class="text-xl font-black text-amber-400 font-['Be_Vietnam_Pro'] tracking-tighter uppercase">Council of Minds</a>
+  <span class="material-symbols-outlined text-amber-400"><a href="forum.html">arrow_back</a></span>
+</header>
+
+<main class="max-w-[1000px] mx-auto px-4 py-6">
+
+  <h1 class="font-pixel-display text-pixel-display text-runed-gold mb-1">MODELS</h1>
+  <p class="font-pixel-body text-pixel-body text-on-surface-variant opacity-80 mb-6">
+    Each character speaks on its own model. Defaults are free-tier — you only pay if you choose to.
+  </p>
+
+  <div id="providers" class="mb-6"></div>
+
+  <h2 class="font-pixel-heading text-pixel-heading text-parchment border-b-2 border-runed-gold inline-block pb-1 mb-4">
+    CHARACTER → MODEL
+  </h2>
+  <div id="roles" class="space-y-2 mb-8"></div>
+
+  <h2 class="font-pixel-heading text-pixel-heading text-parchment border-b-2 border-runed-gold inline-block pb-1 mb-4">
+    FREE CATALOGUE
+  </h2>
+  <p id="catalogue-note" class="font-pixel-small text-pixel-small text-neutral-gray mb-3"></p>
+  <div id="catalogue" class="space-y-1 mb-6"></div>
+
+  <details id="unsupported" class="mb-6">
+    <summary class="font-pixel-small text-pixel-small text-neutral-gray cursor-pointer hover:text-parchment">
+      Free models not offered — and why
+    </summary>
+    <div id="unsupported-list" class="mt-2 space-y-1"></div>
+  </details>
+
+  <h2 class="font-pixel-heading text-pixel-heading text-parchment border-b-2 border-runed-gold inline-block pb-1 mb-4">
+    PAID MODELS (OPTIONAL)
+  </h2>
+  <div id="paid" class="flex flex-wrap gap-2"></div>
+</main>
+
+<script src="api.js"></script>
+<script>
+const NAV = [
+  ['council_landing_page.html','home','Home'],
+  ['forum.html','forum','Forum'],
+  ['council_chamber.html','castle','Chamber'],
+  ['history.html','history','Archive'],
+  ['runic_library.html','auto_stories','Library'],
+  ['divination.html','auto_awesome','Divination'],
+  ['agent_profiles.html','people','Characters'],
+  ['llm_settings.html','tune','Models'],
+];
+document.getElementById('providers').innerHTML = '';
+
+function esc(t){const d=document.createElement('div');d.textContent=t??'';return d.innerHTML;}
+
+const SOURCE_LABEL = { runtime:'pinned', env:'.env', default:'built-in default', fallback:'fallback' };
+
+async function boot() {
+  await loadProviders();
+  await loadRoles();
+  await loadCatalogue();
+}
+
+async function loadProviders() {
+  const box = document.getElementById('providers');
+  try {
+    const res = await window.COM.llmProviders();
+    box.innerHTML = res.providers.map(p => `
+      <div class="bg-surface-container border-2 ${p.active ? 'border-runed-gold' : 'border-outline-variant'} p-3 mb-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="material-symbols-outlined ${p.configured ? 'text-success' : 'text-error'}">${p.configured ? 'check_circle' : 'error'}</span>
+          <span class="font-pixel-heading text-pixel-heading text-parchment">${esc(p.label)}</span>
+          ${p.active ? '<span class="border border-runed-gold text-runed-gold px-1 text-[10px] uppercase rounded">active</span>' : ''}
+          ${p.configured
+            ? '<span class="border border-success/40 text-success px-1 text-[10px] uppercase rounded">ready</span>'
+            : '<span class="border border-error/40 text-error px-1 text-[10px] uppercase rounded">needs API key</span>'}
+          <span class="ml-auto font-pixel-small text-pixel-small text-neutral-gray">${esc(p.base_url)}</span>
+        </div>
+        ${p.notes ? `<p class="font-pixel-small text-pixel-small text-neutral-gray mt-1">${esc(p.notes)}</p>` : ''}
+      </div>`).join('');
+  } catch (e) { box.innerHTML = `<p class="text-error font-pixel-small text-pixel-small">${esc(e.message)}</p>`; }
+}
+
+async function loadRoles() {
+  const box = document.getElementById('roles');
+  box.innerHTML = '<p class="text-neutral-gray font-pixel-body text-pixel-body">Loading…</p>';
+  try {
+    const res = await window.COM.llmRoles();
+    box.innerHTML = res.roles.map(r => `
+      <div class="bg-surface-container border-2 border-outline-variant p-3 flex flex-wrap items-center gap-3">
+        <div class="min-w-[160px]">
+          <div class="font-pixel-heading text-pixel-heading text-runed-gold">${esc(r.role)}</div>
+          ${r.character_name
+            ? `<div class="font-pixel-small text-pixel-small text-neutral-gray">${esc(r.character_name)}</div>`
+            : `<div class="font-pixel-small text-pixel-small text-neutral-gray">—</div>`}
+        </div>
+        <div class="flex-1 min-w-[220px]">
+          <select id="role-${r.role}" class="w-full bg-surface-container-lowest border-2 border-neutral-gray focus:border-runed-gold text-parchment font-pixel-small text-pixel-small p-2 rounded">
+          </select>
+          <div class="font-pixel-small text-pixel-small text-neutral-gray mt-1">
+            <span class="border border-outline-variant px-1 uppercase rounded mr-1">${SOURCE_LABEL[r.source] || r.source}</span>
+            <span class="${r.is_free ? 'text-success' : 'text-warning'}">${r.is_free ? 'free' : 'may cost'}</span>
+            ${r.routed_model !== r.model ? ` · routes as ${esc(r.routed_model)}` : ''}
+          </div>
+        </div>
+        <button class="bg-obsidian border-2 border-neutral-gray text-parchment font-pixel-small text-pixel-small px-3 py-2 rounded hover:border-runed-gold hover:text-runed-gold transition-colors"
+                onclick="apply('${r.role}')">Apply</button>
+        ${r.source === 'runtime'
+          ? `<button class="font-pixel-small text-pixel-small text-neutral-gray hover:text-error underline" onclick="reset('${r.role}')">Reset</button>`
+          : ''}
+      </div>`).join('');
+
+    await loadCatalogue();
+    // Populate each role's dropdown now that the catalogue is known.
+    const cat = window.__catalogue || [];
+    for (const r of res.roles) {
+      const sel = document.getElementById(`role-${r.role}`);
+      const opts = [
+        ...cat.map(m => `<option value="${esc(m.id)}" ${m.id === r.model ? 'selected' : ''}>${esc(m.name)} · free</option>`),
+        ...(r.model && !cat.find(m => m.id === r.model))
+          ? `<option value="${esc(r.model)}" selected>${esc(r.model)} · current</option>` : '',
+      ];
+      sel.innerHTML = opts.join('');
+    }
+  } catch (e) { box.innerHTML = `<p class="text-error font-pixel-small text-pixel-small">${esc(e.message)}</p>`; }
+}
+
+async function loadCatalogue() {
+  try {
+    const res = await window.COM.llmModels();
+    window.__catalogue = res.catalogue || [];
+    const note = document.getElementById('catalogue-note');
+    if (res.provider !== 'opencode') {
+      note.innerHTML = `Provider is <b>${esc(res.provider)}</b>. The free catalogue applies to OpenCode Zen; this provider uses whatever you have installed locally.`;
+    } else {
+      note.innerHTML = `Verified against the live Zen catalogue on <b>${esc(res.snapshot_date || 'unknown date')}</b>. Free models rotate — if one disappears, pick another.`;
+    }
+
+    document.getElementById('catalogue').innerHTML = (res.catalogue || []).map(m => `
+      <div class="bg-surface-container-low border border-outline-variant px-3 py-2 flex items-center gap-3 flex-wrap">
+        <span class="border border-success/40 text-success px-1 text-[10px] uppercase rounded">free</span>
+        <span class="font-pixel-small text-pixel-small text-parchment">${esc(m.name)}</span>
+        <span class="font-pixel-small text-pixel-small text-neutral-gray">${esc(m.id)}</span>
+        ${(m.roles||[]).length ? `<span class="ml-auto font-pixel-small text-pixel-small text-runed-gold">default for ${esc(m.roles.join(', '))}</span>` : ''}
+        ${m.notes ? `<span class="font-pixel-small text-pixel-small text-neutral-gray">${esc(m.notes)}</span>` : ''}
+      </div>`).join('');
+
+    document.getElementById('unsupported-list').innerHTML =
+      (res.unsupported_free || []).map(m => `
+        <div class="bg-surface-container-lowest border border-outline-variant px-3 py-2">
+          <span class="font-pixel-small text-pixel-small text-neutral-gray">${esc(m.id)}</span>
+          <span class="font-pixel-small text-pixel-small text-warning ml-2">${esc(m.reason)}</span>
+        </div>`).join('');
+
+    document.getElementById('paid').innerHTML = (res.paid_suggestions || []).map(m =>
+      `<span class="bg-surface-container border border-outline-variant text-neutral-gray font-pixel-small text-pixel-small px-2 py-1">${esc(m)}</span>`
+    ).join('');
+  } catch (e) { console.warn('catalogue load failed', e); }
+}
+
+async function apply(role) {
+  const modelId = document.getElementById(`role-${role}`).value;
+  try {
+    await window.COM.setLlmRole(role, modelId);
+    await loadRoles();
+  } catch (e) { alert('Could not set model: ' + e.message); }
+}
+
+async function reset(role) {
+  try { await window.COM.clearLlmRole(role); await loadRoles(); }
+  catch (e) { alert('Could not reset: ' + e.message); }
+}
+
+boot();
+</script>
+</body></html>

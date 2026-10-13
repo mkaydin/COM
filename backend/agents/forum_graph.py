@@ -60,6 +60,9 @@ class ForumState(TypedDict, total=False):
     round_count: int
 
     posts: Annotated[List[dict], operator.add]
+    #: Characters that could not speak this round. The moderator is told, so
+    #: a provider outage is reported rather than synthesised around.
+    failed_characters: List[str]
     signals: dict
     outcome: Optional[str]
     synthesis: dict
@@ -182,7 +185,9 @@ async def open_topic(state: ForumState) -> dict:
             )
 
         # The opening post is the Moderator's framing — it anchors the thread.
-        await append_post(
+        # Returned in the node output so a streaming caller can render it
+        # immediately instead of waiting for the first character to speak.
+        opening_post = await append_post(
             db,
             UUID(topic["id"]),
             "moderator",
@@ -210,6 +215,7 @@ async def open_topic(state: ForumState) -> dict:
         "mode": mode,
         "max_rounds": max_rounds,
         "round": 0,
+        "posts": [opening_post],
     }
 
 
@@ -241,11 +247,19 @@ async def statements(state: ForumState) -> dict:
     )
 
     new_posts = []
+    failed = []
     async with async_session() as db:
         for key, result in zip(cast, results):
             if isinstance(result, Exception) or not result:
                 logger.error("forum_statement_failed", character=key,
                              error=str(result)[:160] if result else "none")
+                failed.append(key)
+                continue
+            if not result.get("ok"):
+                # Provider-level failure — see run_character's docstring.
+                logger.warning("forum_statement_skipped", character=key,
+                               error=(result.get("extra") or {}).get("error", "")[:160])
+                failed.append(key)
                 continue
             post = await append_post(
                 db,
@@ -264,8 +278,9 @@ async def statements(state: ForumState) -> dict:
             new_posts.append(post)
         await db.commit()
 
-    logger.info("forum_statements_complete", topic_id=topic_id, posted=len(new_posts))
-    return {"posts": new_posts}
+    logger.info("forum_statements_complete", topic_id=topic_id,
+                posted=len(new_posts), failed=failed)
+    return {"posts": new_posts, "failed_characters": failed}
 
 
 # ======================================================================================
@@ -290,18 +305,20 @@ async def exchange(state: ForumState) -> dict:
     round_no = (state.get("round") or 0) + 1
 
     new_posts = []
+    failed = []
     async with async_session() as db:
         # Re-read inside the transaction: each iteration needs the posts that
         # the previous characters just wrote in this same round.
         async def _loop():
-            nonlocal new_posts
+            nonlocal new_posts, failed
             for key in cast:
                 so_far = await list_posts(db, UUID(topic_id))
                 result = await run_character(
                     key, question, posts=so_far, session_id=state.get("session_id"),
                     is_opening=False,
                 )
-                if not result:
+                if not result or not result.get("ok"):
+                    failed.append(key)
                     continue
                 reply_to_seq = result.get("reply_to_seq")
                 reply_to_id = None
@@ -332,8 +349,8 @@ async def exchange(state: ForumState) -> dict:
         await db.commit()
 
     logger.info("forum_exchange_complete", topic_id=topic_id, round=round_no,
-                posted=len(new_posts))
-    return {"posts": new_posts, "round": round_no}
+                posted=len(new_posts), failed=failed)
+    return {"posts": new_posts, "round": round_no, "failed_characters": failed}
 
 
 # ======================================================================================
@@ -348,6 +365,20 @@ def _fallback_synthesis(question: str, signals: dict) -> dict:
     thread converged, otherwise every character becomes its own position. The
     user still gets something readable and honest rather than an error.
     """
+    # Nobody spoke at all — say that, rather than implying a considered answer.
+    if not signals.get("cast"):
+        return {
+            "mode": "plurality",
+            "answer": "",
+            "positions": [],
+            "fault_line": (
+                "no character produced a statement; the LLM provider is "
+                "unreachable or misconfigured"
+            ),
+            "dissent": [],
+            "signals_note": signals.get("reason", "no character posts"),
+        }
+
     if signals.get("converged") and signals.get("largest_cluster"):
         cluster = signals["largest_cluster"]
         return {
@@ -419,6 +450,22 @@ async def moderator_synthesis(state: ForumState) -> dict:
     )
     thread_text = thread_text[-24000:]
 
+    # If the cast could not speak at all, say so in the synthesis rather than
+    # publishing an empty verdict that reads like a considered position.
+    silent = [k for k in (state.get("cast") or []) if k not in signals.get("cast", [])]
+    outage_note = ""
+    if silent and not signals.get("cast"):
+        outage_note = (
+            f"NO CHARACTER POSTED. {', '.join(silent)} were invited but could not "
+            "produce a statement (provider error). Do NOT synthesise an answer — "
+            "report the outage."
+        )
+    elif silent:
+        outage_note = (
+            f"NOTE: {', '.join(silent)} were invited but did not post "
+            "(provider error). Base the outcome only on those who did."
+        )
+
     messages = [
         {"role": "system", "content": registry.MODERATOR_PROMPT},
         {
@@ -442,6 +489,7 @@ async def moderator_synthesis(state: ForumState) -> dict:
                     if forced
                     else ""
                 )
+                + (f"{outage_note}\n\n" if outage_note else "")
                 + 'If converged is false, do NOT publish a single consensus answer — '
                 "give each surviving position its actual backers instead."
             ),

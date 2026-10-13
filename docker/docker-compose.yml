@@ -1,41 +1,68 @@
+# Council of Minds — full stack.
+#
+#   docker compose up -d --build              default stack (this file)
+#   docker compose --profile local  up -d    + local Ollama (optional provider)
+#   docker compose --profile graph  up -d    + Neo4j (optional graph backend)
+#
+# Default stack: postgres, chromadb, searxng, backend, frontend.
+# The app is then reachable at http://localhost:8080
+
+name: com
+
+# ------------------------------------------------------------------ default stack
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: com-postgres
+    restart: unless-stopped
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_DB: council
-      POSTGRES_USER: council
-      POSTGRES_PASSWORD: council_dev
+      POSTGRES_DB: ${POSTGRES_DB:-council}
+      POSTGRES_USER: ${POSTGRES_USER:-council}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-council_dev}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U council -d council"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-council} -d ${POSTGRES_DB:-council}"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 10s
 
   chromadb:
     image: chromadb/chroma:latest
     container_name: com-chromadb
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
       IS_PERSISTENT: "TRUE"
       PERSIST_DIRECTORY: /chroma/data
+      ANONYMIZED_TELEMETRY: "FALSE"
     volumes:
       - chromadata:/chroma/data
+    healthcheck:
+      # Chroma has had no stable /health on every release; the v2 heartbeat is
+      # the one endpoint that has been stable, and it is what start.py probes.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/v1/heartbeat || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   searxng:
     image: searxng/searxng:latest
     container_name: com-searxng
+    restart: unless-stopped
     ports:
       - "8888:8080"
     environment:
-      - SEARXNG_BASE_URL=http://localhost:8888
-      - UWSGI_WORKERS=4
-      - UWSGI_THREADS=4
+      SEARXNG_BASE_URL: http://localhost:8888/
+      UWSGI_WORKERS: ${SEARXNG_WORKERS:-4}
+      UWSGI_THREADS: ${SEARXNG_THREADS:-4}
     volumes:
       - searxngdata:/etc/searxng
     healthcheck:
@@ -43,8 +70,174 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 20s
+
+  # The `okfbundle` and `sage_wiki` volumes are created root-owned by Docker,
+  # and the backend runs as `com`. Filing a verdict or a wiki page into a
+  # root-owned directory 500s with PermissionError, so hand them to the app
+  # user once, before the backend starts.
+  fix-permissions:
+    image: alpine:3.20
+    container_name: com-fix-permissions
+    user: "0:0"
+    command: ["sh", "-c", "chown -R 1000:1000 /sage_wiki /okf && echo 'permissions set'"]
+    volumes:
+      - ../sage_wiki:/sage_wiki
+      - okfbundle:/okf
+    restart: "no"
+
+  backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    container_name: com-backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8734}:8734"
+    environment:
+      BACKEND_PORT: 8734
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_DIR: /tmp/com-logs
+
+      # --- storage (in-network hostnames, not localhost) ---
+      POSTGRES_URL: postgresql+asyncpg://${POSTGRES_USER:-council}:${POSTGRES_PASSWORD:-council_dev}@postgres:5432/${POSTGRES_DB:-council}
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: 8000
+      SEARXNG_URL: http://searxng:8080
+
+      # --- LLM provider ---
+      # opencode is the default; set LLM_PROVIDER=ollama for the local profile.
+      LLM_PROVIDER: ${LLM_PROVIDER:-opencode}
+      OPENCODE_API_KEY: ${OPENCODE_API_KEY:-}
+      OPENCODE_BASE_URL: ${OPENCODE_BASE_URL:-https://opencode.ai/zen/v1}
+      LLM_MODEL_DEFAULT: ${LLM_MODEL_DEFAULT:-big-pickle}
+
+      # Per-character models. Unset roles fall back to the provider default.
+      LLM_MODEL_MODERATOR: ${LLM_MODEL_MODERATOR:-}
+      LLM_MODEL_ORACLE: ${LLM_MODEL_ORACLE:-}
+      LLM_MODEL_SCHOLAR: ${LLM_MODEL_SCHOLAR:-}
+      LLM_MODEL_SAGE: ${LLM_MODEL_SAGE:-}
+      LLM_MODEL_ANALYST: ${LLM_MODEL_ANALYST:-}
+      LLM_MODEL_HISTORIAN: ${LLM_MODEL_HISTORIAN:-}
+
+      # --- forum ---
+      FORUM_ENABLED: ${FORUM_ENABLED:-true}
+      FORUM_MAX_ROUNDS: ${FORUM_MAX_ROUNDS:-2}
+      FORUM_INTAKE_KEY: ${FORUM_INTAKE_KEY:-}
+
+      # --- optional local provider (profile: local) ---
+      OLLAMA_HOST: ${OLLAMA_HOST:-ollama}
+      OLLAMA_PORT: ${OLLAMA_PORT:-11434}
+      NEO4J_URL: ${NEO4J_URL:-bolt://neo4j:7687}
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-council_dev}
+    volumes:
+      # Filed knowledge must survive an image rebuild. Both paths are chowned
+      # to the app user by `fix-permissions` before this starts.
+      - ../sage_wiki:/sage_wiki
+      - okfbundle:/app/okf/bundles
+      # Deliberately NO volume for /tmp/com-logs. A named volume is created
+      # root-owned and an anonymous one too, either of which makes the
+      # RotatingFileHandler fail with PermissionError for the non-root app
+      # user. /tmp inside the container is already world-writable.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+      fix-permissions:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8734/api/health"]
+      interval: 15s
+      timeout: 5s
+      # Generous: the first boot loads the sentence-transformers model.
+      start_period: 120s
+      retries: 5
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: com_website/Dockerfile
+    container_name: com-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_started
+
+# ------------------------------------------------------------- optional: local LLM
+# The optional provider. Not started by `docker compose up` — the default
+# stack talks to OpenCode Zen over free models.
+#   docker compose --profile local up -d
+#   LLM_PROVIDER=ollama LLM_MODEL_DEFAULT=<tag> docker compose --profile local up -d
+
+  ollama:
+    profiles: ["local"]
+    image: ollama/ollama:latest
+    container_name: com-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollamadata:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # One-shot helper: `docker compose --profile local run --rm ollama-pull`
+  ollama-pull:
+    profiles: ["local"]
+    image: ollama/ollama:latest
+    container_name: com-ollama-pull
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["sh", "-c"]
+    command:
+      - 'for m in $${OLLAMA_PULL:-}; do echo "pulling $$m"; ollama pull $$m; done; ollama list'
+    volumes:
+      - ollamadata:/root/.ollama
+
+# --------------------------------------------------------- optional: graph store
+# Neo4j has been configured in the backend since before this compose file
+# existed, but never actually containerised. Profile `graph` closes that gap.
+#   docker compose --profile graph up -d
+
+  neo4j:
+    profiles: ["graph"]
+    image: neo4j:5-community
+    container_name: com-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-council_dev}
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1G
+      NEO4J_server_memory_pagecache_size: 512m
+    volumes:
+      - neo4jdata:/data
+      - neo4jlogs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
 
 volumes:
   pgdata:
   chromadata:
   searxngdata:
+  ollamadata:
+  neo4jdata:
+  neo4jlogs:
+  okfbundle:

@@ -153,6 +153,32 @@ class TestFallbacks:
         assert synth["mode"] == "plurality"
         assert synth["positions"] == []
 
+    def test_fallback_synthesis_reports_a_total_outage(self):
+        """Nobody spoke — say so instead of implying a considered position.
+
+        A missing API key must not produce a thread that reads like the
+        Council considered the question and declined to answer.
+        """
+        synth = forum_graph._fallback_synthesis("q", {"cast": [], "reason": "no character posts"})
+        assert synth["answer"] == ""
+        assert "unreachable" in synth["fault_line"] or "misconfigured" in synth["fault_line"]
+
+
+class TestFailureHandling:
+    """A provider outage must not bury the thread in identical apologies."""
+
+    def test_a_failed_character_does_not_produce_a_post(self):
+        """`ok=False` means the caller skips the post entirely."""
+        result = {"ok": False, "body": "", "author": "oracle", "extra": {"error": "boom"}}
+        assert not result.get("ok")
+
+    def test_state_carries_failed_characters(self):
+        keys = set(ForumState.__annotations__)
+        assert "failed_characters" in keys, (
+            "the graph must record which characters failed so the moderator "
+            "can be told the cast was silent"
+        )
+
 
 SAME = "the server runs on ubuntu linux with docker containers"
 

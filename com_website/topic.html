@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Council of Minds — Topic</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700;900&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<link href="styles.css" rel="stylesheet"/>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "obsidian": "#1a1a2e","background": "#141315","surface": "#141315","surface-dim": "#141315",
+          "surface-container": "#201f21","surface-container-low": "#1c1b1d","surface-container-lowest": "#0e0e10",
+          "surface-container-high": "#2a2a2b","surface-container-highest": "#353436","surface-variant": "#353436",
+          "surface-bright": "#3a393b","surface-tint": "#c6c4df","parchment": "#e8d5b7","on-surface": "#e5e1e3",
+          "on-surface-variant": "#c8c5cd","on-background": "#e5e1e3","runed-gold": "#ffd700","spectral-blue": "#87ceeb",
+          "ember-glow": "#ff6b6b","mystic-purple": "#9b59b6","warning": "#f39c12","success": "#27ae60",
+          "error": "#c0392b","neutral-gray": "#7f8c8d","outline": "#929097","outline-variant": "#47464c"
+        },
+        fontFamily: {
+          "pixel-display": ["VT323","monospace"], "pixel-heading": ["VT323","monospace"],
+          "pixel-body": ["VT323","monospace"], "pixel-small": ["VT323","monospace"]
+        },
+        fontSize: {
+          "pixel-display": ["32px",{lineHeight:"1.2",letterSpacing:"1px",fontWeight:"700"}],
+          "pixel-heading": ["24px",{lineHeight:"1.3",letterSpacing:"0.5px",fontWeight:"700"}],
+          "pixel-body": ["18px",{lineHeight:"1.6",letterSpacing:"0.5px",fontWeight:"400"}],
+          "pixel-small": ["14px",{lineHeight:"1.5",letterSpacing:"0px",fontWeight:"400"}]
+        }
+      }
+    }
+  };
+</script>
+<style>
+  .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: #1c1b1d; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: #ffd700; border: 2px solid #1c1b1d; }
+  .post-body { font-size: 20px; line-height: 1.7; word-wrap: break-word; }
+  .post-reply { margin-left: 1.5rem; border-left: 2px solid #47464c; padding-left: 1rem; }
+  .post-new { animation: postIn .35s ease; }
+  @keyframes postIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .markdown-body { font-size: 20px; line-height: 1.7; word-wrap: break-word; color: #e8d5b7; }
+  .markdown-body p { margin: .5em 0; }
+  .markdown-body ul, .markdown-body ol { margin: .4em 0; padding-left: 1.5em; }
+  .markdown-body strong { color: #fff7e6; font-weight: 700; }
+  .markdown-body code { background: rgba(255,255,255,.08); padding: 1px 5px; border-radius: 3px; }
+  .markdown-body blockquote { border-left: 3px solid #7f8c8d; margin: .5em 0; padding-left: .8em; color: #c8c5cd; }
+</style>
+</head>
+<body class="bg-surface-dim text-on-surface font-pixel-body min-h-screen">
+
+<header class="sticky top-0 w-full z-50 flex justify-between items-center px-4 h-16 bg-obsidian border-b-2 border-amber-400/30">
+  <a href="forum.html" class="text-xl font-black text-amber-400 font-['Be_Vietnam_Pro'] tracking-tighter uppercase hover:text-parchment transition-colors">Council of Minds</a>
+  <div class="flex items-center gap-3">
+    <span id="live-chip" class="bg-obsidian border border-neutral-gray text-neutral-gray font-pixel-small text-pixel-small px-2 py-1 rounded">connecting…</span>
+    <a href="forum.html" class="text-amber-400 p-2 rounded hover:bg-amber-400/10"><span class="material-symbols-outlined">arrow_back</span></a>
+  </div>
+</header>
+
+<main class="max-w-[1000px] mx-auto px-4 py-6 pb-32">
+
+  <!-- topic header -->
+  <div id="topic-header" class="mb-6"></div>
+
+  <!-- convergence badge -->
+  <div id="signals-bar" class="mb-4"></div>
+
+  <!-- live thread -->
+  <div id="thread" class="space-y-3">
+    <div class="text-center py-12 text-neutral-gray font-pixel-body text-pixel-body">Loading thread…</div>
+  </div>
+
+  <!-- outcome -->
+  <div id="outcome"></div>
+</main>
+
+<!-- reply bar -->
+<div id="reply-bar" class="fixed bottom-0 left-0 md:left-64 w-full md:w-[calc(100%-16rem)] bg-obsidian border-t-2 border-runed-gold z-40">
+  <div class="max-w-[1000px] mx-auto px-4 py-3 flex items-end gap-3">
+    <textarea id="reply-input" rows="2" placeholder="Add your own view to the thread…"
+      class="flex-1 bg-surface-container-lowest border-2 border-neutral-gray focus:border-runed-gold text-parchment font-pixel-body text-pixel-body p-3 rounded outline-none resize-none placeholder:text-surface-tint/40"></textarea>
+    <button id="reply-send" class="bg-runed-gold text-obsidian border-2 border-runed-gold font-pixel-heading text-pixel-heading px-5 py-3 uppercase hover:bg-parchment transition-colors">Reply</button>
+  </div>
+  <div class="max-w-[1000px] mx-auto px-4 pb-2 flex items-center gap-3">
+    <label class="flex items-center gap-2 font-pixel-small text-pixel-small text-neutral-gray">
+      <input id="trigger-round" type="checkbox" checked class="form-checkbox"/>
+      Ask the Council to respond
+    </label>
+    <button id="close-topic" class="ml-auto font-pixel-small text-pixel-small text-neutral-gray hover:text-warning transition-colors underline">Close topic now</button>
+  </div>
+</div>
+
+<script src="api.js"></script>
+<script src="ws.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const topicId = params.get('id');
+
+let CAST = [];
+let POSTS = new Map();          // seq -> post
+let SOCKET = null;
+let TOPIC = null;
+let CONCLUDED = false;
+
+const STANCE_META = {
+  open:       { label: 'framing',      color: 'mystic-purple', icon: 'flag' },
+  propose:    { label: 'proposes',     color: 'spectral-blue', icon: 'lightbulb' },
+  support:    { label: 'supports',     color: 'success',       icon: 'add_circle' },
+  challenge:  { label: 'challenges',   color: 'error',         icon: 'gavel' },
+  question:   { label: 'asks',         color: 'warning',       icon: 'help' },
+  concede:    { label: 'concedes',     color: 'neutral-gray',  icon: 'undo' },
+  synthesize: { label: 'concludes',    color: 'runed-gold',    icon: 'gavel' },
+};
+
+function esc(t) { const d = document.createElement('div'); d.textContent = t ?? ''; return d.innerHTML; }
+function md(src) {
+  if (!src) return '';
+  try {
+    const html = window.marked ? marked.parse(String(src)) : esc(src);
+    return window.DOMPurify ? DOMPurify.sanitize(html) : html;
+  } catch { return esc(src); }
+}
+function charOf(key) { return CAST.find(c => c.key === key) || null; }
+function colorOf(key) { const c = charOf(key); return c ? c.color : (key === 'moderator' ? 'mystic-purple' : key === 'user' ? 'runed-gold' : 'neutral-gray'); }
+function iconOf(key) { const c = charOf(key); return c ? c.icon : (key === 'moderator' ? 'gavel' : 'person'); }
+function nameOf(key) { const c = charOf(key); return c ? c.display_name : (key === 'moderator' ? 'The Moderator' : key === 'user' ? 'You' : key); }
+
+// ---------------- load ----------------
+async function boot() {
+  if (!topicId) { window.location.href = 'forum.html'; return; }
+  try { CAST = (await window.COM.forumCast()).cast || []; } catch {}
+  await loadTopic();
+  connect();
+}
+
+async function loadTopic(sinceSeq = null) {
+  const url = `/api/forum/topics/${topicId}` + (sinceSeq ? `?since_seq=${sinceSeq}` : '');
+  const t = await window.COM.api(url);
+  if (t.partial) { (t.posts || []).forEach(addPost); return; }
+  TOPIC = t;
+  CONCLUDED = t.status === 'concluded' || t.status === 'archived';
+  renderHeader();
+  renderSignals();
+  const thread = document.getElementById('thread');
+  thread.innerHTML = '';
+  POSTS = new Map();
+  (t.posts || []).forEach(addPost);
+  if (t.outcome) renderOutcome(t.outcome, t.synthesis, t.signals);
+  document.getElementById('close-topic').classList.toggle('hidden', CONCLUDED);
+}
+
+function renderHeader() {
+  const t = TOPIC;
+  const cast = (t.cast || []).map(k =>
+    `<span class="inline-flex items-center gap-1 text-${colorOf(k)} font-pixel-small text-pixel-small">
+       <span class="material-symbols-outlined" style="font-size:14px">${iconOf(k)}</span>${esc(nameOf(k))}</span>`
+  ).join('<span class="text-outline-variant mx-1">·</span>');
+
+  document.getElementById('topic-header').innerHTML = `
+    <div class="bg-surface-container border-2 border-runed-gold p-4">
+      <div class="flex flex-wrap items-center gap-2 mb-2">
+        <span class="border border-outline-variant text-neutral-gray px-1 text-[10px] uppercase rounded">${esc(t.origin)}</span>
+        <span class="border border-outline-variant text-neutral-gray px-1 text-[10px] uppercase rounded">${t.round_count}/${t.max_rounds} rounds</span>
+      </div>
+      <h1 class="font-pixel-display text-pixel-display text-runed-gold mb-1">${esc(t.title)}</h1>
+      <p class="font-pixel-small text-pixel-small text-on-surface-variant opacity-80 mb-2">${esc(t.question)}</p>
+      <div class="flex flex-wrap items-center gap-1 border-t border-outline-variant pt-2">${cast}</div>
+    </div>`;
+}
+
+function renderSignals() {
+  const bar = document.getElementById('signals-bar');
+  const s = TOPIC?.signals || {};
+  if (!s.cast || !s.cast.length) { bar.innerHTML = ''; return; }
+
+  const conv = s.converged;
+  bar.innerHTML = `
+    <div class="bg-surface-container-low border-2 ${conv ? 'border-success/40' : 'border-warning/40'} px-3 py-2 flex flex-wrap items-center gap-3">
+      <span class="inline-flex items-center gap-1 text-${conv ? 'success' : 'warning'} font-pixel-small text-pixel-small uppercase">
+        <span class="material-symbols-outlined" style="font-size:15px">${conv ? 'check_circle' : 'call_split'}</span>
+        ${conv ? 'Converging' : 'Diverging'}
+      </span>
+      <span class="text-neutral-gray font-pixel-small text-pixel-small">${esc(s.reason || '')}</span>
+      <span class="ml-auto text-neutral-gray font-pixel-small text-pixel-small">
+        spread ${s.confidence_spread != null ? Math.round(s.confidence_spread * 100) + '%' : 'n/a'} ·
+        ${s.unresolved_challenges || 0} open challenge${(s.unresolved_challenges || 0) === 1 ? '' : 's'}
+      </span>
+    </div>`;
+}
+
+// ---------------- posts ----------------
+function addPost(p) {
+  if (POSTS.has(p.seq)) return;
+  POSTS.set(p.seq, p);
+  const thread = document.getElementById('thread');
+  thread.querySelector('.text-center')?.remove();
+
+  const sm = STANCE_META[p.stance] || STANCE_META.propose;
+  const color = colorOf(p.author);
+  const icon = iconOf(p.author);
+  const isMod = p.author === 'moderator';
+  const isUser = p.author === 'user';
+
+  // Indent replies to another post so the exchange is legible.
+  const targetSeq = p.extra?.reply_to_seq ?? p.reply_to_seq;
+  const repliedTo = targetSeq != null ? POSTS.get(targetSeq) : null;
+  const indent = (repliedTo && !isMod && !isUser) ? 'post-reply' : '';
+
+  const quote = repliedTo && !isMod && !isUser
+    ? `<div class="font-pixel-small text-pixel-small text-neutral-gray mb-1 italic">
+         ↳ replying to #${repliedTo.seq} ${esc(nameOf(repliedTo.author))}
+       </div>` : '';
+
+  const claims = (p.claims || []).filter(c => c.text)
+    .map(c => `<div class="font-pixel-small text-pixel-small text-parchment">
+                 <span class="text-${color}">▸</span> ${esc(c.text)}
+                 ${(c.sources||[]).length ? `<span class="text-neutral-gray"> [${(c.sources||[]).map(esc).join(', ')}]</span>` : ''}
+               </div>`).join('');
+
+  const citations = (p.citations || []).filter(c => c.title).slice(0, 5)
+    .map(c => `<a href="${esc(c.source_url)}" target="_blank" rel="noopener"
+                 class="font-pixel-small text-pixel-small text-spectral-blue underline">${esc(c.title)}</a>`).join(' · ');
+
+  const extras = [];
+  if (p.extra?.novelty) extras.push(`<div class="font-pixel-small text-pixel-small text-mystic-purple">Novelty: ${esc(p.extra.novelty)}</div>`);
+  for (const a of (p.extra?.analogies || []).slice(0, 2))
+    extras.push(`<div class="font-pixel-small text-pixel-small text-on-surface-variant"><span class="text-${color}">${esc(a.domain)}</span>: ${esc(a.concept)} → ${esc(a.application)}</div>`);
+  for (const ch of (p.extra?.causal_chains || []).slice(0, 2))
+    extras.push(`<div class="font-pixel-small text-pixel-small text-on-surface-variant">Chain: ${(ch.chain||[]).map(esc).join(' → ')}</div>`);
+  for (const d of (p.extra?.ethical_dimensions || []).slice(0, 3))
+    extras.push(`<div class="font-pixel-small text-pixel-small text-on-surface-variant">Ethics: ${esc(d)}</div>`);
+  for (const g of (p.extra?.gaps || []).slice(0, 3))
+    extras.push(`<div class="font-pixel-small text-pixel-small text-warning">Gap: ${esc(g)}</div>`);
+  if (p.extra?.insufficient_data)
+    extras.push(`<div class="font-pixel-small text-pixel-small text-warning">Insufficient data in its knowledge sources.</div>`);
+
+  const el = document.createElement('div');
+  el.className = `post-new bg-surface-container border-2 border-${color}/50 p-3 ${indent}`;
+  el.id = `post-${p.seq}`;
+  el.innerHTML = `
+    <div class="flex items-center gap-2 border-b border-outline-variant pb-1 mb-2 flex-wrap">
+      <span class="material-symbols-outlined text-${color}">${icon}</span>
+      <span class="font-pixel-heading text-pixel-heading text-${color} uppercase">${esc(nameOf(p.author))}</span>
+      <span class="border border-${sm.color}/40 text-${sm.color} px-1 text-[10px] uppercase rounded inline-flex items-center gap-1">
+        <span class="material-symbols-outlined" style="font-size:11px">${sm.icon}</span>${sm.label}</span>
+      <span class="text-neutral-gray font-pixel-small text-pixel-small">#${p.seq}</span>
+      ${p.round != null ? `<span class="text-neutral-gray font-pixel-small text-pixel-small">round ${p.round}</span>` : ''}
+      ${p.confidence != null ? `<span class="ml-auto text-neutral-gray font-pixel-small text-pixel-small">${Math.round(p.confidence*100)}% confident</span>` : ''}
+    </div>
+    ${quote}
+    <div class="${isMod ? 'markdown-body' : 'post-body'} text-parchment">${md(p.body)}</div>
+    ${claims ? `<div class="mt-2 space-y-0.5">${claims}</div>` : ''}
+    ${citations ? `<div class="mt-2">${citations}</div>` : ''}
+    ${extras.length ? `<div class="mt-2 space-y-0.5">${extras.join('')}</div>` : ''}`;
+  thread.appendChild(el);
+  scrollToEnd();
+}
+
+function scrollToEnd() {
+  const main = document.getElementById('thread');
+  const rect = main.getBoundingClientRect();
+  if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 240) {
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+  }
+}
+
+// ---------------- outcome ----------------
+function renderOutcome(outcome, synthesis, signals) {
+  const box = document.getElementById('outcome');
+  const s = synthesis || {};
+
+  if (outcome === 'consensus') {
+    box.innerHTML = `
+      <div class="bg-surface-container border-2 border-success p-4 mt-6">
+        <div class="flex items-center gap-2 border-b border-success/30 pb-2 mb-3">
+          <span class="material-symbols-outlined text-success">verified</span>
+          <span class="font-pixel-heading text-pixel-heading text-success uppercase">The Council's Answer</span>
+          <span class="ml-auto text-neutral-gray font-pixel-small text-pixel-small">
+            ${(signals?.largest_cluster || []).map(esc).join(', ') || ''}
+          </span>
+        </div>
+        <div class="markdown-body text-parchment">${md(s.answer || '')}</div>
+        ${(s.dissent||[]).length ? `
+          <div class="mt-3 border-t border-outline-variant pt-2">
+            <div class="font-pixel-small text-pixel-small uppercase text-warning mb-1">Recorded Dissent</div>
+            ${s.dissent.map(d => `<div class="font-pixel-small text-pixel-small text-parchment">
+              <span class="text-${colorOf(d.author)}">${esc(nameOf(d.author))}</span>: ${esc(d.objection)}</div>`).join('')}
+          </div>` : ''}
+      </div>`;
+  } else {
+    box.innerHTML = `
+      <div class="bg-surface-container border-2 border-warning p-4 mt-6">
+        <div class="flex items-center gap-2 border-b border-warning/30 pb-2 mb-3">
+          <span class="material-symbols-outlined text-warning">call_split</span>
+          <span class="font-pixel-heading text-pixel-heading text-warning uppercase">Positions That Survived</span>
+        </div>
+        ${s.fault_line ? `<p class="font-pixel-body text-pixel-body text-parchment mb-3">
+            <span class="text-warning">The real disagreement:</span> ${esc(s.fault_line)}</p>` : ''}
+        <div class="grid md:grid-cols-2 gap-3">
+          ${(s.positions||[]).map(p => `
+            <div class="bg-surface-container-low border-2 border-outline-variant p-3">
+              <div class="font-pixel-heading text-pixel-heading text-runed-gold mb-1">${esc(p.label)}</div>
+              <div class="post-body text-parchment mb-2">${esc(p.position)}</div>
+              <div class="flex flex-wrap gap-1 border-t border-outline-variant pt-1">
+                ${(p.backers||[]).map(b => `<span class="inline-flex items-center gap-1 text-${colorOf(b)} font-pixel-small text-pixel-small">
+                  <span class="material-symbols-outlined" style="font-size:13px">${iconOf(b)}</span>${esc(nameOf(b))}</span>`).join('')}
+              </div>
+            </div>`).join('')}
+        </div>
+        ${(s.dissent||[]).length ? `
+          <div class="mt-3 border-t border-outline-variant pt-2">
+            <div class="font-pixel-small text-pixel-small uppercase text-warning mb-1">Dissent</div>
+            ${s.dissent.map(d => `<div class="font-pixel-small text-pixel-small text-parchment">
+              <span class="text-${colorOf(d.author)}">${esc(nameOf(d.author))}</span>: ${esc(d.objection)}</div>`).join('')}
+          </div>` : ''}
+      </div>`;
+  }
+
+  if (s.signals_note) {
+    box.insertAdjacentHTML('beforeend',
+      `<p class="font-pixel-small text-pixel-small text-neutral-gray mt-2 opacity-70">${esc(s.signals_note)}</p>`);
+  }
+}
+
+// ---------------- websocket ----------------
+function connect() {
+  if (SOCKET) SOCKET.close();
+  const base = (window.COM_API_BASE || 'http://localhost:8734').replace(/^http/, 'ws');
+  SOCKET = new WebSocket(`${base}/ws/forum/${topicId}`);
+
+  SOCKET.onopen = () => setLive(true);
+  SOCKET.onclose = () => {
+    setLive(false);
+    // The thread is finished more often than the socket is; only reconnect
+    // while there is something still to watch.
+    if (!CONCLUDED) setTimeout(connect, 2000);
+  };
+  SOCKET.onmessage = (e) => {
+    let msg; try { msg = JSON.parse(e.data); } catch { return; }
+    switch (msg.type) {
+      case 'topic_opened':
+        if (!TOPIC) loadTopic();
+        break;
+      case 'post_created':
+        addPost(msg.post);
+        break;
+      case 'round_started':
+        setStatus(`Round ${msg.round} — the Council is speaking`);
+        break;
+      case 'round_completed':
+        setStatus(`Round ${msg.round} complete (${msg.posted} posts)`);
+        break;
+      case 'signals_updated':
+        TOPIC.signals = msg.signals; renderSignals();
+        break;
+      case 'synthesis':
+        renderOutcome(msg.outcome, msg.synthesis, msg.signals);
+        if (msg.signals) { TOPIC.signals = msg.signals; renderSignals(); }
+        setStatus('Concluded');
+        break;
+      case 'topic_concluded':
+        CONCLUDED = true;
+        document.getElementById('close-topic').classList.add('hidden');
+        setStatus('Concluded');
+        break;
+      case 'error':
+        setStatus('Error: ' + msg.message);
+        break;
+    }
+  };
+}
+
+function setLive(on) {
+  const chip = document.getElementById('live-chip');
+  chip.textContent = on ? 'live' : 'reconnecting…';
+  chip.className = `font-pixel-small text-pixel-small px-2 py-1 rounded bg-obsidian border ${
+    on ? 'border-success/40 text-success' : 'border-error/40 text-error'}`;
+}
+function setStatus(text) {
+  const chip = document.getElementById('live-chip');
+  if (!CONCLUDED) { chip.textContent = text; chip.className = 'font-pixel-small text-pixel-small px-2 py-1 rounded bg-obsidian border border-warning/40 text-warning'; }
+}
+
+// ---------------- actions ----------------
+async function sendReply() {
+  const input = document.getElementById('reply-input');
+  const body = input.value.trim();
+  if (!body) return;
+  const btn = document.getElementById('reply-send');
+  btn.disabled = true;
+  try {
+    if (SOCKET && SOCKET.readyState === WebSocket.OPEN) {
+      SOCKET.send(JSON.stringify({
+        type: 'reply', body,
+        trigger_round: document.getElementById('trigger-round').checked,
+      }));
+      input.value = '';
+      setStatus('Posted — awaiting the Council');
+    } else {
+      await window.COM.replyToTopic(topicId, body, document.getElementById('trigger-round').checked);
+      input.value = '';
+      await loadTopic();
+    }
+  } catch (e) {
+    alert('Could not post: ' + e.message);
+  } finally { btn.disabled = false; }
+}
+
+async function closeTopic() {
+  if (!confirm('Close this topic now with a final synthesis?')) return;
+  try {
+    const res = await window.COM.closeTopic(topicId);
+    CONCLUDED = true;
+    renderOutcome(res.outcome, res.synthesis, res.signals);
+    if (res.signals) { TOPIC.signals = res.signals; renderSignals(); }
+    setStatus('Concluded');
+    document.getElementById('close-topic').classList.add('hidden');
+  } catch (e) { alert('Could not close: ' + e.message); }
+}
+
+document.getElementById('reply-send').onclick = sendReply;
+document.getElementById('close-topic').onclick = closeTopic;
+document.getElementById('reply-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); }
+});
+
+boot();
+</script>
+</body></html>

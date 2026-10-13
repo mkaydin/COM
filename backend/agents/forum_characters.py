@@ -220,14 +220,19 @@ async def run_character(
         statement = registry.CharacterStatement(**data)
     except Exception as e:
         logger.error("forum_character_failed", character=key, error=str(e)[:160])
+        # A provider-level failure (no API key, unreachable endpoint, rate
+        # limit) hits every character in every round. Writing a post per
+        # failure would bury the thread in identical apologies, so `ok=False`
+        # means the caller skips the post entirely and the condition is
+        # surfaced once, in the synthesis.
         return {
             "author": key,
             "stance": "propose",
-            "body": f"*{character.display_name} could not respond — {type(e).__name__}.*",
+            "body": "",
             "confidence": 0.0,
             "claims": [],
             "citations": [],
-            "extra": {"error": str(e)[:200], "insufficient_data": True},
+            "extra": {"error": str(e)[:200]},
             "ok": False,
         }
 
