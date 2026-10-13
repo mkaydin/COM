@@ -26,7 +26,8 @@
           "pixel-display": ["VT323", "monospace"],
           "pixel-heading": ["VT323", "monospace"],
           "pixel-body": ["VT323", "monospace"],
-          "pixel-small": ["VT323", "monospace"]
+          "pixel-small": ["VT323", "monospace"],
+          "ui": ["Be Vietnam Pro", "system-ui", "sans-serif"]
         },
         fontSize: {
           "pixel-display": ["32px", { lineHeight: "1.2", letterSpacing: "1px", fontWeight: "700" }],
@@ -38,15 +39,6 @@
     }
   };
 </script>
-<style>
-  .custom-scrollbar::-webkit-scrollbar { width: 8px; }
-  .custom-scrollbar::-webkit-scrollbar-track { background: #1c1b1d; }
-  .custom-scrollbar::-webkit-scrollbar-thumb { background: #ffd700; border: 2px solid #1c1b1d; }
-  .topic-row { transition: background-color .15s ease, transform .15s ease; }
-  .topic-row:hover { background-color: rgba(255,215,0,.05); transform: translateX(2px); }
-  .cast-chip { transition: all .15s ease; }
-  .cast-chip.on { border-width: 2px; }
-</style>
 </head>
 <body class="bg-surface-dim text-on-surface font-pixel-body min-h-screen">
 
@@ -57,6 +49,19 @@
     <span id="forum-chip" class="bg-obsidian border border-amber-400/30 text-amber-400 font-pixel-small text-pixel-small px-2 py-1 rounded">forum</span>
   </div>
 </header>
+
+<!-- Below md the sidebar is gone — and with it the only New Topic button and
+     the only navigation. Without this the page's primary action is unreachable
+     on a narrow window, which is what happens in a half-width desktop app.
+
+     Outside the flex row on purpose: as a sibling of <nav> and <main> it
+     becomes a third flex item and squeezes the content to zero width. -->
+<div class="md:hidden sticky top-16 z-40 bg-obsidian border-b-2 border-slate-800 px-4 py-2">
+  <button id="new-topic-btn-mobile" class="w-full bg-runed-gold text-obsidian font-pixel-body text-pixel-body py-2 px-4 rounded hover:bg-parchment transition-colors flex items-center justify-center gap-2">
+    <span class="material-symbols-outlined">add</span>New Topic
+  </button>
+  <ul class="flex gap-1 mt-2 overflow-x-auto pb-1 -mb-1 font-['Be_Vietnam_Pro'] uppercase text-xs font-medium tracking-wide" id="nav-links-mobile"></ul>
+</div>
 
 <div class="flex">
 <nav class="hidden md:flex sticky top-16 h-[calc(100vh-4rem)] w-64 shrink-0 flex-col pt-6 bg-obsidian border-r-2 border-slate-800 font-['Be_Vietnam_Pro'] uppercase text-xs font-medium tracking-widest">
@@ -80,30 +85,35 @@
 
 <main class="flex-1 min-w-0 px-4 py-6 max-w-[1200px] mx-auto">
 
-  <div class="flex flex-wrap items-center gap-3 mb-6">
+  <div class="flex flex-wrap items-center gap-3 mb-4">
     <h1 class="font-pixel-display text-pixel-display text-runed-gold">TOPICS</h1>
+    <span id="topic-count" class="font-pixel-small text-pixel-small text-neutral-gray"></span>
     <div class="ml-auto flex items-center gap-2">
-      <select id="filter-status" class="bg-obsidian border-2 border-neutral-gray text-parchment font-pixel-small text-pixel-small px-2 py-1 rounded">
+      <div class="relative">
+        <span class="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-neutral-gray pointer-events-none" style="font-size:18px">search</span>
+        <input id="search" type="search" placeholder="Search titles, tags, cast…"
+          aria-label="Search topics"
+          class="bg-obsidian border-2 border-neutral-gray focus:border-runed-gold text-parchment font-pixel-small text-pixel-small pl-8 pr-2 py-1 rounded w-44 sm:w-56 outline-none placeholder:text-neutral-gray/70"/>
+      </div>
+      <select id="filter-status" aria-label="Filter by status" class="bg-obsidian border-2 border-neutral-gray text-parchment font-pixel-small text-pixel-small px-2 py-1 rounded">
         <option value="">All statuses</option>
         <option value="open">Open</option>
         <option value="debating">Debating</option>
         <option value="concluded">Concluded</option>
         <option value="archived">Archived</option>
       </select>
-      <select id="filter-outcome" class="bg-obsidian border-2 border-neutral-gray text-parchment font-pixel-small text-pixel-small px-2 py-1 rounded">
+      <select id="filter-outcome" aria-label="Filter by outcome" class="bg-obsidian border-2 border-neutral-gray text-parchment font-pixel-small text-pixel-small px-2 py-1 rounded">
         <option value="">Any outcome</option>
         <option value="consensus">Consensus</option>
         <option value="plurality">Plurality</option>
       </select>
-      <button id="refresh-btn" class="bg-obsidian border-2 border-neutral-gray text-parchment p-2 rounded hover:border-runed-gold hover:text-runed-gold transition-colors" title="Refresh"><span class="material-symbols-outlined">refresh</span></button>
+      <button id="refresh-btn" aria-label="Refresh topics" class="bg-obsidian border-2 border-neutral-gray text-parchment p-2 rounded hover:border-runed-gold hover:text-runed-gold transition-colors" title="Refresh"><span class="material-symbols-outlined">refresh</span></button>
     </div>
   </div>
 
-  <div id="stats-bar" class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6"></div>
+  <div id="stats-bar" class="flex flex-wrap items-center gap-x-5 gap-y-2 mb-5 border-y border-outline-variant py-2 font-pixel-small text-pixel-small text-neutral-gray"></div>
 
-  <div id="topic-list" class="space-y-2">
-    <div class="text-center py-12 text-neutral-gray font-pixel-body text-pixel-body">Loading topics…</div>
-  </div>
+  <div id="topic-list" class="space-y-2"></div>
 
   <div class="mt-10">
     <h2 class="font-pixel-heading text-pixel-heading text-parchment border-b-2 border-runed-gold inline-block pb-1 mb-4">THE CAST</h2>
@@ -119,17 +129,17 @@
       <h2 class="font-pixel-heading text-pixel-heading text-runed-gold uppercase flex items-center gap-2">
         <span class="material-symbols-outlined">campaign</span>Open a Topic
       </h2>
-      <button onclick="closeModal()" class="text-neutral-gray hover:text-error"><span class="material-symbols-outlined">close</span></button>
+      <button onclick="closeModal()" aria-label="Close" class="text-neutral-gray hover:text-error"><span class="material-symbols-outlined">close</span></button>
     </div>
 
-    <label class="block text-parchment font-pixel-small text-pixel-small uppercase mb-1">The Question</label>
+    <label class="block text-parchment font-pixel-small text-pixel-small uppercase mb-1" for="topic-question">The Question</label>
     <textarea id="topic-question" rows="4"
       class="w-full bg-surface-container-lowest border-2 border-neutral-gray focus:border-runed-gold text-parchment font-pixel-body text-pixel-body p-3 rounded mb-4 outline-none"
       placeholder="What should the Council work through?"></textarea>
 
     <div class="grid md:grid-cols-2 gap-4 mb-4">
       <div>
-        <label class="block text-parchment font-pixel-small text-pixel-small uppercase mb-1">Outcome</label>
+        <label class="block text-parchment font-pixel-small text-pixel-small uppercase mb-1" for="topic-mode">Outcome</label>
         <select id="topic-mode" class="w-full bg-surface-container-lowest border-2 border-neutral-gray text-parchment font-pixel-small text-pixel-small p-2 rounded">
           <option value="auto">Let the Moderator decide</option>
           <option value="consensus">Seek one accepted answer</option>
@@ -140,31 +150,32 @@
         </p>
       </div>
       <div>
-        <label class="block text-parchment font-pixel-small text-pixel-small uppercase mb-1">Rounds</label>
+        <label class="block text-parchment font-pixel-small text-pixel-small uppercase mb-1" for="topic-rounds">Rounds</label>
         <select id="topic-rounds" class="w-full bg-surface-container-lowest border-2 border-neutral-gray text-parchment font-pixel-small text-pixel-small p-2 rounded">
           <option value="1">1 — quick</option>
           <option value="2" selected>2 — standard</option>
           <option value="3">3 — thorough</option>
         </select>
-        <p class="text-neutral-gray font-pixel-small text-pixel-small mt-1 opacity-70">More rounds = more free-tier model calls.</p>
+        <p class="text-neutral-gray font-pixel-small text-pixel-small mt-1 opacity-70">More rounds = more free-tier model calls. Each round is minutes, not seconds.</p>
       </div>
     </div>
 
     <label class="block text-parchment font-pixel-small text-pixel-small uppercase mb-1">Invite the cast</label>
-    <div id="cast-picker" class="flex flex-wrap gap-2 mb-4"></div>
-    <p class="text-neutral-gray font-pixel-small text-pixel-small mb-4 opacity-70">Leave all off to let the Moderator invite whoever suits the question.</p>
+    <div id="cast-picker" class="flex flex-wrap gap-2 mb-2"></div>
+    <p id="cast-hint" class="text-neutral-gray font-pixel-small text-pixel-small mb-4 opacity-70">Leave all off to let the Moderator invite whoever suits the question.</p>
 
-    <label class="block text-parchment font-pixel-small text-pixel-small uppercase mb-1">Tags (comma separated)</label>
+    <label class="block text-parchment font-pixel-small text-pixel-small uppercase mb-1" for="topic-tags">Tags (comma separated)</label>
     <input id="topic-tags" type="text"
       class="w-full bg-surface-container-lowest border-2 border-neutral-gray text-parchment font-pixel-small text-pixel-small p-2 rounded mb-4"
       placeholder="architecture, ethics"/>
 
-    <div id="modal-error" class="hidden text-error font-pixel-small text-pixel-small mb-3"></div>
+    <div id="modal-error" role="alert" class="hidden text-error font-pixel-small text-pixel-small mb-3"></div>
 
     <div class="flex gap-3">
       <button id="submit-topic" class="flex-1 bg-runed-gold text-obsidian font-pixel-heading text-pixel-heading py-2 rounded hover:bg-parchment transition-colors">Open Topic</button>
       <button onclick="closeModal()" class="px-6 bg-obsidian border-2 border-neutral-gray text-parchment font-pixel-body text-pixel-body py-2 rounded hover:border-error hover:text-error transition-colors">Cancel</button>
     </div>
+    <p class="mt-2 text-neutral-gray font-pixel-small text-pixel-small opacity-60">Ctrl+Enter to open.</p>
   </div>
 </div>
 
@@ -183,16 +194,29 @@ const NAV = [
   ['llm_settings.html', 'tune', 'Models'],
 ];
 function renderNav() {
-  document.getElementById('nav-links').innerHTML = NAV.map(([href, icon, label, active]) =>
-    `<li><a href="${href}" class="flex items-center px-4 py-3 gap-3 ${active
-      ? 'text-amber-400 border-l-3 border-amber-400 bg-amber-400/5'
-      : 'text-slate-400 hover:text-amber-300'}"><span class="material-symbols-outlined">${icon}</span>${label}</a></li>`
-  ).join('');
+  const item = ([href, icon, label, active], compact) => {
+    const tone = active
+      ? 'text-amber-400 bg-amber-400/10 border-amber-400/40'
+      : 'text-slate-400 hover:text-amber-300';
+    return compact
+      ? `<li class="shrink-0"><a href="${href}" class="flex items-center px-2.5 py-1.5 gap-1.5 border rounded whitespace-nowrap ${tone}"><span class="material-symbols-outlined" style="font-size:16px">${icon}</span>${label}</a></li>`
+      : `<li><a href="${href}" class="flex items-center px-4 py-3 gap-3 ${active
+          ? 'text-amber-400 border-l-3 border-amber-400 bg-amber-400/5'
+          : 'text-slate-400 hover:text-amber-300'}"><span class="material-symbols-outlined">${icon}</span>${label}</a></li>`;
+  };
+
+  // Both navs are rendered, not one hidden by media query: the sidebar is
+  // display:none below md, and a button that only exists inside it leaves a
+  // narrow window with no way to open a topic at all.
+  document.getElementById('nav-links').innerHTML = NAV.map(e => item(e, false)).join('');
+  document.getElementById('nav-links-mobile').innerHTML = NAV.map(e => item(e, true)).join('');
 }
 
 // ---------------- state ----------------
 let CAST = [];
 let selectedCast = new Set();
+let ALL_TOPICS = [];
+let searchTerm = '';
 
 const STANCE_COLORS = {
   propose: 'spectral-blue', support: 'success', challenge: 'error',
@@ -208,6 +232,42 @@ function escapeHtml(t) { const d = document.createElement('div'); d.textContent 
 function castColor(key) { const c = CAST.find(x => x.key === key); return c ? c.color : 'neutral-gray'; }
 function castIcon(key) { const c = CAST.find(x => x.key === key); return c ? c.icon : 'person'; }
 function castName(key) { const c = CAST.find(x => x.key === key); return c ? c.display_name : key; }
+
+/**
+ * Relative time, with the absolute date kept in the tooltip.
+ *
+ * `toLocaleString()` gave every row "10/13/2026, 7:57:43 PM" — twenty-odd
+ * characters that all say the same thing and make the list hard to scan. In a
+ * forum the useful question is "how long ago", not "exactly when".
+ */
+function timeAgo(iso) {
+  if (!iso) return '';
+  const then = new Date(iso);
+  if (isNaN(then)) return '';
+  const secs = Math.max(0, (Date.now() - then.getTime()) / 1000);
+  if (secs < 45) return 'just now';
+  if (secs < 3600) return `${Math.round(secs / 60)}m ago`;
+  if (secs < 86400) return `${Math.round(secs / 3600)}h ago`;
+  if (secs < 604800) return `${Math.round(secs / 86400)}d ago`;
+  return then.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+/**
+ * A round avatar for a character.
+ *
+ * Two-letter initials taken from the key, not one from the display name. The
+ * cast is Scholar / Sage / Analyst — one-letter initials gave "S A S" and
+ * "O S S", which cannot be told apart at 22px and defeat the point of
+ * showing who is in the room.
+ */
+function avatar(key, size = 22) {
+  const c = CAST.find(x => x.key === key);
+  const letters = (c ? c.key : key).slice(0, 2).toUpperCase();
+  const fs = Math.round(size * 0.40);
+  return `<span class="inline-flex items-center justify-center rounded-full border border-${c ? c.color : 'neutral-gray'}/60 bg-${c ? c.color : 'neutral-gray'}/10 text-${c ? c.color : 'neutral-gray'} font-['Be_Vietnam_Pro'] font-bold shrink-0 tracking-tight"
+    style="width:${size}px;height:${size}px;font-size:${fs}px"
+    title="${escapeHtml(castName(key))}">${escapeHtml(letters)}</span>`;
+}
 
 // ---------------- boot ----------------
 async function boot() {
@@ -249,6 +309,15 @@ async function loadStatus() {
   } catch { pc.textContent = 'model ?'; }
 }
 
+function skeleton() {
+  return Array.from({ length: 4 }, (_, i) => `
+    <div class="bg-surface-container border-2 border-outline-variant/60 p-3 animate-pulse" style="animation-delay:${i * 90}ms">
+      <div class="h-3 w-24 bg-surface-container-highest mb-2 rounded"></div>
+      <div class="h-5 w-3/5 bg-surface-container-highest mb-2 rounded"></div>
+      <div class="h-3 w-2/5 bg-surface-container-highest/60 rounded"></div>
+    </div>`).join('');
+}
+
 async function loadTopics() {
   const list = document.getElementById('topic-list');
   const status = document.getElementById('filter-status').value;
@@ -258,86 +327,200 @@ async function loadTopics() {
   if (status) qs.set('status', status);
   if (outcome) qs.set('outcome', outcome);
 
+  list.innerHTML = skeleton();
+  const btn = document.getElementById('refresh-btn');
+  btn.querySelector('span').classList.add('animate-spin');
+
   try {
     const res = await window.COM.api(`/api/forum/topics?${qs}`);
-    list.innerHTML = (res.topics || []).length
-      ? res.topics.map(renderTopicRow).join('')
-      : `<div class="text-center py-12 text-neutral-gray">
-           <span class="material-symbols-outlined text-[48px]">forum</span>
-           <p class="font-pixel-heading text-pixel-heading mt-2">No topics yet</p>
-           <p class="font-pixel-small text-pixel-small opacity-70">Open one, or let the API feed one in.</p>
-         </div>`;
+    ALL_TOPICS = res.topics || [];
+    renderTopics();
   } catch (e) {
-    list.innerHTML = `<div class="text-error font-pixel-body text-pixel-body">Could not load topics: ${escapeHtml(e.message)}</div>`;
+    list.innerHTML = `<div class="border-2 border-error/40 bg-surface-container p-4">
+        <p class="text-error font-pixel-heading text-pixel-heading">Could not load topics</p>
+        <p class="text-neutral-gray font-pixel-small text-pixel-small mt-1">${escapeHtml(e.message)}</p>
+      </div>`;
+  } finally {
+    btn.querySelector('span').classList.remove('animate-spin');
+    loadStats();
   }
-
-  loadStats();
 }
 
-async function loadStats() {
-  const bar = document.getElementById('stats-bar');
-  try {
-    const s = await window.COM.forumStats();
-    const cards = [
-      ['Topics', s.topics, 'forum', 'runed-gold'],
-      ['Concluded', s.concluded, 'task_alt', 'success'],
-      ['Consensus', s.consensus, 'check_circle', 'spectral-blue'],
-      ['Plurality', s.plurality, 'call_split', 'warning'],
-      ['API queued', s.intake_queued, 'cloud_upload', s.intake_queued ? 'ember-glow' : 'neutral-gray'],
-    ];
-    bar.innerHTML = cards.map(([label, value, icon, color]) => `
-      <div class="bg-surface-container border-2 border-${color}/40 p-3">
-        <div class="flex items-center gap-2 mb-1">
-          <span class="material-symbols-outlined text-${color}" style="font-size:18px">${icon}</span>
-          <span class="font-pixel-small text-pixel-small uppercase text-neutral-gray">${label}</span>
-        </div>
-        <div class="font-pixel-heading text-pixel-heading text-${color}">${value ?? 0}</div>
-      </div>`).join('');
-  } catch { bar.innerHTML = ''; }
+function matchesSearch(t, term) {
+  if (!term) return true;
+  const hay = [
+    t.title, t.question, t.framing, t.outcome, t.status, t.origin,
+    ...(t.tags || []),
+    ...(t.cast || []).map(castName),
+  ].join(' ').toLowerCase();
+  // Every word must appear: "rust go" finds the Rust-vs-Go topic, but
+  // "rust go caching" does not silently degrade to a match on either.
+  return term.split(/\s+/).filter(Boolean).every(w => hay.includes(w));
+}
+
+function renderTopics() {
+  const list = document.getElementById('topic-list');
+  const shown = ALL_TOPICS.filter(t => matchesSearch(t, searchTerm));
+
+  const total = ALL_TOPICS.length;
+  document.getElementById('topic-count').textContent =
+    searchTerm ? `${shown.length} of ${total}` : (total ? `${total} shown` : '');
+
+  if (!total) {
+    list.innerHTML = `
+      <div class="border-2 border-dashed border-outline-variant bg-surface-container/40 p-10 text-center">
+        <span class="material-symbols-outlined text-[48px] text-neutral-gray/60">forum</span>
+        <p class="font-pixel-heading text-pixel-heading text-parchment mt-2">No topics yet</p>
+        <p class="font-pixel-small text-pixel-small text-neutral-gray mt-1">
+          Open one here, or POST a question to <code class="text-runed-gold">/api/forum/intake</code>
+          and the Moderator will open it for you.
+        </p>
+        <button onclick="openModal()" class="mt-4 bg-runed-gold text-obsidian font-pixel-body text-pixel-body px-5 py-2 rounded hover:bg-parchment transition-colors">
+          Open the first topic
+        </button>
+      </div>`;
+    scheduleAutoRefresh();
+    return;
+  }
+
+  if (!shown.length) {
+    list.innerHTML = `
+      <div class="border-2 border-dashed border-outline-variant bg-surface-container/40 p-10 text-center">
+        <span class="material-symbols-outlined text-[40px] text-neutral-gray/60">search_off</span>
+        <p class="font-pixel-heading text-pixel-heading text-parchment mt-2">Nothing matches “${escapeHtml(searchTerm)}”</p>
+        <button onclick="clearSearch()" class="mt-3 font-pixel-small text-pixel-small text-runed-gold hover:underline">Clear search</button>
+      </div>`;
+    return;
+  }
+
+  list.innerHTML = shown.map(renderTopicRow).join('');
+  scheduleAutoRefresh();
 }
 
 function renderTopicRow(t) {
   const om = OUTCOME_META[t.outcome];
   const sc = STATUS_COLORS[t.status] || 'neutral-gray';
-  const cast = (t.cast || []).map(k =>
-    `<span class="material-symbols-outlined text-${castColor(k)}" title="${escapeHtml(castName(k))}" style="font-size:16px">${castIcon(k)}</span>`
-  ).join('');
+  const live = t.status === 'debating' || t.status === 'open';
+
+  const cast = (t.cast || []).map(k => avatar(k, 24)).join('');
 
   const badge = t.outcome
-    ? `<span class="inline-flex items-center gap-1 border border-${om.color}/40 text-${om.color} px-2 py-0.5 text-[11px] uppercase rounded">
+    ? `<span class="inline-flex items-center gap-1 border border-${om.color}/40 text-${om.color} px-2 py-0.5 text-[11px] uppercase rounded whitespace-nowrap">
          <span class="material-symbols-outlined" style="font-size:13px">${om.icon}</span>${om.label}</span>`
-    : `<span class="inline-flex items-center gap-1 border border-${sc}/40 text-${sc} px-2 py-0.5 text-[11px] uppercase rounded">
-         <span class="material-symbols-outlined animate-pulse" style="font-size:13px">${t.status === 'debating' ? 'forum' : 'radio_button_unchecked'}</span>${t.status}</span>`;
+    : `<span class="inline-flex items-center gap-1 border border-${sc}/40 text-${sc} px-2 py-0.5 text-[11px] uppercase rounded whitespace-nowrap">
+         <span class="material-symbols-outlined ${live ? 'animate-pulse' : ''}" style="font-size:13px">${live ? 'forum' : 'radio_button_unchecked'}</span>${escapeHtml(t.status)}</span>`;
 
   const tags = (t.tags || []).map(tag =>
     `<span class="border border-outline-variant text-neutral-gray px-1 text-[10px] uppercase rounded">${escapeHtml(tag)}</span>`).join(' ');
 
-  const when = t.created_at ? new Date(t.created_at).toLocaleString() : '';
+  const posts = t.post_count ?? 0;
+
+  // The Moderator's framing is what actually distinguishes two topics on the
+  // same question, so it previews the thread. But when there is no framing and
+  // the question is just the title again, the line is pure repetition — the
+  // Moderator's opening is sometimes empty, and echoing the heading beneath it
+  // adds a line of nothing.
+  const titleNorm = (t.title || '').toLowerCase().trim();
+  let source = (t.framing || '').trim();
+  if (!source && (t.question || '').trim().toLowerCase() !== titleNorm) {
+    source = (t.question || '').trim();
+  }
+  // Kept short: at full length it dominated the row and pushed the title,
+  // which is what you are scanning for, below the fold of the card.
+  const preview = source.length > 130
+    ? source.slice(0, 130).replace(/\s+\S*$/, '') + '…'
+    : source;
+
+  // How the thread actually ended — more informative than the outcome badge
+  // alone, which only says "they did not agree".
+  const nPositions = (t.synthesis?.positions || []).length;
+  let resolution = '';
+  if (t.outcome === 'consensus' && t.synthesis?.answer) {
+    resolution = t.synthesis.answer;
+  } else if (nPositions > 1) {
+    resolution = `${nPositions} positions survived`;
+  }
 
   return `
-  <div class="topic-row bg-surface-container border-2 border-outline-variant hover:border-runed-gold/50 p-3 cursor-pointer"
-       onclick="openTopic('${t.id}')">
-    <div class="flex items-start gap-3">
+  <a href="topic.html?id=${encodeURIComponent(t.id)}"
+     class="topic-row group block bg-surface-container border border-outline-variant hover:border-runed-gold/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-runed-gold p-3">
+    <div class="flex items-start gap-4">
       <div class="min-w-0 flex-1">
         <div class="flex flex-wrap items-center gap-2 mb-1">
           ${badge}
           <span class="border border-outline-variant text-neutral-gray px-1 text-[10px] uppercase rounded">${escapeHtml(t.origin)}</span>
           ${tags}
         </div>
-        <h3 class="font-pixel-heading text-pixel-heading text-parchment truncate">${escapeHtml(t.title)}</h3>
-        <p class="font-pixel-small text-pixel-small text-on-surface-variant opacity-80 truncate">${escapeHtml(t.question)}</p>
+        <h3 class="font-pixel-heading text-pixel-heading text-parchment group-hover:text-runed-gold transition-colors truncate">
+          ${escapeHtml(t.title)}
+        </h3>
+        ${preview ? `<p class="font-pixel-small text-pixel-small text-on-surface-variant/60 truncate">${escapeHtml(preview)}</p>` : ''}
+        <div class="font-pixel-small text-pixel-small text-neutral-gray/80 mt-1 flex flex-wrap items-center gap-x-3">
+          <span>${posts === 1 ? '1 post' : `${posts} posts`}</span>
+          <span>${(t.cast || []).length} speakers</span>
+          <span>round ${t.round_count || 0}/${t.max_rounds || '?'}</span>
+          ${resolution ? `<span class="text-on-surface-variant/70">· ${escapeHtml(resolution.slice(0, 60))}</span>` : ''}
+        </div>
       </div>
-      <div class="flex flex-col items-end gap-1 shrink-0">
-        <div class="flex gap-1">${cast}</div>
-        <span class="font-pixel-small text-pixel-small text-neutral-gray">${when}</span>
+      <div class="flex flex-col items-end gap-2 shrink-0">
+        <div class="flex items-center gap-1">${cast}</div>
+        <time class="font-pixel-small text-pixel-small text-neutral-gray whitespace-nowrap"
+              datetime="${escapeHtml(t.created_at || '')}" title="${escapeHtml(t.created_at ? new Date(t.created_at).toLocaleString() : '')}">
+          ${timeAgo(t.created_at)}
+        </time>
       </div>
     </div>
-  </div>`;
+  </a>`;
+}
+
+async function loadStats() {
+  const bar = document.getElementById('stats-bar');
+  try {
+    const s = await window.COM.forumStats();
+    // A flat strip, not five competing cards. A zero deserves less attention
+    // than a real number, so it is dimmed rather than given equal weight.
+    const stats = [
+      ['forum', 'Topics', s.topics],
+      ['task_alt', 'Concluded', s.concluded],
+      ['check_circle', 'Consensus', s.consensus],
+      ['call_split', 'Plurality', s.plurality],
+      ['cloud_upload', 'API queued', s.intake_queued],
+    ];
+    bar.innerHTML = stats.map(([icon, label, value]) => `
+      <span class="inline-flex items-center gap-1.5 ${value ? 'text-on-surface-variant' : 'text-neutral-gray/45'}">
+        <span class="material-symbols-outlined" style="font-size:16px">${icon}</span>
+        <span class="uppercase tracking-wide">${label}</span>
+        <span class="${value ? 'text-runed-gold' : ''}">${value ?? 0}</span>
+      </span>`).join('');
+  } catch { bar.innerHTML = ''; }
+}
+
+/**
+ * Poll only while something is actually in flight.
+ *
+ * The page never refreshed, so a topic that opened and deliberated over the
+ * next three minutes looked identical to a finished one. Polling forever
+ * would be its own kind of wrong, so it stops once the board is quiet.
+ */
+let refreshTimer = null;
+function scheduleAutoRefresh() {
+  clearTimeout(refreshTimer);
+  const busy = ALL_TOPICS.some(t => t.status === 'debating' || t.status === 'open');
+  if (!busy) return;
+  refreshTimer = setTimeout(() => {
+    loadTopics().then(loadStats).catch(() => {});
+  }, 5000);
+}
+
+function clearSearch() {
+  searchTerm = '';
+  document.getElementById('search').value = '';
+  renderTopics();
 }
 
 function renderCastGrid() {
   document.getElementById('cast-grid').innerHTML = CAST.map(c => `
-    <div class="bg-surface-container border-2 border-${c.color}/40 p-3">
+    <div class="bg-surface-container border border-${c.color}/40 hover:border-${c.color}/70 p-3 transition-colors">
       <div class="flex items-center gap-2 mb-2">
         <span class="material-symbols-outlined text-${c.color}">${c.icon}</span>
         <div class="min-w-0">
@@ -345,17 +528,17 @@ function renderCastGrid() {
           <div class="font-pixel-small text-pixel-small text-neutral-gray uppercase">${escapeHtml(c.archetype)}</div>
         </div>
       </div>
-      <p class="font-pixel-small text-pixel-small text-on-surface-variant mb-2">${escapeHtml(c.description)}</p>
+      <p class="font-pixel-small text-pixel-small text-on-surface-variant/80 mb-2">${escapeHtml(c.description)}</p>
       <div class="flex items-center justify-between border-t border-outline-variant pt-1">
         <span class="font-pixel-small text-pixel-small text-neutral-gray" title="${escapeHtml((c.voice_rules||[]).join(' · '))}">
-          ${(c.knowledge || []).join(', ') || 'reasoning'}</span>
-        <span class="font-pixel-small text-pixel-small text-${c.color}" title="Model for this character">
+          ${escapeHtml((c.knowledge || []).join(', ') || 'reasoning')}</span>
+        <span class="font-pixel-small text-pixel-small text-${c.color}" title="Free model for this character">
           ${escapeHtml(c.model || '—')}</span>
       </div>
     </div>`).join('');
 
   document.getElementById('cast-nav').innerHTML =
-    `<div class="px-4 font-pixel-small text-pixel-small text-neutral-gray uppercase">${CAST.length} characters</div>`;
+    `<a href="#cast-grid" class="px-4 font-pixel-small text-pixel-small text-neutral-gray uppercase hover:text-amber-400 transition-colors">${CAST.length} characters</a>`;
 }
 
 function renderCastPicker() {
@@ -368,13 +551,27 @@ function renderCastPicker() {
 
 function toggleCast(key, el) {
   const c = CAST.find(x => x.key === key);
+  const base = 'cast-chip bg-obsidian border border-${c.color}/50 text-${c.color}/60 px-3 py-1 font-pixel-small text-pixel-small uppercase';
   if (selectedCast.has(key)) {
     selectedCast.delete(key);
-    el.className = `cast-chip bg-obsidian border border-${c.color}/50 text-${c.color}/60 px-3 py-1 font-pixel-small text-pixel-small uppercase`;
+    el.className = base;
   } else {
     selectedCast.add(key);
-    el.className = `cast-chip on bg-obsidian border-${c.color} text-${c.color} px-3 py-1 font-pixel-small text-pixel-small uppercase`;
+    el.className = `cast-chip on bg-obsidian border-2 border-${c.color} text-${c.color} px-3 py-1 font-pixel-small text-pixel-small uppercase`;
   }
+
+  // The hint used to be static prose. It now says what will actually happen,
+  // because "leave all off" is only useful advice if you can see that you
+  // have in fact selected someone.
+  const hint = document.getElementById('cast-hint');
+  const n = selectedCast.size;
+  hint.textContent = n === 0
+    ? 'Nobody selected — the Moderator will invite whoever suits the question.'
+    : `${n} selected: ${CAST.filter(c => selectedCast.has(c.key)).map(c => c.display_name).join(', ')}.`
+      + (n === 1 ? ' A single speaker has no one to respond to — pick at least two.' : '');
+  hint.className = n === 1
+    ? 'text-warning font-pixel-small text-pixel-small mb-4'
+    : 'text-neutral-gray font-pixel-small text-pixel-small mb-4 opacity-70';
 }
 
 function openModal() {
@@ -398,6 +595,7 @@ async function submitTopic() {
   }
 
   const btn = document.getElementById('submit-topic');
+  const label = btn.textContent;
   btn.disabled = true;
   btn.textContent = 'Opening…';
 
@@ -417,18 +615,25 @@ async function submitTopic() {
     err.textContent = e.message;
     err.classList.remove('hidden');
     btn.disabled = false;
-    btn.textContent = 'Open Topic';
+    btn.textContent = label;
   }
 }
 
-function openTopic(id) { window.location.href = `topic.html?id=${id}`; }
-
 // ---------------- wiring ----------------
+let searchTimer = null;
 document.getElementById('new-topic-btn').onclick = openModal;
+document.getElementById('new-topic-btn-mobile').onclick = openModal;
 document.getElementById('submit-topic').onclick = submitTopic;
 document.getElementById('refresh-btn').onclick = loadTopics;
 document.getElementById('filter-status').onchange = loadTopics;
 document.getElementById('filter-outcome').onchange = loadTopics;
+document.getElementById('search').addEventListener('input', e => {
+  // Debounced: the filter is client-side and instant, but re-rendering on
+  // every keystroke fights the user while they are still typing a word.
+  clearTimeout(searchTimer);
+  const value = e.target.value.trim().toLowerCase();
+  searchTimer = setTimeout(() => { searchTerm = value; renderTopics(); }, 120);
+});
 document.getElementById('topic-question').addEventListener('keydown', e => {
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) submitTopic();
 });
@@ -436,6 +641,13 @@ document.getElementById('topic-modal').addEventListener('click', e => {
   if (e.target.id === 'topic-modal') closeModal();
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// "n" opens a new topic, "/" focuses search — the two things you do here most.
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input, textarea, select')) return;
+  if (e.key === '/') { e.preventDefault(); document.getElementById('search').focus(); }
+  else if (e.key.toLowerCase() === 'n') { e.preventDefault(); openModal(); }
+});
 
 boot();
 </script>

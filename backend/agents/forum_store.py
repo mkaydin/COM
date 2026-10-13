@@ -245,16 +245,35 @@ async def list_topics(
         stmt = stmt.where(Topic.session_id == session_id)
     if cast:
         stmt = stmt.where(Topic.cast.contains([cast]))
+
+    if tag:
+        # Must be part of the query, not a filter applied after it: the LIMIT
+        # runs first, so dropping non-matching rows in Python silently returns
+        # a short page — and an empty one for a tag that exists on an older
+        # topic outside the window.
+        stmt = stmt.where(Topic.tags.contains([tag]))
+
     stmt = stmt.order_by(desc(Topic.created_at)).limit(limit).offset(offset)
 
     rows = (await db.execute(stmt)).scalars().all()
-    out = []
-    for t in rows:
-        d = topic_to_dict(t)
-        if tag and tag not in (t.tags or []):
-            continue
-        out.append(d)
-    return out
+
+    # Post counts for the whole page in one grouped query. The forum list
+    # renders them on every row, and a per-row count would be an N+1 against
+    # a table that only ever grows.
+    counts: dict = {}
+    if rows:
+        ids = [t.id for t in rows]
+        grouped = await db.execute(
+            select(Post.topic_id, func.count(Post.id))
+            .where(Post.topic_id.in_(ids))
+            .group_by(Post.topic_id)
+        )
+        counts = {topic_id: n for topic_id, n in grouped.all()}
+
+    return [
+        {**topic_to_dict(t), "post_count": counts.get(t.id, 0)}
+        for t in rows
+    ]
 
 
 async def count_posts(db, topic_id) -> int:
