@@ -1,4 +1,54 @@
+import os
+import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
+
+
+# ======================================================================================
+# `python main.py`
+#
+# This module only *defines* the app, so running it directly used to import
+# everything and exit silently. It now starts the server — and because the
+# likeliest reason someone reaches for it is that they are not in the venv, it
+# says so plainly instead of dumping a bare ModuleNotFoundError.
+#
+# The check is above the imports on purpose: everything below is a top-level
+# `from fastapi import ...`, so a check further down would run after the very
+# failure it exists to explain.
+# ======================================================================================
+
+def _fail(msg: str, *hints: str) -> None:
+    print(f"\n  {msg}\n", file=sys.stderr)
+    for h in hints:
+        print(f"    {h}", file=sys.stderr)
+    print("", file=sys.stderr)
+    sys.exit(1)
+
+
+def _preflight() -> None:
+    """Fail with an actionable message if this interpreter cannot serve."""
+    try:
+        import uvicorn  # noqa: F401
+    except ModuleNotFoundError:
+        root = Path(__file__).resolve().parent.parent
+        venv = root / ".venv"
+        exe = venv / "bin" / "python"
+        _fail(
+            "The backend's dependencies are not installed for this interpreter.",
+            f"you are running : {sys.executable}",
+            "",
+            "Use the virtualenv:",
+            f"    {exe} main.py",
+            "",
+            "or let the launcher handle it (it also starts Docker):",
+            "    python start.py",
+        )
+
+
+if __name__ == "__main__":
+    _preflight()
+
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config import get_settings
@@ -148,3 +198,23 @@ async def forum_status():
         "intake_open": not settings.forum_intake_key,
     }
 
+
+if __name__ == "__main__":
+    import uvicorn
+
+    _host = os.environ.get("BACKEND_HOST", "127.0.0.1")
+    _port = settings.backend_port
+    _reload = "--reload" in sys.argv
+    _root = Path(__file__).resolve().parent.parent
+
+    # flush=True: stdout is often a pipe here, and a server killed while
+    # starting should still have shown what it was starting.
+    print("\n  Council of Minds — backend", flush=True)
+    print(f"    provider : {settings.llm_provider}", flush=True)
+    print(f"    model    : {settings.default_model}", flush=True)
+    print(f"    api      : http://{_host}:{_port}", flush=True)
+    print(f"    health   : http://{_host}:{_port}/api/health", flush=True)
+    print("\n  The forum is opened by Electron, or directly:", flush=True)
+    print(f"    {_root / 'com_website' / 'forum.html'}\n", flush=True)
+
+    uvicorn.run("main:app", host=_host, port=_port, reload=_reload)

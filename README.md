@@ -178,6 +178,19 @@ Nothing else is required — no API key. The CLI has its own credentials.
 | `--graph` | also start Neo4j |
 | `--server` | backend only, no Docker |
 | `--container` | whole stack in Docker (loses the free models) |
+
+### Just the backend
+
+If you are already running Postgres somewhere and only want the API:
+
+```bash
+cd backend
+../.venv/bin/python main.py              # add --reload for development
+```
+
+Use the virtualenv's interpreter. With the system `python` you get a plain
+`ModuleNotFoundError: No module named 'fastapi'` — `main.py` checks for that
+and names the venv and the launcher instead of leaving you to guess.
 | `--stop` | stop the infra |
 
 ### Infrastructure only
