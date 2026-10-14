@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,7 +54,7 @@ async def create_candidate(
         return {"status": "exists", "candidate_id": str(found.id)}
 
     candidate = PromotionCandidate(
-        id=uuid.uuid4() if False else __import__("uuid").uuid4(),
+        id=uuid4(),
         chunk_id=chunk_uuid,
         reason=reason,
         trigger_query=trigger_query[:500] if trigger_query else None,

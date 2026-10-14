@@ -237,8 +237,13 @@ async def test_topic_reaches_consensus(client, stub_llm):
         topic = await get_topic(db, __import__("uuid").UUID(body["topic_id"]))
         posts = await list_posts(db, __import__("uuid").UUID(body["topic_id"]))
 
+    # The topic row the caller was handed is the one the run concluded —
+    # not a second, orphan topic. `Topic` has no author_kind (that is on Post).
+    assert str(topic.id) == body["topic_id"]
+    assert topic.status == "concluded"
+    assert topic.outcome == body["outcome"]
+
     # Moderator opening + every character spoke + closing synthesis.
-    assert topic.author_kind if False else True
     assert posts[0]["author"] == "moderator"
     assert posts[0]["stance"] == "open"
     authors = {p["author"] for p in posts}
@@ -389,3 +394,94 @@ async def test_delete_topic_cascades_posts(client, stub_llm):
         after = int(await db.scalar(
             select(func.count(Post.id)).where(Post.topic_id == tid)) or 0)
     assert after == 0, "posts orphaned after topic delete"
+
+
+async def test_streamed_topic_writes_to_the_topic_it_returned(client, stub_llm):
+    """`stream: true` must not create a second, orphan topic.
+
+    This is the default path for the UI (`forum.html`) and the API intake
+    endpoint. It hands the client a `topic_id` immediately and schedules the
+    run as a background task — so every post, the synthesis and the conclusion
+    must land on *that* topic. When `run_topic_streaming` failed to forward
+    `topic_id`, the graph created a fresh topic instead: the client's id stayed
+    empty forever and reloading the thread showed nothing.
+    """
+    from sqlalchemy import select
+    from db.postgres import async_session
+    from db.forum_models import Topic
+    from agents.forum_store import get_topic, list_posts
+
+    question = "Does the streamed path write to the topic it hands back?"
+
+    # The live database persists between runs, so compare the set of topics
+    # before and after rather than counting absolutely.
+    async def ids_for(q):
+        async with async_session() as db:
+            rows = (await db.execute(
+                select(Topic.id).where(Topic.question == q)
+            )).scalars().all()
+            return {str(r) for r in rows}
+
+    before = await ids_for(question)
+
+    resp = await client.post("/api/forum/topics", json={
+        "question": question,
+        "stream": True,
+        "max_rounds": 2,
+    })
+    assert resp.status_code == 202, resp.text
+    topic_id = resp.json()["topic_id"]
+    tid = uuid.UUID(topic_id)
+
+    # Starlette runs background tasks before the ASGI call returns, so by here
+    # the run has finished.
+    async with async_session() as db:
+        topic = await get_topic(db, tid)
+        posts = await list_posts(db, tid)
+
+    assert posts, "the streamed run wrote no posts"
+    assert all(p["topic_id"] == topic_id for p in posts), (
+        "posts landed on a different topic than the one returned to the client"
+    )
+    assert topic.status == "concluded", (
+        f"the returned topic is still {topic.status!r}; the run concluded an "
+        "orphan instead"
+    )
+    assert topic.framing and topic.outcome and topic.round_count
+
+    authors = {p["author"] for p in posts}
+    assert {"oracle", "scholar", "analyst", "historian", "sage"} <= authors
+
+    # The real assertion: this request created exactly one topic, and it is the
+    # one the client holds. A second row is the orphan.
+    created = await ids_for(question) - before
+    assert created == {topic_id}, (
+        f"one streamed question created {len(created)} topic rows "
+        f"({sorted(created)}); an orphan was created alongside {topic_id}"
+    )
+
+
+async def test_reclosing_a_concluded_topic_is_idempotent(client, stub_llm):
+    """Closing twice must not append a second closing post."""
+    from agents.forum_store import get_topic, list_posts
+    from db.postgres import async_session
+
+    resp = await client.post("/api/forum/topics", json={
+        "question": "Close me twice", "stream": False, "max_rounds": 1,
+    })
+    topic_id = resp.json()["topic_id"]
+    tid = uuid.UUID(topic_id)
+
+    async with async_session() as db:
+        before = len(await list_posts(db, tid))
+
+    second = await client.post(f"/api/forum/topics/{topic_id}/close")
+    assert second.status_code == 200, second.text
+    assert second.json()["already_concluded"] is True
+
+    async with async_session() as db:
+        after = len(await list_posts(db, tid))
+        topic = await get_topic(db, tid)
+
+    assert after == before, "re-closing appended another closing post"
+    assert topic.status == "concluded"

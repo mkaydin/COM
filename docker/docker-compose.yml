@@ -29,7 +29,7 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: com-postgres
-    restart: unless-stopped
+    restart: "no"  # Start explicitly after the project disk is mounted.
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     environment:
@@ -38,7 +38,12 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-council_dev}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+      - type: bind
+        source: ./postgres-init
+        target: /docker-entrypoint-initdb.d
+        read_only: true
+        bind:
+          create_host_path: false
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-council} -d ${POSTGRES_DB:-council}"]
       interval: 5s
@@ -49,7 +54,7 @@ services:
   chromadb:
     image: chromadb/chroma:latest
     container_name: com-chromadb
-    restart: unless-stopped
+    restart: "no"  # Start explicitly after the project disk is mounted.
     ports:
       - "${CHROMA_PORT:-8000}:8000"
     environment:
@@ -84,7 +89,7 @@ services:
   searxng:
     image: searxng/searxng:latest
     container_name: com-searxng
-    restart: unless-stopped
+    restart: "no"  # Start explicitly after the project disk is mounted.
     ports:
       # Divination is optional and 8888 collides easily, so the host port is
       # configurable. The container port never changes.
@@ -115,7 +120,11 @@ services:
     user: "0:0"
     command: ["sh", "-c", "chown -R 1000:1000 /sage_wiki /okf && echo 'permissions set'"]
     volumes:
-      - ../sage_wiki:/sage_wiki
+      - type: bind
+        source: ../sage_wiki
+        target: /sage_wiki
+        bind:
+          create_host_path: false
       - okfbundle:/okf
     restart: "no"
 
@@ -125,7 +134,7 @@ services:
       context: ..
       dockerfile: backend/Dockerfile
     container_name: com-backend
-    restart: unless-stopped
+    restart: "no"  # Start explicitly after the project disk is mounted.
     ports:
       - "${BACKEND_PORT:-8734}:8734"
     environment:
@@ -172,7 +181,11 @@ services:
     volumes:
       # Filed knowledge must survive an image rebuild. Both paths are chowned
       # to the app user by `fix-permissions` before this starts.
-      - ../sage_wiki:/sage_wiki
+      - type: bind
+        source: ../sage_wiki
+        target: /sage_wiki
+        bind:
+          create_host_path: false
       - okfbundle:/app/okf/bundles
       # Deliberately NO volume for /tmp/com-logs. A named volume is created
       # root-owned and an anonymous one too, either of which makes the
@@ -199,7 +212,7 @@ services:
       context: ..
       dockerfile: com_website/Dockerfile
     container_name: com-frontend
-    restart: unless-stopped
+    restart: "no"  # Start explicitly after the project disk is mounted.
     ports:
       - "${FRONTEND_PORT:-8080}:80"
     depends_on:
@@ -216,7 +229,7 @@ services:
     profiles: ["local"]
     image: ollama/ollama:latest
     container_name: com-ollama
-    restart: unless-stopped
+    restart: "no"  # Start explicitly after the project disk is mounted.
     ports:
       - "11434:11434"
     volumes:
@@ -253,7 +266,7 @@ services:
     profiles: ["graph"]
     image: neo4j:5-community
     container_name: com-neo4j
-    restart: unless-stopped
+    restart: "no"  # Start explicitly after the project disk is mounted.
     ports:
       - "7474:7474"
       - "7687:7687"

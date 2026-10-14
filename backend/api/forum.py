@@ -187,6 +187,12 @@ async def open_topic(body: TopicCreate, background_tasks: BackgroundTasks,
 
     mode = body.mode if body.mode in ("auto", "consensus", "diverse") else "auto"
 
+    # Resolve the round budget once, here. The graph falls back to
+    # `settings.forum_max_rounds` when it is not told, so persisting a hardcoded
+    # 2 would record a budget the run then ignores.
+    from config import get_settings
+    effective_rounds = body.max_rounds or get_settings().forum_max_rounds
+
     async with async_session() as sdb:
         topic = await create_topic(
             sdb,
@@ -196,7 +202,7 @@ async def open_topic(body: TopicCreate, background_tasks: BackgroundTasks,
             cast=cast,
             tags=body.tags,
             session_id=body.session_id,
-            max_rounds=body.max_rounds or 2,
+            max_rounds=effective_rounds,
         )
 
     logger.info("forum_topic_requested", topic_id=topic["id"], cast=cast, mode=mode)
@@ -210,13 +216,14 @@ async def open_topic(body: TopicCreate, background_tasks: BackgroundTasks,
         background_tasks.add_task(
             run_topic_streaming,
             topic["id"], body.question, cast=cast, mode=mode, tags=body.tags,
-            origin="user", session_id=body.session_id, max_rounds=body.max_rounds,
+            origin="user", session_id=body.session_id,
+            max_rounds=effective_rounds,
         )
         return {"topic_id": topic["id"], "status": "accepted", "mode": mode, "cast": cast}
 
     result = await _run_and_respond(
         topic["id"], body.question, cast=cast, mode=mode, tags=body.tags,
-        origin="user", session_id=body.session_id, max_rounds=body.max_rounds,
+        origin="user", session_id=body.session_id, max_rounds=effective_rounds,
     )
     async with async_session() as sdb:
         t = await get_topic(sdb, UUID(topic["id"]))
@@ -344,17 +351,21 @@ async def post_reply(topic_id: UUID, body: UserReply,
         await db.commit()
 
     if body.trigger_round and topic.cast:
-        background_tasks.add_task(_continue_thread, str(topic_id))
+        background_tasks.add_task(_continue_thread_locked, str(topic_id))
 
     return {"post": post, "post_count": await count_posts(db, topic_id)}
 
 
 async def _continue_thread(topic_id: str):
-    """Run one more exchange round + synthesis on a concluded/open thread."""
+    """Run one more exchange round on a concluded/open thread.
+
+    Each character sees the posts written earlier in this same round, so the
+    cast replies into a live thread rather than in parallel. Synthesis is *not*
+    run here — the caller decides whether to close (forum_graph's own loop
+    ends at the round budget and then synthesises).
+    """
     from agents.forum_characters import run_character
-    from agents.forum_store import bump_round, conclude_topic
-    from agents.forum_graph import moderator_synthesis
-    from agents import forum_signals
+    from agents.forum_store import bump_round
 
     async with async_session() as db:
         topic = await get_topic(db, UUID(topic_id))
@@ -364,11 +375,18 @@ async def _continue_thread(topic_id: str):
         question = topic.question
 
     new_posts = []
+    failed = []
     async with async_session() as db:
         for key in cast:
             so_far = await list_posts(db, UUID(topic_id))
             result = await run_character(key, question, posts=so_far, is_opening=False)
-            if not result:
+            # `run_character` reports a provider-level failure as a *truthy*
+            # dict with ok=False (see forum_characters). Checking truthiness
+            # alone would write an empty post per silent character, burying
+            # the thread and poisoning the convergence signals with
+            # zero-content clusters.
+            if not result or not result.get("ok"):
+                failed.append(key)
                 continue
             reply_to_seq = result.get("reply_to_seq")
             reply_to_id = None
@@ -387,19 +405,49 @@ async def _continue_thread(topic_id: str):
         await db.commit()
 
     logger.info("forum_thread_continued", topic_id=topic_id, posted=len(new_posts))
+    if failed:
+        logger.warning("forum_thread_partial_round", topic_id=topic_id, failed=failed)
+
+
+async def _continue_thread_locked(topic_id: str):
+    """Run `_continue_thread` under the per-topic lock.
+
+    Every entry point that starts Council work must come through here: the REST
+    reply, the reopen, and the WebSocket reply. Without it two replies in quick
+    succession run two full rounds concurrently — interleaved posts, a double
+    round bump, and two closing syntheses.
+
+    The lock is NOT reentrant, so a caller that already holds it must call
+    `_continue_thread` directly rather than this wrapper.
+    """
+    from api.forum_ws import streams  # local import: forum_ws imports this module
+
+    async with streams.lock(topic_id):
+        await _continue_thread(topic_id)
 
 
 @router.post("/topics/{topic_id}/close")
 async def close_topic(topic_id: UUID, db: AsyncSession = Depends(get_db)):
-    """Force a closing synthesis now, without waiting for the round budget."""
+    """Force a closing synthesis now, without waiting for the round budget.
+
+    Idempotent. Re-closing a concluded topic returns the synthesis it already
+    has; synthesising again would append a second closing post and rewrite the
+    outcome from a thread that has since grown.
+    """
     _forum_enabled()
     topic = await get_topic(db, topic_id)
     if topic is None:
         raise HTTPException(status_code=404, detail="Topic not found")
 
+    posts = await list_posts(db, topic_id)
+
+    if topic.status == "concluded" and topic.outcome:
+        return {"topic_id": str(topic_id), "outcome": topic.outcome,
+                "signals": topic.signals, "synthesis": topic.synthesis,
+                "post_count": len(posts), "already_concluded": True}
+
     from agents.forum_graph import moderator_synthesis
 
-    posts = await list_posts(db, topic_id)
     out = await moderator_synthesis({
         "topic_id": str(topic_id),
         "question": topic.question,
@@ -410,7 +458,7 @@ async def close_topic(topic_id: UUID, db: AsyncSession = Depends(get_db)):
     })
     return {"topic_id": str(topic_id), "outcome": out.get("outcome"),
             "signals": out.get("signals"), "synthesis": out.get("synthesis"),
-            "post_count": len(posts)}
+            "post_count": len(posts), "already_concluded": False}
 
 
 @router.post("/topics/{topic_id}/reopen", status_code=202)
@@ -425,7 +473,7 @@ async def reopen_topic(topic_id: UUID, background_tasks: BackgroundTasks,
 
     topic.status = "debating"
     await db.commit()
-    background_tasks.add_task(_continue_thread, str(topic_id))
+    background_tasks.add_task(_continue_thread_locked, str(topic_id))
     return {"topic_id": str(topic_id), "status": "debating"}
 
 

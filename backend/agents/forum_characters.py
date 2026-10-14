@@ -126,6 +126,13 @@ async def gather_context(
             tasks.append(_graph_context(query))
         elif source == "sessions":
             tasks.append(_session_context(session_id))
+        else:
+            # Fail loudly. This used to fall through silently, so a typo in a
+            # character's knowledge tuple left it reading nothing from that
+            # source while its prompt still promised the context.
+            logger.warning(
+                "forum_unknown_knowledge_source", character=character.key, source=source
+            )
 
     for coro_result in await asyncio.gather(*tasks) if tasks else []:
         if coro_result and coro_result.strip():

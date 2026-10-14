@@ -484,7 +484,7 @@ _CHARACTERS: tuple[Character, ...] = (
         model_role="ORACLE",
         temperature=0.3,
         max_tokens=3072,
-        knowledge=("okf", "rag_chunks"),
+        knowledge=("okf", "rag"),
         system_prompt=ORACLE_PROMPT,
         voice_rules=(
             "Every claim names the OKF concept it came from.",

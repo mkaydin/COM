@@ -191,54 +191,64 @@ async def _handle_user_reply(topic_id: str, ws: WebSocket, msg: dict) -> None:
 
 async def _run_continuation(topic_id: str) -> None:
     """One more exchange round after a user reply, streamed as it goes."""
-    from api.forum import _continue_thread
+    # `_continue_thread_locked` takes the per-topic lock itself. It must not be
+    # taken here as well — asyncio.Lock is not reentrant, so that deadlocks.
+    from api.forum import _continue_thread_locked
 
-    lock = streams.lock(topic_id)
-    async with lock:
-        await _continue_thread(topic_id)
+    await _continue_thread_locked(topic_id)
 
 
 async def _handle_close(topic_id: str, ws: WebSocket) -> None:
+    try:
+        async with streams.lock(topic_id):
+            await _close_locked(topic_id, ws)
+    except Exception as e:
+        logger.error("forum_ws_close_failed", topic_id=topic_id, error=str(e)[:160])
+        await ws.send_text(json.dumps({"type": "error", "message": str(e)[:200]}))
+
+
+async def _close_locked(topic_id: str, ws: WebSocket) -> None:
+    """Run the closing synthesis. Caller must hold the per-topic lock.
+
+    Closing synthesises, so it races against a round in flight exactly the way
+    two replies do — hence the same lock as `_run_continuation`.
+    """
     from uuid import UUID
 
     from db.postgres import async_session
     from agents.forum_store import get_topic
 
-    try:
-        async with async_session() as db:
-            topic = await get_topic(db, UUID(topic_id))
-            if topic is None:
-                await ws.send_text(json.dumps(
-                    {"type": "error", "message": "topic not found"}))
-                return
-            question, title = topic.question, topic.title
-            round_no = topic.round_count or 0
+    async with async_session() as db:
+        topic = await get_topic(db, UUID(topic_id))
+        if topic is None:
+            await ws.send_text(json.dumps(
+                {"type": "error", "message": "topic not found"}))
+            return
+        question, title = topic.question, topic.title
+        round_no = topic.round_count or 0
 
-        from agents.forum_graph import moderator_synthesis
+    from agents.forum_graph import moderator_synthesis
 
-        await streams.publish(topic_id, {"type": "round_started", "round": round_no + 1})
-        result = await moderator_synthesis({
-            "topic_id": topic_id,
-            "question": question,
-            "title": title,
-            "round": round_no,
-            "max_rounds": round_no + 1,
-            "forced": True,
-        })
-        await streams.publish(topic_id, {
-            "type": "synthesis",
-            "outcome": result.get("outcome"),
-            "synthesis": result.get("synthesis"),
-            "signals": result.get("signals"),
-        })
-        await streams.publish(topic_id, {
-            "type": "topic_concluded",
-            "topic_id": topic_id,
-            "outcome": result.get("outcome"),
-        })
-    except Exception as e:
-        logger.error("forum_ws_close_failed", topic_id=topic_id, error=str(e)[:160])
-        await ws.send_text(json.dumps({"type": "error", "message": str(e)[:200]}))
+    await streams.publish(topic_id, {"type": "round_started", "round": round_no + 1})
+    result = await moderator_synthesis({
+        "topic_id": topic_id,
+        "question": question,
+        "title": title,
+        "round": round_no,
+        "max_rounds": round_no + 1,
+        "forced": True,
+    })
+    await streams.publish(topic_id, {
+        "type": "synthesis",
+        "outcome": result.get("outcome"),
+        "synthesis": result.get("synthesis"),
+        "signals": result.get("signals"),
+    })
+    await streams.publish(topic_id, {
+        "type": "topic_concluded",
+        "topic_id": topic_id,
+        "outcome": result.get("outcome"),
+    })
 
 
 # ======================================================================================
@@ -309,8 +319,9 @@ async def run_topic_streaming(topic_id: str, question: str, *, cast=None, mode="
     async with lock:
         try:
             await run_topic(
-                question, cast=cast, mode=mode, tags=tags, origin=origin,
-                session_id=session_id, max_rounds=max_rounds, on_event=on_event,
+                question, topic_id=topic_id, cast=cast, mode=mode, tags=tags,
+                origin=origin, session_id=session_id, max_rounds=max_rounds,
+                on_event=on_event,
             )
         except Exception as e:
             logger.error("forum_stream_run_failed", topic_id=topic_id, error=str(e)[:160])

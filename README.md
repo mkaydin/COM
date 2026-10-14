@@ -300,12 +300,14 @@ See [docs/FORUM.md](docs/FORUM.md).
 ## Tests
 
 ```bash
-cd backend && pytest -q                                   # 325 unit tests
+cd backend && pytest -q                                   # 495 unit tests
 pytest -q -m live --run-live --allow-real-db               # + Postgres integration
 ```
 
 The live suite runs real topics end-to-end against Postgres with the LLM
-stubbed, and verifies both outcome shapes — consensus and plurality.
+stubbed, and verifies both outcome shapes — consensus and plurality. Both
+topic paths are covered: the blocking one and the streamed one, which is what
+the UI and the intake endpoint use.
 
 ---
 
@@ -321,6 +323,9 @@ stubbed, and verifies both outcome shapes — consensus and plurality.
   verdict filing continue to work unchanged.
 - Two live tests in `test_rag_retrieval.py` fail on a fresh database — they
   need a seeded corpus. They fail identically on the pre-forum commits.
+- The live suite **rewrites `backend/okf/bundles/oracle/index.md`** (the
+  promotion test creates a document and the bundle index is regenerated).
+  `git checkout` it before committing, or you will commit a test artefact.
 - `/api/health` reports `configured` and `callable` separately. A key being
   present does **not** mean a model answers; `POST /api/llm/verify` proves it.
 

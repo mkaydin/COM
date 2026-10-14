@@ -114,9 +114,25 @@ OLLAMA_ROLE_DEFAULTS: dict[str, str] = {
 }
 
 
+#: Both OpenCode transports reach the same Zen models — `opencode` over HTTP
+#: and `opencode-cli` by shelling out to the client. They differ only in how
+#: the request travels, so they share one catalogue and one set of defaults.
+OPENCODE_PROVIDERS = ("opencode", "opencode-cli")
+
+
+def uses_opencode_catalogue(provider: str) -> bool:
+    """True when `provider` is served by Zen's free-model catalogue."""
+    return (provider or "").strip() in OPENCODE_PROVIDERS
+
+
 def free_models_for(provider: str) -> list[dict]:
-    """The verified free-model list for a provider, for the setup UI."""
-    if provider != "opencode":
+    """The verified free-model list for a provider, for the setup UI.
+
+    This used to match only ``"opencode"`` exactly, so under the shipped
+    default ``LLM_PROVIDER=opencode-cli`` the setup UI listed *no* free models
+    at all — even though the CLI is precisely how you reach them.
+    """
+    if not uses_opencode_catalogue(provider):
         return []
     out = []
     for model_id, meta in OPENCODE_FREE_MODELS.items():
@@ -147,7 +163,11 @@ def default_for_role(role: str, provider: str) -> str:
     all resolve to the same character.
     """
     key = (role or "").strip().upper()
-    table = OPENCODE_ROLE_DEFAULTS if provider == "opencode" else OLLAMA_ROLE_DEFAULTS
+    table = (
+        OPENCODE_ROLE_DEFAULTS
+        if uses_opencode_catalogue(provider)
+        else OLLAMA_ROLE_DEFAULTS
+    )
     if key in table:
         return table[key]
     # Unknown role (a new character added without a default) still gets a
