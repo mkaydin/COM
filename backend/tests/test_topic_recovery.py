@@ -11,6 +11,11 @@ a successful retry clears it.
 """
 
 import pytest
+from pathlib import Path
+
+# Source files are read relative to this package, not the working
+# directory: the suite is run both from backend/ and from the repo root.
+BACKEND = Path(__file__).resolve().parents[1]
 
 from api import forum as forum_api
 from agents import forum_store
@@ -24,9 +29,8 @@ from agents import forum_store
 class TestFailedStatusIsAllowed:
     def test_patch_accepts_failed(self):
         """`failed` is a real state now; rejecting it strands the topic harder."""
-        from pathlib import Path
 
-        src = Path("api/forum.py").read_text()
+        src = (BACKEND / "api/forum.py").read_text()
         assert '"failed"' in src
         assert '("open", "debating", "concluded", "archived")' not in src, (
             "the allowed status list must include `failed`, or a failed topic "
@@ -34,9 +38,8 @@ class TestFailedStatusIsAllowed:
         )
 
     def test_topic_dict_exposes_the_error(self):
-        from pathlib import Path
 
-        src = Path("agents/forum_store.py").read_text()
+        src = (BACKEND / "agents/forum_store.py").read_text()
         assert '"error"' in src, (
             "the UI cannot explain a failed topic without the reason on it"
         )
@@ -44,9 +47,8 @@ class TestFailedStatusIsAllowed:
 
 class TestTopicErrorIsClearedOnRetry:
     def test_reply_clears_a_stale_error(self):
-        from pathlib import Path
 
-        src = Path("api/forum.py").read_text()
+        src = (BACKEND / "api/forum.py").read_text()
         # Both the reply path and the generic status patch.
         assert src.count("topic.error = None") >= 2, (
             "a retry must clear the previous failure reason, or the UI shows "
@@ -54,9 +56,8 @@ class TestTopicErrorIsClearedOnRetry:
         )
 
     def test_patch_clears_the_error_when_not_failed(self):
-        from pathlib import Path
 
-        src = Path("api/forum.py").read_text()
+        src = (BACKEND / "api/forum.py").read_text()
         assert 'if body.status != "failed":' in src
 
 
@@ -68,9 +69,8 @@ class TestTopicErrorIsClearedOnRetry:
 class TestEveryRunPathMarksFailure:
     def test_continuation_wrapper_catches(self):
         """The REST reply, the reopen and the WS reply all go through this."""
-        from pathlib import Path
 
-        src = Path("api/forum.py").read_text()
+        src = (BACKEND / "api/forum.py").read_text()
         fn = src.split("async def _continue_thread_locked")[1].split("\n@router")[0]
         assert "except Exception" in fn, (
             "_continue_thread_locked must catch; otherwise every caller that "
@@ -80,9 +80,8 @@ class TestEveryRunPathMarksFailure:
 
     def test_streaming_run_catches(self):
         """The UI and the intake endpoint both use the streaming path."""
-        from pathlib import Path
 
-        src = Path("api/forum_ws.py").read_text()
+        src = (BACKEND / "api/forum_ws.py").read_text()
         fn = src.split("async def run_topic_streaming")[1]
         assert "_mark_topic_failed" in fn
         assert '"type": "run_failed"' in fn, (
@@ -92,9 +91,8 @@ class TestEveryRunPathMarksFailure:
 
     def test_marker_uses_its_own_session(self):
         """The caller's session may be mid-transaction and broken."""
-        from pathlib import Path
 
-        fn = Path("api/forum.py").read_text().split("async def _mark_topic_failed")[1]
+        fn = (BACKEND / "api/forum.py").read_text().split("async def _mark_topic_failed")[1]
         assert "async_session()" in fn
         assert "fail_topic" in fn
         # And it must never raise: this runs inside another except block.

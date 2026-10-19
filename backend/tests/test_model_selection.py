@@ -14,9 +14,27 @@ Two things this file pins:
 """
 
 import pytest
+from pathlib import Path
 
+# Source files are read relative to this package, not the working
+# directory: the suite is run both from backend/ and from the repo root.
+BACKEND = Path(__file__).resolve().parents[1]
+
+from config import get_settings
 from llm import catalogue, discovery, embeddings, providers, roles
 from agents import registry
+
+
+@pytest.fixture(autouse=True)
+def _dummy_credentials(monkeypatch):
+    """`opencode` requires a key; these tests exercise routing, not auth.
+
+    Without this, `build_kwargs` tests fail on a clone with no `.env`. The
+    tests that are *about* a missing credential set it back to empty.
+    """
+    monkeypatch.setattr(
+        get_settings(), "opencode_api_key", "test-key-not-real", raising=False
+    )
 
 
 # ======================================================================================
@@ -229,9 +247,8 @@ class TestCallersDoNotPinTheGlobalProvider:
     """
     @pytest.mark.parametrize("module_path", ["api/llm.py", "api/agents.py", "api/forum.py"])
     def test_no_caller_pins_a_provider(self, module_path):
-        from pathlib import Path
 
-        src = Path(module_path).read_text()
+        src = (BACKEND / module_path).read_text()
         assert "all_roles(provider)" not in src, (
             f"{module_path} calls all_roles(provider), which pins every role to "
             "the global provider. Pass nothing and let each role resolve its own."
@@ -240,9 +257,8 @@ class TestCallersDoNotPinTheGlobalProvider:
 
     def test_health_resolves_per_role(self):
         """`llm.health` already does; pin it so it stays that way."""
-        from pathlib import Path
 
-        src = Path("llm/__init__.py").read_text()
+        src = (BACKEND / "llm/__init__.py").read_text()
         assert "roles.all_roles()" in src
 
 

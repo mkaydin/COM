@@ -12,6 +12,11 @@ queue into topics that would never run and reported success.
 """
 
 import pytest
+from pathlib import Path
+
+# Source files are read relative to this package, not the working
+# directory: the suite is run both from backend/ and from the repo root.
+BACKEND = Path(__file__).resolve().parents[1]
 
 from api import forum as forum_api
 from agents import forum_store
@@ -117,9 +122,8 @@ async def test_release_of_a_queued_item_is_a_no_op():
 
 class TestIntakePathsRequeue:
     def test_open_failure_releases_the_claim(self):
-        from pathlib import Path
 
-        src = Path("api/forum.py").read_text()
+        src = (BACKEND / "api/forum.py").read_text()
         fn = src.split("async def _open_intake_topic")[1].split("\nasync def ")[0]
         assert "except Exception" in fn, (
             "topic creation can fail after the claim is committed; without a "
@@ -129,18 +133,16 @@ class TestIntakePathsRequeue:
 
     def test_schedule_failure_releases_the_claim(self):
         """A topic that exists but will never run is still a lost question."""
-        from pathlib import Path
 
-        src = Path("api/forum.py").read_text()
+        src = (BACKEND / "api/forum.py").read_text()
         # Both the single-intake and the drain path schedule.
         assert src.count("forum_intake_schedule_failed") == 2
         assert src.count("await _requeue_intake(claimed[\"id\"])") >= 1
 
     def test_both_intake_entry_points_use_the_shared_helper(self):
         """One implementation, so the fix cannot drift between them."""
-        from pathlib import Path
 
-        src = Path("api/forum.py").read_text()
+        src = (BACKEND / "api/forum.py").read_text()
         assert src.count("_open_intake_topic(") == 3, (
             "both intake handlers must route through _open_intake_topic "
             "(definition + two call sites)"
@@ -149,9 +151,8 @@ class TestIntakePathsRequeue:
         assert 'origin="api", mode=opts.get("mode", "auto"),\n            cast=cast' not in src
 
     def test_requeue_helper_never_raises(self):
-        from pathlib import Path
 
-        fn = Path("api/forum.py").read_text().split("async def _requeue_intake")[1]
+        fn = (BACKEND / "api/forum.py").read_text().split("async def _requeue_intake")[1]
         fn = fn.split("\nasync def ")[0]
         assert "except Exception" in fn, (
             "_requeue_intake runs inside an except block; raising here would "
@@ -160,18 +161,16 @@ class TestIntakePathsRequeue:
 
     def test_requeue_uses_a_fresh_session(self):
         """The caller's session may be mid-transaction and broken."""
-        from pathlib import Path
 
-        fn = Path("api/forum.py").read_text().split("async def _requeue_intake")[1]
+        fn = (BACKEND / "api/forum.py").read_text().split("async def _requeue_intake")[1]
         fn = fn.split("\nasync def ")[0]
         assert "async_session()" in fn
 
 
 class TestDrainRefusesWithoutARunner:
     def test_no_longer_creates_unrunnable_topics(self):
-        from pathlib import Path
 
-        src = Path("api/forum.py").read_text()
+        src = (BACKEND / "api/forum.py").read_text()
         fn = src.split("async def drain_intake")[1].split("\n@router")[0]
         assert "if background_tasks is None:" in fn
         assert "status_code=503" in fn, (
@@ -239,9 +238,8 @@ class TestChromaFailureModes:
 class TestDetachedAttributeAccess:
     def test_cast_read_inside_the_session_block(self):
         """`topic.cast` after the block only worked by `expire_on_commit=False`."""
-        from pathlib import Path
 
-        src = Path("api/forum_ws.py").read_text()
+        src = (BACKEND / "api/forum_ws.py").read_text()
         fn = src.split("async def _handle_user_reply")[1].split("\nasync def ")[0]
 
         session_end = fn.index("await streams.publish(topic_id, {\"type\": \"post_created\"")

@@ -241,6 +241,11 @@ class TestScripts:
         )
 
     def test_electron_is_installed(self):
+        # A fresh clone has no node_modules — that is an uninstalled
+        # dependency, not a broken repo, so it skips. Once node_modules exists
+        # a missing electron *is* a real problem and still fails.
+        if not (DESKTOP / "node_modules").is_dir():
+            pytest.skip("desktop dependencies not installed — run `npm install`")
         assert (DESKTOP / "node_modules" / "electron").exists() or (
             DESKTOP / "node_modules" / "electron" / "dist" / "electron"
         ).exists()

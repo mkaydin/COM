@@ -19,6 +19,19 @@ def _clean_overrides():
     roles._reset_cache()
 
 
+@pytest.fixture(autouse=True)
+def _dummy_credentials(monkeypatch):
+    """Most tests here exercise kwarg construction, not authentication.
+
+    `opencode` requires a key, so without this a fresh clone — no `.env` —
+    fails five tests whose subject is unrelated to credentials. The one test
+    that *is* about a missing key sets it back to empty explicitly.
+    """
+    monkeypatch.setattr(
+        get_settings(), "opencode_api_key", "test-key-not-real", raising=False
+    )
+
+
 class TestProviderResolution:
     def test_default_provider_is_the_cli(self):
         """The API refuses free models for standalone clients, so the CLI is

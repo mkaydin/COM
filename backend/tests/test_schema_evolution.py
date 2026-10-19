@@ -14,6 +14,11 @@ These tests pin the two mechanisms that prevent a repeat:
 """
 
 import pytest
+from pathlib import Path
+
+# Source files are read relative to this package, not the working
+# directory: the suite is run both from backend/ and from the repo root.
+BACKEND = Path(__file__).resolve().parents[1]
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -202,18 +207,16 @@ class TestHealthReportsAnUnusableDatabase:
     """
 
     def test_health_asks_about_the_schema_not_just_the_socket(self):
-        from pathlib import Path
 
-        src = Path("main.py").read_text()
+        src = (BACKEND / "main.py").read_text()
         assert "information_schema.tables" in src, (
             "health must check that the core tables exist, not only that "
             "Postgres answers SELECT 1"
         )
 
     def test_startup_failure_is_carried_on_app_state(self):
-        from pathlib import Path
 
-        src = Path("main.py").read_text()
+        src = (BACKEND / "main.py").read_text()
         assert "app.state.db_error" in src
         assert "startup_error" in src, (
             "a failed init_db must be visible on /api/health, not only in the log"
@@ -357,10 +360,9 @@ def test_migrations_cover_every_model_table():
 
     Cheap static check: the migration chain must mention each forum table.
     """
-    from pathlib import Path
 
     combined = "\n".join(
-        p.read_text() for p in Path("db/migrations/versions").glob("*.py")
+        p.read_text() for p in (BACKEND / "db/migrations/versions").glob("*.py")
     )
     for table in ("llm_roles", "topics", "posts", "topic_intake"):
         assert f'"{table}"' in combined, f"{table} has no alembic revision"

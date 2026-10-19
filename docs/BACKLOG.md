@@ -87,6 +87,25 @@ blocking Neo4j call on the event loop · **32%/92% silent embedding truncation**
   unit coverage.** This is why four defects shipped together.
   *(forum.py and forum_ws.py now have 21 tests.)*
 
+- [x] **Q7. The suite only passed from `backend/`, and only with a real
+  `.env`.** Found by checking the commit out into a clean worktree and running
+  it there — not by reading the tests.
+
+  Twenty-eight tests read source files as `Path("api/forum.py")`, so they
+  resolved only when the working directory happened to be `backend/`. They now
+  use `BACKEND = Path(__file__).resolve().parents[1]`, the convention the rest
+  of the suite already followed.
+
+  Five more (`test_provider_registry`, `test_model_selection`) called
+  `build_kwargs(provider=providers.get("opencode"))`, which requires an API key.
+  Their subject is kwarg construction, not authentication, so a fresh clone with
+  no `.env` failed them for an unrelated reason. An autouse fixture supplies a
+  dummy key; the tests that *are* about a missing credential set it back to
+  empty explicitly.
+
+  Verified: 614 pass from the repo root, from `backend/`, and with `.env`
+  removed.
+
 - [ ] **Q3. Ten routers still untested:** `websocket`, `deliberations`,
   `documents`, `verdicts`, `divination`, `wiki`, `okf`, `sessions`, `agents`,
   `rag`, `llm`.
