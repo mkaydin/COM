@@ -48,20 +48,26 @@ _st_model = None
 
 
 def _get_embedder():
-    global _st_model
-    if _st_model is None:
-        from sentence_transformers import SentenceTransformer
-        _st_model = SentenceTransformer("all-MiniLM-L6-v2")
-    return _st_model
+    """The loaded sentence-transformer, for callers that need the object.
+
+    Prefer `llm.embeddings.embed()` — this returns the model itself and so
+    bypasses the selectable backend. Kept because `rag.retrieval` uses it as a
+    last resort when the async path is unavailable.
+    """
+    from llm.embeddings import _get_local_model
+
+    return _get_local_model()
 
 
 def _embed(texts: list[str]) -> list[list[float]]:
-    """Embed a batch of texts → list of 384-dim vectors."""
-    if not texts:
-        return []
-    model = _get_embedder()
-    vectors = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
-    return [v.tolist() for v in vectors]
+    """Embed a batch of texts → list of vectors.
+
+    Blocking: the encode is CPU-bound and loads the model on first use. Callers
+    must be in a thread (`asyncio.to_thread`); `llm.embeddings.embed` does that.
+    """
+    from llm.embeddings import embed_sync
+
+    return embed_sync(texts)
 
 
 def _content_hash(text: str) -> str:

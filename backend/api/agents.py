@@ -39,11 +39,11 @@ def _agent_cards() -> list[dict]:
     Built from the registry rather than a literal list, so a new character
     appears here automatically.
     """
-    from llm import providers, roles
+    from llm import roles
 
     try:
-        provider = providers.get()
-        bindings = {r["role"]: r["model"] for r in roles.all_roles(provider)}
+        # No provider argument: each character resolves its own.
+        bindings = {r["role"]: r["model"] for r in roles.all_roles()}
     except Exception:
         bindings = {}
 

@@ -19,9 +19,14 @@ what LiteLLM's `openai/` prefix speaks):
                                many calls with large grounded context.
 * ``mimo-v2.6-flash-free``  — used at high temperature for the Sage's analogy
                                and ethics work.
-* ``ling-3.1-flash-free`` / ``step-5-preview-free`` / ``cat-jam-free`` /
-  ``space-bunny-free`` — reserve cast for the Analyst and Historian, and for
-  spreading rate-limit pressure across distinct endpoints.
+* ``glm-5.3-flash-free`` / ``deepseek-v4.1-flash-free`` — reserve cast for the
+  Analyst and Historian, and for spreading rate-limit pressure across distinct
+  endpoints. These replaced ``ling-3.1-flash-free`` and
+  ``step-5-preview-free``, which rotated out of the free tier: they were still
+  the recorded defaults here while `opencode models` stopped listing them, so
+  those two characters could not answer at all. The free tier turns over, so
+  `GET /api/llm/discovery` is the authority on what exists now and this file is
+  only the curated snapshot.
 
 Deliberately excluded from the chat-completions defaults:
 
@@ -44,8 +49,8 @@ OPENCODE_ROLE_DEFAULTS: dict[str, str] = {
     "ORACLE": "longcat-2.5-preview-free",
     "SCHOLAR": "nemotron-3.5-lightning-free",
     "SAGE": "mimo-v2.6-flash-free",
-    "ANALYST": "ling-3.1-flash-free",
-    "HISTORIAN": "step-5-preview-free",
+    "ANALYST": "glm-5.3-flash-free",
+    "HISTORIAN": "deepseek-v4.1-flash-free",
 }
 
 #: Verified free models usable over `/v1/chat/completions`.
@@ -70,9 +75,8 @@ OPENCODE_FREE_MODELS: dict[str, dict] = {
         "roles": ["SAGE"],
         "notes": "high-temperature work",
     },
-    "ling-3.1-flash-free": {"name": "Ling 3.1 Flash Free", "roles": ["ANALYST"]},
-    "step-5-preview-free": {"name": "Step 5 Preview Free", "roles": ["HISTORIAN"]},
-    "cat-jam-free": {"name": "Cat Jam Free", "roles": []},
+    "glm-5.3-flash-free": {"name": "GLM 5.3 Flash Free", "roles": ["ANALYST"]},
+    "deepseek-v4.1-flash-free": {"name": "DeepSeek V4.1 Flash Free", "roles": ["HISTORIAN"]},
     "space-bunny-free": {"name": "Space Bunny Free", "roles": []},
 }
 

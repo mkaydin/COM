@@ -100,11 +100,16 @@ def _bundle_fingerprint(root: Path) -> float:
 
 
 def _get_st_model():
-    global _st_model
-    if _st_model is None:
-        from sentence_transformers import SentenceTransformer
-        _st_model = SentenceTransformer("all-MiniLM-L6-v2")
-    return _st_model
+    """Deprecated. Kept only so a stale import fails loudly rather than
+    silently returning a model from the wrong backend.
+
+    This used to hold a second hardcoded `SentenceTransformer("all-MiniLM-L6-v2")`,
+    so the same weights were resident twice. `llm.embeddings` owns the single
+    loaded instance now; call `llm.embeddings.embed_sync` instead.
+    """
+    from llm.embeddings import _get_local_model
+
+    return _get_local_model()
 
 
 def _concept_text(c: dict[str, Any]) -> str:
@@ -123,9 +128,11 @@ def _ensure_index(bundle_root: Path) -> None:
     ):
         return
     concepts = list_concepts(root)
-    model = _get_st_model()
+    # Through the shared embedder so the user's selection applies here too.
+    from llm.embeddings import embed_sync
+
     texts = [_concept_text(c) for c in concepts] or ["empty"]
-    emb = model.encode(texts, normalize_embeddings=True)
+    emb = embed_sync(texts)
     _concept_cache.update(
         root=root,
         ids=[c["id"] for c in concepts],
@@ -156,9 +163,17 @@ def retrieve_relevant(
     if cache["embeddings"] is None or len(cache["ids"]) == 0:
         return []
 
-    model = _get_st_model()
-    q_emb = model.encode([query], normalize_embeddings=True)
-    q_emb = np.asarray(q_emb, dtype=np.float32)[0]
+    # The query must come from the same backend that built the index above, or
+    # the two vectors are not comparable. Reaching past `llm.embeddings` for
+    # the raw sentence-transformer did exactly that whenever a non-local
+    # backend was selected.
+    try:
+        from llm.embeddings import embed_sync
+
+        q_emb = np.asarray(embed_sync([query])[0], dtype=np.float32)
+    except Exception:
+        return _keyword_retrieve(query, root, top_k)
+
     scores = cache["embeddings"] @ q_emb
     order = np.argsort(-scores)[:top_k]
     concepts = cache["concepts"]

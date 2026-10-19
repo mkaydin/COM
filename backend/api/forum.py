@@ -141,11 +141,11 @@ async def _run_and_respond(topic_id: str, question: str, *, cast, mode, tags, or
 @router.get("/cast")
 async def get_cast():
     """Every registered character, with its live model binding."""
-    from llm import roles, providers
+    from llm import roles
 
     try:
-        provider = providers.get()
-        bindings = {r["role"]: r for r in roles.all_roles(provider)}
+        # No provider argument: each character resolves its own.
+        bindings = {r["role"]: r for r in roles.all_roles()}
     except Exception:
         bindings = {}
 
@@ -295,9 +295,12 @@ async def patch_topic(topic_id: UUID, body: TopicPatch, db: AsyncSession = Depen
     if body.tags is not None:
         topic.tags = body.tags
     if body.status is not None:
-        if body.status not in ("open", "debating", "concluded", "archived"):
+        if body.status not in ("open", "debating", "concluded", "archived", "failed"):
             raise HTTPException(status_code=400, detail="invalid status")
         topic.status = body.status
+        # A manual status change is a recovery; drop the stale failure reason.
+        if body.status != "failed":
+            topic.error = None
 
     await db.commit()
     await db.refresh(topic)
@@ -348,6 +351,8 @@ async def post_reply(topic_id: UUID, body: UserReply,
 
     if topic.status == "open":
         topic.status = "debating"
+        # A reply on a previously-failed topic is a retry; drop the stale reason.
+        topic.error = None
         await db.commit()
 
     if body.trigger_round and topic.cast:
@@ -423,7 +428,30 @@ async def _continue_thread_locked(topic_id: str):
     from api.forum_ws import streams  # local import: forum_ws imports this module
 
     async with streams.lock(topic_id):
-        await _continue_thread(topic_id)
+        try:
+            await _continue_thread(topic_id)
+        except Exception as e:
+            # Without this the topic stays `debating` forever: the callers set
+            # that status before scheduling, and nothing was scheduled to change
+            # it back.
+            logger.error("forum_continuation_failed", topic_id=topic_id, error=str(e)[:200])
+            await _mark_topic_failed(topic_id, e)
+
+
+async def _mark_topic_failed(topic_id: str, exc: BaseException) -> None:
+    """Record a dead run on the topic, in its own session.
+
+    Uses a fresh session because the caller's may be mid-transaction and
+    broken — reusing it would either roll back the failure record or raise a
+    second error that masks the first.
+    """
+    from agents.forum_store import fail_topic
+
+    try:
+        async with async_session() as sdb:
+            await fail_topic(sdb, topic_id, f"{type(exc).__name__}: {exc}")
+    except Exception as e:  # pragma: no cover - defensive
+        logger.error("forum_fail_record_failed", topic_id=topic_id, error=str(e)[:200])
 
 
 @router.post("/topics/{topic_id}/close")
@@ -519,32 +547,88 @@ async def intake_question(
         except (KeyError, ValueError):
             cast = []
 
-    topic = await create_topic(
-        db,
-        claimed["question"],
-        origin="api",
-        mode=opts.get("mode", "auto"),
-        cast=cast,
-        tags=opts.get("tags") or [],
-        source_meta={
-            "source": claimed.get("source"),
-            "intake_id": claimed["id"],
-            "payload": claimed.get("payload"),
-        },
-    )
-    await link_intake_to_topic(db, UUID(claimed["id"]), UUID(topic["id"]))
+    topic = await _open_intake_topic(db, claimed, cast, opts)
+    if topic is None:
+        return {"intake_id": claimed["id"], "status": "requeued",
+                "hint": "Could not open a topic; the question is back in the queue."}
 
     # Same live-streaming path as a UI-opened topic, so an API-fed question
     # is watchable over the WebSocket while it runs.
     from api.forum_ws import run_topic_streaming
 
-    background_tasks.add_task(
-        run_topic_streaming, topic["id"], claimed["question"], cast=cast,
-        mode=opts.get("mode", "auto"), tags=opts.get("tags") or [],
-        origin="api", session_id=None, max_rounds=opts.get("max_rounds"),
-    )
+    try:
+        background_tasks.add_task(
+            run_topic_streaming, topic["id"], claimed["question"], cast=cast,
+            mode=opts.get("mode", "auto"), tags=opts.get("tags") or [],
+            origin="api", session_id=None, max_rounds=opts.get("max_rounds"),
+        )
+    except Exception as e:
+        # The question is claimed and has a topic but nothing will run it.
+        # Hand it back so a later drain picks it up.
+        logger.error("forum_intake_schedule_failed",
+                     intake_id=claimed["id"], topic_id=topic["id"], error=str(e)[:200])
+        await _requeue_intake(claimed["id"])
+        await _fail_orphan_topic(topic["id"], e)
+        return {"intake_id": claimed["id"], "status": "requeued",
+                "hint": "Could not schedule the run; the question is back in the queue."}
 
     return {"intake_id": claimed["id"], "topic_id": topic["id"], "status": "opening"}
+
+
+async def _open_intake_topic(db, claimed, cast, opts):
+    """Create the topic for a claimed intake item, or release it and return None.
+
+    `claim_intake` has already committed `status='opened'` by this point, so
+    every failure between here and the background task leaves the question
+    stranded as `opened` with no topic. Returning None after requeueing is what
+    keeps an API-submitted question from disappearing.
+    """
+    try:
+        topic = await create_topic(
+            db,
+            claimed["question"],
+            origin="api",
+            mode=opts.get("mode", "auto"),
+            cast=cast,
+            tags=opts.get("tags") or [],
+            source_meta={
+                "source": claimed.get("source"),
+                "intake_id": claimed["id"],
+                "payload": claimed.get("payload"),
+            },
+        )
+        await link_intake_to_topic(db, UUID(claimed["id"]), UUID(topic["id"]))
+        return topic
+    except Exception as e:
+        logger.error(
+            "forum_intake_open_failed",
+            intake_id=claimed.get("id"),
+            error=str(e)[:200],
+            hint="Releasing the intake item so the question is not lost.",
+        )
+        await _requeue_intake(claimed["id"])
+        return None
+
+
+async def _requeue_intake(intake_id: str) -> None:
+    """Put a claimed intake item back in the queue. Never raises."""
+    from agents.forum_store import release_intake
+
+    try:
+        async with async_session() as sdb:
+            await release_intake(sdb, UUID(intake_id))
+    except Exception as e:  # pragma: no cover - defensive
+        logger.error("forum_intake_release_failed",
+                     intake_id=intake_id, error=str(e)[:200])
+
+
+async def _fail_orphan_topic(topic_id: str, exc: BaseException) -> None:
+    """A topic that exists but will never run must not look runnable."""
+    try:
+        await _mark_topic_failed(topic_id, exc)
+    except Exception as e:  # pragma: no cover - defensive
+        logger.error("forum_orphan_mark_failed",
+                     topic_id=topic_id, error=str(e)[:200])
 
 
 @router.get("/intake")
@@ -565,6 +649,17 @@ async def drain_intake(limit: int = Query(default=5, ge=1, le=50),
     """Open up to `limit` queued questions as topics."""
     _require_intake_key(x_com_key)
 
+    # FastAPI always injects BackgroundTasks, but the old `is not None` guard
+    # meant that if it ever were None this endpoint would claim every question,
+    # create a topic for each, and schedule nothing — the queue drains into
+    # topics that sit `open` forever with no run and no error. Refusing is the
+    # only safe reading: the questions stay queued.
+    if background_tasks is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Draining requires a background task runner; nothing was claimed.",
+        )
+
     queued = await list_intake(db, status="queued", limit=limit)
     opened = []
     for item in queued:
@@ -578,21 +673,26 @@ async def drain_intake(limit: int = Query(default=5, ge=1, le=50),
                 cast = registry.validate_cast(opts["cast"])
             except (KeyError, ValueError):
                 cast = []
-        topic = await create_topic(
-            db, claimed["question"], origin="api", mode=opts.get("mode", "auto"),
-            cast=cast, tags=opts.get("tags") or [],
-            source_meta={"source": claimed.get("source"), "intake_id": claimed["id"],
-                         "payload": claimed.get("payload")},
-        )
-        await link_intake_to_topic(db, UUID(claimed["id"]), UUID(topic["id"]))
-        if background_tasks is not None:
-            from api.forum_ws import run_topic_streaming
 
+        topic = await _open_intake_topic(db, claimed, cast, opts)
+        if topic is None:
+            continue
+
+        from api.forum_ws import run_topic_streaming
+
+        try:
             background_tasks.add_task(
                 run_topic_streaming, topic["id"], claimed["question"], cast=cast,
                 mode=opts.get("mode", "auto"), tags=opts.get("tags") or [],
                 origin="api", session_id=None, max_rounds=opts.get("max_rounds"),
             )
+        except Exception as e:
+            logger.error("forum_intake_schedule_failed",
+                         intake_id=claimed["id"], topic_id=topic["id"], error=str(e)[:200])
+            await _requeue_intake(claimed["id"])
+            await _fail_orphan_topic(topic["id"], e)
+            continue
+
         opened.append({"intake_id": claimed["id"], "topic_id": topic["id"]})
 
     logger.info("forum_intake_drained", opened=len(opened))

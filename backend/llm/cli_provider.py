@@ -91,9 +91,21 @@ def container_hint() -> Optional[str]:
 
 
 def to_cli_model(model: str) -> str:
-    """`big-pickle` -> `opencode/big-pickle`."""
-    bare = (model or "").split("/", 1)[-1]
-    return bare if bare.startswith(CLI_MODEL_PREFIX) else f"{CLI_MODEL_PREFIX}{bare}"
+    """`big-pickle` -> `opencode/big-pickle`.
+
+    An id that is already qualified is returned untouched. That covers both
+    `opencode/big-pickle` (the same model, written out) and
+    `openrouter/anthropic/claude-sonnet-5` — which the previous
+    `split("/", 1)[-1]` rewrote into `opencode/anthropic/claude-sonnet-5`, a
+    model that does not exist. The catalogue is mostly qualified ids, so this
+    silently broke every non-Zen entry.
+    """
+    mid = (model or "").strip()
+    if not mid:
+        return f"{CLI_MODEL_PREFIX}"
+    if "/" in mid:
+        return mid
+    return f"{CLI_MODEL_PREFIX}{mid}"
 
 
 def flatten_messages(messages: list[dict]) -> str:

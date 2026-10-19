@@ -22,8 +22,16 @@ class VerdictCreate(BaseModel):
 
 @router.post("", status_code=201)
 async def submit_verdict(body: VerdictCreate, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+    try:
+        deliberation_uuid = UUID(body.deliberation_id)
+    except (ValueError, AttributeError, TypeError) as e:
+        # A malformed id is the caller's mistake, not a server fault.
+        raise HTTPException(
+            status_code=400, detail="deliberation_id must be a UUID"
+        ) from e
+
     result = await db.execute(
-        select(Deliberation).where(Deliberation.id == UUID(body.deliberation_id))
+        select(Deliberation).where(Deliberation.id == deliberation_uuid)
     )
     deliberation = result.scalar_one_or_none()
     if not deliberation:

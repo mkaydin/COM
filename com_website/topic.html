@@ -3,41 +3,16 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>Council of Minds — Topic</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700;900&display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<!-- com:local-css -->
+<!-- Generated: desktop/build-css.js + desktop/fetch-fonts.js.
+     Replacing the CDN tags is what lets the app render offline. -->
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="tailwind.topic.css">
+<!-- /com:local-css -->
+<script src="vendor/marked.min.js"></script>
+<script src="vendor/purify.min.js"></script>
 <link href="styles.css" rel="stylesheet"/>
-<script>
-  tailwind.config = {
-    darkMode: "class",
-    theme: {
-      extend: {
-        colors: {
-          "obsidian": "#1a1a2e","background": "#141315","surface": "#141315","surface-dim": "#141315",
-          "surface-container": "#201f21","surface-container-low": "#1c1b1d","surface-container-lowest": "#0e0e10",
-          "surface-container-high": "#2a2a2b","surface-container-highest": "#353436","surface-variant": "#353436",
-          "surface-bright": "#3a393b","surface-tint": "#c6c4df","parchment": "#e8d5b7","on-surface": "#e5e1e3",
-          "on-surface-variant": "#c8c5cd","on-background": "#e5e1e3","runed-gold": "#ffd700","spectral-blue": "#87ceeb",
-          "ember-glow": "#ff6b6b","mystic-purple": "#9b59b6","warning": "#f39c12","success": "#27ae60",
-          "error": "#c0392b","neutral-gray": "#7f8c8d","outline": "#929097","outline-variant": "#47464c"
-        },
-        fontFamily: {
-          "pixel-display": ["VT323","monospace"], "pixel-heading": ["VT323","monospace"],
-          "pixel-body": ["VT323","monospace"], "pixel-small": ["VT323","monospace"]
-        },
-        fontSize: {
-          "pixel-display": ["32px",{lineHeight:"1.2",letterSpacing:"1px",fontWeight:"700"}],
-          "pixel-heading": ["24px",{lineHeight:"1.3",letterSpacing:"0.5px",fontWeight:"700"}],
-          "pixel-body": ["18px",{lineHeight:"1.6",letterSpacing:"0.5px",fontWeight:"400"}],
-          "pixel-small": ["14px",{lineHeight:"1.5",letterSpacing:"0px",fontWeight:"400"}]
-        }
-      }
-    }
-  };
-</script>
+
 <style>
   .custom-scrollbar::-webkit-scrollbar { width: 8px; }
   .custom-scrollbar::-webkit-scrollbar-track { background: #1c1b1d; }
@@ -122,9 +97,11 @@ const STANCE_META = {
 function esc(t) { const d = document.createElement('div'); d.textContent = t ?? ''; return d.innerHTML; }
 function md(src) {
   if (!src) return '';
+  // Fail closed — see the same function in council_chamber.html. Returning
+  // `marked`'s raw HTML when DOMPurify is missing renders unfiltered markup.
+  if (!window.marked || !window.DOMPurify) return esc(src);
   try {
-    const html = window.marked ? marked.parse(String(src)) : esc(src);
-    return window.DOMPurify ? DOMPurify.sanitize(html) : html;
+    return DOMPurify.sanitize(marked.parse(String(src)));
   } catch { return esc(src); }
 }
 function charOf(key) { return CAST.find(c => c.key === key) || null; }

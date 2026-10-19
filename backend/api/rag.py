@@ -52,9 +52,32 @@ class SearchRequest(BaseModel):
 
 @router.post("/search")
 async def rag_search(req: SearchRequest, db: AsyncSession = Depends(get_db)):
-    """Unified retrieval search (OKF → Wiki → vector fallback)."""
+    """Unified retrieval search (OKF → Wiki → vector fallback).
+
+    Degrades instead of 500ing when the embedder is unavailable — an offline
+    first boot cannot download the model, and every caller of `retrieve`
+    treats a missing vector tier as "no raw results". The agents already
+    handle that; this endpoint is the one that did not.
+    """
     from rag.retrieval import retrieve
-    result = await retrieve(db, req.query, top_k=req.top_k)
+    try:
+        result = await retrieve(db, req.query, top_k=req.top_k)
+    except Exception as e:
+        from llm import diagnose_call_error
+
+        # `diagnose_call_error` takes the message, not the exception.
+        hint = diagnose_call_error(str(e))
+        logger.warning("rag_search_degraded", error=str(e)[:200])
+        return {
+            "query": req.query,
+            "curated": [],
+            "raw": [],
+            "all": [],
+            "context": "",
+            "degraded": True,
+            "reason": hint or str(e)[:200],
+            "stats": {"curated": 0, "raw": 0},
+        }
     return result
 
 

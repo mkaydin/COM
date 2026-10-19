@@ -77,11 +77,18 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     logger.info("backend_starting", port=settings.backend_port, provider=settings.llm_provider)
 
+    # Recorded rather than raised: the process must still start so the UI can
+    # load and *show* the problem. Silently continuing is what this used to do,
+    # which left a server that answered 200 on /api/health while every real
+    # request 500'd on a missing table.
+    db_error: str | None = None
     try:
         await init_db()
-        logger.info("database_initialized")
     except Exception as e:
-        logger.error("database_init_failed", error=str(e))
+        db_error = str(e)
+        logger.error("database_init_failed", error=db_error[:400])
+
+    app.state.db_error = db_error
 
     # Load persisted role -> model overrides so a per-character model choice
     # survives a restart. Non-fatal: env config still applies without it.
@@ -90,6 +97,16 @@ async def lifespan(app: FastAPI):
         await llm_roles.load_overrides()
     except Exception as e:
         logger.warning("llm_roles_load_failed", error=str(e))
+
+    if db_error:
+        logger.error(
+            "backend_running_without_database",
+            hint=(
+                "The API is up so this can be reported, but the database schema "
+                "is not usable. Check POSTGRES_URL, that the server is "
+                "reachable, and that pgvector is installed."
+            ),
+        )
 
     yield
 
@@ -165,6 +182,41 @@ async def health():
     except Exception as e:
         checks["postgres_ok"] = False
         checks["postgres_error"] = str(e)
+
+    # `SELECT 1` only proves the socket is open. A database that is reachable
+    # but has no schema passes that check and then 500s on every real request,
+    # so the table itself is what gets asked about.
+    if checks.get("postgres_ok"):
+        try:
+            from db.postgres import engine
+            from sqlalchemy import text
+
+            async with engine.connect() as conn:
+                present = await conn.execute(text(
+                    "SELECT count(*) FROM information_schema.tables "
+                    "WHERE table_schema = 'public' AND table_name = ANY(:names)"
+                ), {"names": ["topics", "posts", "rag_chunks", "llm_roles"]})
+                found = present.scalar_one()
+            checks["schema_ok"] = found == 4
+            checks["schema_tables_found"] = int(found)
+            if found != 4:
+                checks["schema_hint"] = (
+                    f"{4 - int(found)} core table(s) missing. The database is "
+                    "reachable but the schema was never created — check "
+                    "pgvector, since rag_chunks.embedding is a Vector(384) "
+                    "column that cannot be created without the extension."
+                )
+        except Exception as e:
+            checks["schema_ok"] = False
+            checks["schema_error"] = str(e)[:300]
+
+    # Anything that went wrong during startup is reported here rather than only
+    # in the log, so a client can refuse to use the API instead of failing
+    # request by request.
+    startup_error = getattr(app.state, "db_error", None)
+    if startup_error:
+        checks["startup_error"] = startup_error[:400]
+        checks["status"] = "degraded"
 
     return checks
 

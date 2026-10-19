@@ -1,7 +1,7 @@
 {
   "name": "com-council-of-minds",
   "version": "1.0.0",
-  "description": "Multi-agent AI deliberation system \u2014 Council of Minds",
+  "description": "Multi-agent AI deliberation system — Council of Minds",
   "homepage": "https://github.com/mkaydin/COM",
   "author": {
     "name": "mkaydin",
@@ -11,6 +11,10 @@
   "scripts": {
     "start": "electron .",
     "dev": "NODE_ENV=dev electron .",
+    "build:css": "node build-css.js",
+    "build:icons": "node build-icons.js",
+    "build:fonts": "node fetch-fonts.js --from-dom",
+    "build:web": "npm run build:css && npm run build:icons && npm run build:fonts",
     "build:linux": "electron-builder --linux",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",
@@ -69,7 +73,8 @@
   },
   "devDependencies": {
     "electron": "^33.0.0",
-    "electron-builder": "^25.0.0"
+    "electron-builder": "^25.0.0",
+    "tailwindcss": "^3.4.17"
   },
   "dependencies": {
     "electron-store": "^8.2.0"

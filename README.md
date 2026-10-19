@@ -115,8 +115,8 @@ Five characters, each with its own knowledge, its own model, and its own rules.
 |-----------|-----------|-----------|----------------------|
 | **Oracle** | Seeker of Truth | OKF knowledge bundle + raw RAG | `longcat-2.5-preview-free` |
 | **Scholar** | Keeper of Lore | vector RAG, documents, archive | `nemotron-3.5-lightning-free` |
-| **Analyst** | Weaver of Connections | OKF + graph traversal | `ling-3.1-flash-free` |
-| **Historian** | Keeper of Time | wiki, prior sessions, OKF | `step-5-preview-free` |
+| **Analyst** | Weaver of Connections | OKF + graph traversal | `glm-5.3-flash-free` |
+| **Historian** | Keeper of Time | wiki, prior sessions, OKF | `deepseek-v4.1-flash-free` |
 | **Sage** | Voice of Intuition | wiki | `mimo-v2.6-flash-free` |
 | **Moderator** | Master of Rules | the whole thread | `big-pickle` |
 
@@ -125,7 +125,64 @@ Five characters, each with its own knowledge, its own model, and its own rules.
 > five fonts. See `backend/agents/registry.py`.
 
 Every binding is overridable per character, at runtime, from
-**`/llm_settings.html`** or `POST /api/llm/roles`.
+**`/models.html`** or `POST /api/llm/roles`.
+
+## Choosing models
+
+`models.html` is the model picker. Each character carries **a provider and a
+model**, so the cast can be split across backends — the Oracle on a local
+Ollama model while the Moderator keeps a free Zen one:
+
+```bash
+curl -X POST http://localhost:8734/api/llm/roles \
+  -H 'Content-Type: application/json' \
+  -d '{"role":"ORACLE","model_id":"qwen3:4b","provider":"ollama"}'
+```
+
+Omit `provider` to pin the model but leave the character on the globally
+active provider. Resolution order is runtime override → `.env` → built-in
+default, and an unknown provider is reported rather than quietly falling back.
+
+| endpoint | what it gives |
+|----------|---------------|
+| `GET /api/llm/discovery` | every model each provider can serve **now** — `opencode models` for Zen (600+, embedding models included), `/api/tags` for Ollama |
+| `GET/POST /api/llm/embedding` | the embedding backend and model |
+| `POST /api/llm/embedding/test` | embeds a probe and reports the vector width |
+| `POST /api/llm/test` | sends a real completion to prove a model answers |
+
+**Embeddings are one global choice**, shared by retrieval, the OKF bundle and
+ingestion. Four backends: `ollama` (recommended), `local`
+(sentence-transformers), and the two OpenCode transports.
+
+The default is **`ollama` + `qwen3-embedding:0.6b`**:
+
+```bash
+ollama pull qwen3-embedding:0.6b
+```
+
+It has a 32k window, so nothing is truncated, and its Matryoshka head emits
+exactly the **384 dimensions** the vector stores use — so it fits the existing
+schema with no migration. `POST /api/llm/embedding/test` confirms the width.
+
+> **Do not go back to `local` / `all-MiniLM-L6-v2` casually.** Its window is 256
+> tokens and `rag.chunker` emits 300–500 token chunks, so it was silently
+> discarding **32% of the OKF bundle and 92% of the wiki** — the encode just
+> returns a shorter vector, nothing raises. `llm.embeddings` now warns when it
+> loads a model whose window is shorter than the chunk size.
+
+> **The vector stores are 384-dimensional.** A model of another width is
+> *folded* to 384 where it supports that (`dimensions` is sent), but a
+> fixed-width model that cannot be (`bge-m3`, `nv-embed`) will not fit.
+> **Changing the embedding model invalidates every stored vector** — the new
+> model lives in a different vector space, so stored chunks must be re-embedded.
+> There is no re-embed command yet.
+
+> The free catalogue turns over. `ling-3.1-flash-free` and
+> `step-5-preview-free` rotated out of Zen's free tier while still being the
+> recorded defaults, which left the Analyst and Historian unable to answer;
+> they are now `glm-5.3-flash-free` and `deepseek-v4.1-flash-free`.
+> `GET /api/llm/discovery` is the authority on what exists — `llm/catalogue.py`
+> is only the curated snapshot.
 
 ---
 
@@ -163,6 +220,26 @@ command. The logs are at `~/.config/com-council-of-minds/logs/electron.log`.
 > The backend is launched with the interpreter that can actually import
 > `uvicorn` — the repo's `.venv`, in practice. If none can, the app tells you
 > rather than crash-looping behind a window that looks fine.
+
+The site works with no internet connection — Tailwind, the three webfonts,
+`marked` and DOMPurify are all vendored into `com_website/`. Rebuild them
+after editing a page's markup or theme:
+
+| script | does |
+|--------|------|
+| `npm run build:web` | both of the below, in order |
+| `npm run build:css` | compiles one stylesheet per page from `com_website/tailwind.config.js` |
+| `npm run build:icons` | harvests the Material Symbols glyphs each page renders |
+| `npm run build:fonts` | fetches and subsets the fonts to the glyphs in use |
+| `node vendor-libs.js` | re-downloads `marked` / DOMPurify into `com_website/vendor/` |
+
+The generated assets are committed, so a fresh clone runs without any of
+these. Rebuild only when you change a page's markup or theme.
+
+> Each page compiles from **its own** config entry. The pages deliberately
+> differ — `agent_profiles.html` and `history.html` use a smaller `pixel-body`
+> than the rest — so collapsing them into one shared theme would silently
+> restyle those pages.
 
 ### From a terminal
 
@@ -300,7 +377,7 @@ See [docs/FORUM.md](docs/FORUM.md).
 ## Tests
 
 ```bash
-cd backend && pytest -q                                   # 495 unit tests
+cd backend && pytest -q                                   # 597 unit tests
 pytest -q -m live --run-live --allow-real-db               # + Postgres integration
 ```
 
@@ -321,13 +398,18 @@ the UI and the intake endpoint use.
   removed.
 - Every topic also writes a `Deliberation` record, so Archive, PDF export and
   verdict filing continue to work unchanged.
-- Two live tests in `test_rag_retrieval.py` fail on a fresh database — they
-  need a seeded corpus. They fail identically on the pre-forum commits.
+- The live suite seeds everything it needs and passes on an empty database. A
+  fresh database must have pgvector first (`CREATE EXTENSION vector;`) — the
+  Docker init script only installs it on first container start, so a
+  `CREATE DATABASE` from outside starts without it.
 - The live suite **rewrites `backend/okf/bundles/oracle/index.md`** (the
   promotion test creates a document and the bundle index is regenerated).
   `git checkout` it before committing, or you will commit a test artefact.
 - `/api/health` reports `configured` and `callable` separately. A key being
   present does **not** mean a model answers; `POST /api/llm/verify` proves it.
+- The schema is managed by alembic (`backend/db/migrations/`). `init_db()` still
+  creates missing tables and adds missing columns, because `create_all` only
+  ever creates tables — but anything needing a backfill belongs in a revision.
 
 ## License
 

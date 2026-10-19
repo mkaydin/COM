@@ -4,11 +4,20 @@ The forum runs five characters, each on its own model. This is where the user
 sees that mapping and changes it:
 
     GET  /api/llm/providers       every provider, whether it is configured
-    GET  /api/llm/roles           the live role -> model mapping
-    POST /api/llm/roles           pin a role to a model (persists)
+    GET  /api/llm/roles           the live role -> (provider, model) mapping
+    POST /api/llm/roles           pin a role to a provider + model (persists)
     DELETE /api/llm/roles/{role}  unpin, back to env/default
     GET  /api/llm/models          the free catalogue + installed local models
+    GET  /api/llm/discovery       live listing for every provider, chat + embedding
+    GET  /api/llm/embedding       the selected embedding backend/model
+    POST /api/llm/embedding       choose the embedding backend/model
+    POST /api/llm/embedding/test  embed a probe and report the vector width
     POST /api/llm/test            send a real completion to check a model
+
+Model selection is per character: each role carries both a provider and a model,
+so the Oracle can run on a local Ollama model while the Moderator uses a free
+Zen one. Embeddings are selected separately, because they are a single global
+choice shared by retrieval, the OKF bundle and ingestion.
 """
 
 from typing import List, Optional
@@ -19,6 +28,8 @@ from pydantic import BaseModel, Field
 from llm import (
     catalogue,
     diagnose_call_error,
+    discovery,
+    embeddings,
     health,
     list_models,
     providers,
@@ -51,13 +62,20 @@ def settings_provider() -> str:
 
 @router.get("/roles")
 async def list_roles():
-    """The live role -> model mapping, with where each value came from."""
+    """The live role -> (provider, model) mapping, with where each came from.
+
+    Each role resolves its own provider, so this passes none: pinning the global
+    one here would report every character as being on it and hide a pinned
+    override entirely.
+    """
     try:
+        # Still resolves the global provider, to surface a bad `LLM_PROVIDER`
+        # as a 503 rather than an empty list.
         provider = providers.get()
     except providers.ProviderError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
 
-    entries = roles.all_roles(provider)
+    entries = roles.all_roles()
     # Attach the character each role belongs to, so the UI can label them.
     by_role = {}
     for c in registry.all_characters():
@@ -79,13 +97,17 @@ async def list_roles():
 class RoleSet(BaseModel):
     role: str
     model_id: str = Field(..., min_length=1, max_length=255)
+    #: Which provider the model belongs to. Omit to pin the model but leave the
+    #: role on the globally active provider — the behaviour before per-character
+    #: provider selection existed.
+    provider: Optional[str] = Field(default=None, max_length=64)
 
 
 @router.post("/roles")
 async def set_role(body: RoleSet):
-    """Pin a role to a model. Persists to `llm_roles` and takes effect at once."""
+    """Pin a role to a (provider, model). Persists to `llm_roles`, effective at once."""
     try:
-        return await roles.set_override(body.role, body.model_id)
+        return await roles.set_override(body.role, body.model_id, body.provider)
     except providers.ProviderError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -105,6 +127,84 @@ async def models(provider: Optional[str] = None):
         return await list_models(provider)
     except providers.ProviderError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.get("/discovery")
+async def discover_models(provider: Optional[str] = None):
+    """Every model each provider can serve right now, for the picker.
+
+    Unlike `/api/llm/models`, this is the **live** listing: `opencode models`
+    for the Zen catalogue (several hundred, embedding models included) and
+    Ollama's `/api/tags` with capability detection. Never raises on an
+    unreachable provider — it reports the reason instead, because a settings
+    page that 500s when Ollama is down cannot explain that Ollama is down.
+    """
+    return await discovery.discover(provider)
+
+
+class EmbeddingSet(BaseModel):
+    backend: str = Field(..., max_length=64)
+    model: str = Field(..., min_length=1, max_length=255)
+
+
+@router.get("/embedding")
+async def embedding_current():
+    """The selected embedding backend and model."""
+    return embeddings.current()
+
+
+@router.post("/embedding")
+async def embedding_select(body: EmbeddingSet):
+    """Choose the embedding backend and model.
+
+    Applies immediately — the cached local model is dropped so the next call
+    loads the new one. Returns the width-compatibility verdict, because the
+    vector stores are fixed at 384 dims and a mismatch makes retrieval return
+    noise rather than raising.
+    """
+    try:
+        return embeddings.select(body.backend, body.model)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.post("/embedding/test")
+async def embedding_test(body: EmbeddingSet):
+    """Embed a probe string with the chosen model and report the width.
+
+    Proving the model answers matters for the same reason as `/api/llm/test`: a
+    configured embedder that cannot be loaded looks identical to a working one
+    until retrieval quietly returns nothing.
+    """
+    try:
+        embeddings.select(body.backend, body.model)
+        vectors = await embeddings.embed(["council of minds embedding probe"])
+    except Exception as e:
+        return {
+            "ok": False,
+            "backend": body.backend,
+            "model": body.model,
+            "error": str(e)[:300],
+            "diagnosis": diagnose_call_error(str(e)),
+        }
+
+    width = embeddings.width_of(vectors)
+    matches_store = width == embeddings.VECTOR_DIM
+    return {
+        "ok": True,
+        "backend": embeddings.configured_backend(),
+        "model": embeddings.configured_model(),
+        "dimension": width,
+        "expected_dimension": embeddings.VECTOR_DIM,
+        "matches_store": matches_store,
+        "note": (
+            None if matches_store else
+            f"The vector stores are {embeddings.VECTOR_DIM}-dimensional. "
+            f"{body.model} returns {width}, so cosine search over existing "
+            "chunks will return noise. Re-embed, or choose a "
+            f"{embeddings.VECTOR_DIM}-dim model."
+        ),
+    }
 
 
 class TestRequest(BaseModel):

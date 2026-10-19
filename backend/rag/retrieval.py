@@ -13,13 +13,15 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import threading
+from collections import OrderedDict
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import RagChunk
-from rag.ingest import TRUST_WEIGHTS, _get_embedder
+from rag.ingest import TRUST_WEIGHTS
 from logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -31,18 +33,49 @@ _CURATED_TIER = "curated"
 # Gap detection: track queries that hit vector fallback with no curated match.
 # key = query_hash, value = count. When count >= GAP_THRESHOLD → flag for promotion.
 _GAP_THRESHOLD = 3
-_gap_tracker: dict[str, int] = {}
+#: Bounded on purpose. This was a plain dict that never evicted, so a
+#: long-lived process leaked one entry per distinct never-curated query — and
+#: mutating it from `asyncio.to_thread` workers made the counters racy.
+#: Only queries that have not yet been curated matter, so capping and dropping
+#: the oldest is the right trade: a forgotten query costs one recount.
+_GAP_TRACKER_MAX = 2048
+_gap_tracker: "OrderedDict[str, int]" = OrderedDict()
+_gap_lock = threading.Lock()
+
+
+def _gap_hit(qhash: str) -> int:
+    """Count a gap observation, returning the new count. Thread-safe."""
+    with _gap_lock:
+        count = _gap_tracker.get(qhash, 0) + 1
+        _gap_tracker[qhash] = count
+        _gap_tracker.move_to_end(qhash)
+        while len(_gap_tracker) > _GAP_TRACKER_MAX:
+            _gap_tracker.popitem(last=False)
+        return count
+
+
+def _gap_forget(qhash: str) -> None:
+    """Drop a query from the tracker — its gap has been dealt with."""
+    with _gap_lock:
+        _gap_tracker.pop(qhash, None)
+
+
+def _gap_snapshot() -> dict[str, int]:
+    """A consistent copy for the promotion scan."""
+    with _gap_lock:
+        return dict(_gap_tracker)
 
 
 async def _embed_query(query: str) -> list[float]:
     """Embed `query` off the event loop.
 
-    sentence-transformers encode is CPU-bound and the first call loads the
-    model; running it inline would stall every concurrent request for seconds.
+    The encode is CPU-bound and the first call loads the model; running it
+    inline stalls every concurrent request for seconds. Goes through
+    `llm.embeddings` so the selected embedding backend is respected.
     """
-    return await asyncio.to_thread(
-        lambda: _get_embedder().encode([query], normalize_embeddings=True)[0].tolist()
-    )
+    from llm.embeddings import embed_one
+
+    return await embed_one(query)
 
 
 def _query_hash(query: str) -> str:
@@ -225,13 +258,13 @@ async def retrieve(
     qhash = _query_hash(query)
     gap_detected = False
     if not has_curated_match and raw_results:
-        _gap_tracker[qhash] = _gap_tracker.get(qhash, 0) + 1
-        if _gap_tracker[qhash] >= _GAP_THRESHOLD:
+        gap_count = _gap_hit(qhash)
+        if gap_count >= _GAP_THRESHOLD:
             gap_detected = True
             logger.info(
                 "rag_gap_detected",
                 query=query[:60],
-                count=_gap_tracker[qhash],
+                count=gap_count,
                 hint="candidate for OKF promotion",
             )
             # Auto-flag top raw chunks as promotion candidates.
@@ -245,7 +278,7 @@ async def retrieve(
                 logger.warning("promotion_auto_flag_failed", error=str(e)[:100])
     elif has_curated_match:
         # Reset gap counter if curated match found.
-        _gap_tracker.pop(qhash, None)
+        _gap_forget(qhash)
 
     # 5. Merge + rank (curated always ranks above raw per spec §4).
     all_results = curated + raw_results
@@ -293,14 +326,14 @@ def get_gap_candidates() -> list[dict]:
     """Return queries flagged for promotion review (gap detection)."""
     return [
         {"query_hash": h, "fallback_count": c}
-        for h, c in _gap_tracker.items()
+        for h, c in _gap_snapshot().items()
         if c >= _GAP_THRESHOLD
     ]
 
 
 def reset_gap(query: str) -> None:
     """Manually reset gap tracking for a query (after promotion)."""
-    _gap_tracker.pop(_query_hash(query), None)
+    _gap_forget(_query_hash(query))
 
 
 # --- Supporter mode (Phase 3) -----------------------------------------------

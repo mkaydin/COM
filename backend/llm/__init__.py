@@ -41,7 +41,9 @@ def build_kwargs(
     from config import get_settings
 
     s = get_settings()
-    provider = provider or providers.get()
+    # Resolve the role's own provider, not the global one. This is what lets the
+    # Oracle run on a local Ollama model while the Moderator uses a free Zen one.
+    provider = provider or roles.provider_for(role)
 
     # The CLI transport has its own credential story and does not take
     # api_base/api_key, so only LiteLLM-backed providers need the guard.
@@ -77,14 +79,20 @@ async def llm_complete(
     """
     from agents.retry import llm_call_with_retry
 
+    # The role decides its own provider. `build_kwargs` resolves the model
+    # against the same provider, so the model id and the transport always agree —
+    # previously both used the single global provider, which made per-character
+    # provider selection impossible.
+    provider = roles.provider_for(role)
     kwargs = build_kwargs(
-        role=role, messages=messages, temperature=temperature, max_tokens=max_tokens, **extra
+        role=role, provider=provider, messages=messages,
+        temperature=temperature, max_tokens=max_tokens, **extra,
     )
     logger.debug(
-        "llm_call", role=role, model=kwargs["model"], temp=temperature, max_tokens=max_tokens
+        "llm_call", role=role, provider=provider.id, model=kwargs["model"],
+        temp=temperature, max_tokens=max_tokens,
     )
 
-    provider = providers.get()
     if provider.transport:
         import importlib
 
@@ -168,18 +176,25 @@ async def health() -> dict:
     except providers.ProviderError as e:
         return {"ok": False, "provider": s.llm_provider, "error": str(e)}
 
+    # Each role resolves its own provider, so pass none here — pinning the global
+    # one would report every role as being on it and hide a broken override.
     roles_map = []
     try:
-        roles_map = roles.all_roles(provider)
+        roles_map = roles.all_roles()
     except Exception as e:
         return {"ok": False, "provider": provider.id, "error": str(e)}
 
+    # A role is only healthy if *its own* provider is usable. One character
+    # pinned to a dead Ollama should not be masked by five working ones.
+    unhealthy = [r["role"] for r in roles_map if r.get("provider_error")]
+
     ok = bool(provider.api_key) or not provider.requires_key
     detail = {
-        "ok": ok,
+        "ok": ok and not unhealthy,
         "provider": provider.id,
         "transport": provider.transport or "litellm",
         "roles": roles_map,
+        "unhealthy_roles": unhealthy,
     }
 
     if provider.transport == "cli_provider":
@@ -287,27 +302,40 @@ async def test_model(model_id: str = "", provider_id: Optional[str] = None) -> d
         except Exception:
             model_id = ""
     if provider.requires_key and not provider.api_key:
-        return {"ok": False, "model": model_id, "error": "provider has no API key"}
+        return {"ok": False, "model": model_id, "provider": provider.id,
+                "error": "provider has no API key"}
     try:
-        resp = await llm_complete(
-            [{"role": "user", "content": "Reply with the single word: ready"}],
-            role=DEFAULT_ROLE,
-            temperature=0.0,
-            max_tokens=16,
-            model=model_id,
+        # `build_kwargs` prefers the explicit `model=`, so the probe really
+        # tests the model the user picked — but the transport must be the
+        # probed provider, not the one the MODERATOR role happens to use.
+        kwargs = build_kwargs(
+            role=DEFAULT_ROLE, provider=provider, model=model_id,
+            temperature=0.0, max_tokens=16,
+            messages=[{"role": "user", "content": "Reply with the single word: ready"}],
         )
+        if provider.transport:
+            import importlib
+
+            completion_fn = _cli_completion(importlib.import_module(f"llm.{provider.transport}"))
+        else:
+            from litellm import completion as completion_fn
+
+        from agents.retry import llm_call_with_retry
+
+        resp = await llm_call_with_retry(completion_fn, **kwargs)
         # Reach through the wrapper's own accessor rather than
         # `resp.choices[0].message.content`: the CLI transport's first choice
         # is a dict, not an object.
         text = (resp.content or "").strip()
-        return {"ok": bool(text), "model": model_id, "sample": text[:120],
-                "callable": True}
+        return {"ok": bool(text), "model": model_id, "provider": provider.id,
+                "sample": text[:120], "callable": True}
     except Exception as e:
         message = str(e)
         return {
             "ok": False,
             "callable": False,
             "model": model_id,
+            "provider": provider.id,
             "error": message[:300],
             "diagnosis": diagnose_call_error(message),
         }

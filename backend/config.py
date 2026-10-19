@@ -49,6 +49,36 @@ class Settings(BaseSettings):
     llm_model_analyst: Optional[str] = None
     llm_model_historian: Optional[str] = None
 
+    # Per-role *provider* overrides — `llm_provider_<role>`. Set one to run a
+    # single character through a different backend than the rest of the cast.
+    # The model for that role is then resolved against this provider, not the
+    # global one. None means "whatever `llm_provider` says".
+    #
+    # Declared explicitly rather than read ad-hoc: `getattr(settings, name, None)`
+    # would work, but an undeclared key that pydantic never heard of is exactly
+    # the kind of typo that silently does nothing.
+    llm_provider_moderator: Optional[str] = None
+    llm_provider_oracle: Optional[str] = None
+    llm_provider_scholar: Optional[str] = None
+    llm_provider_sage: Optional[str] = None
+    llm_provider_analyst: Optional[str] = None
+    llm_provider_historian: Optional[str] = None
+
+    # --- Embeddings ----------------------------------------------------------------
+    # One embedding model is shared by retrieval, the OKF bundle and ingestion.
+    #
+    # Default is `ollama` + `qwen3-embedding:0.6b`: 32k window (nothing is
+    # truncated) and a Matryoshka head that emits exactly the 384 dimensions the
+    # stores use, so it fits the existing schema with no migration.
+    #
+    # `local` stays available as the no-extra-services fallback, but
+    # all-MiniLM-L6-v2 has a 256-token window against 300-500 token chunks, so
+    # it silently drops most of a wiki page. `llm.embeddings` warns on load.
+    #: One of `local`, `ollama`, `opencode-cli`, `opencode`.
+    embedding_backend: str = "ollama"
+    #: A sentence-transformers id for `local`; a provider's model id otherwise.
+    embedding_model: str = "qwen3-embedding:0.6b"
+
     supports_json_mode: bool = False
 
     # --- Forum ---------------------------------------------------------------------

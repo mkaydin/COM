@@ -67,31 +67,41 @@ async def _wiki_context(query: str, max_pages: int = 4) -> str:
 
 async def _graph_context(query: str) -> str:
     """Neo4j traversal — optional, since it runs behind the `graph` profile."""
+    # Token-overlap entity lookup; the graph is usually sparse early on,
+    # so an empty result is the normal case and not an error.
+    words = [w for w in query.lower().split() if len(w) > 4][:5]
+    if not words:
+        return ""
     try:
         from db.neo4j import get_driver
 
         driver = get_driver()
         if driver is None:
             return ""
-        # Token-overlap entity lookup; the graph is usually sparse early on,
-        # so an empty result is the normal case and not an error.
-        words = [w for w in query.lower().split() if len(w) > 4][:5]
-        if not words:
-            return ""
-        with driver.session() as session:
-            result = session.run(
-                "MATCH (n) WHERE any(w IN $words WHERE toLower(n.name) CONTAINS w) "
-                "RETURN n.name AS name, labels(n) AS labels LIMIT 10",
-                words=words,
-            )
-            rows = [r for r in result]
-        if not rows:
-            return ""
-        lines = [f"- {r['name']} ({', '.join(r['labels'])})" for r in rows]
-        return "GRAPH ENTITIES:\n" + "\n".join(lines)
+        lines = await asyncio.to_thread(_graph_lookup, driver, words)
+        return "GRAPH ENTITIES:\n" + "\n".join(lines) if lines else ""
     except Exception as e:
-        logger.debug("forum_graph_retrieval_unavailable", error=str(e)[:120])
+        # `debug` used to make a stalled Neo4j invisible; this is an optional
+        # source on the Analyst's critical path, so a failure is worth seeing.
+        logger.warning("forum_graph_retrieval_unavailable", error=str(e)[:120])
         return ""
+
+
+def _graph_lookup(driver, words: list[str]) -> list[str]:
+    """The blocking Neo4j round-trip. Always called via `asyncio.to_thread`.
+
+    The sync driver blocks for its full timeout if the database is unreachable.
+    Called directly from the event loop that stalls every other request in the
+    process, which is why the offload is not optional.
+    """
+    with driver.session() as session:
+        result = session.run(
+            "MATCH (n) WHERE any(w IN $words WHERE toLower(n.name) CONTAINS w) "
+            "RETURN n.name AS name, labels(n) AS labels LIMIT 10",
+            words=words,
+        )
+        rows = [r for r in result]
+    return [f"- {r['name']} ({', '.join(r['labels'])})" for r in rows]
 
 
 async def _session_context(session_id: Optional[str]) -> str:

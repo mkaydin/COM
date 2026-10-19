@@ -25,7 +25,20 @@ async def deliberation_stream(websocket: WebSocket, session_id: str):
     try:
         while True:
             data = await websocket.receive_text()
-            msg = json.loads(data)
+            # A malformed frame must not kill the connection: the browser can
+            # send anything, and `forum_ws` answers with an error event instead.
+            try:
+                msg = json.loads(data)
+            except (ValueError, TypeError):
+                await websocket.send_text(json.dumps({
+                    "type": "error", "message": "invalid JSON",
+                }))
+                continue
+            if not isinstance(msg, dict):
+                await websocket.send_text(json.dumps({
+                    "type": "error", "message": "expected a JSON object",
+                }))
+                continue
 
             if msg.get("type") == "query":
                 query = msg.get("content", "")
@@ -126,8 +139,16 @@ async def _run_streaming_deliberation(websocket: WebSocket, session_id: str, que
                 if d:
                     d.status = "failed"
                     await db.commit()
-        except:
-            pass
+        except Exception as mark_error:
+            # Marking the deliberation failed is best-effort: the original error
+            # is already being reported to the client. A bare `except:` here also
+            # swallowed KeyboardInterrupt and SystemExit, which is not this
+            # cleanup's call to make.
+            logger.warning(
+                "ws_deliberation_status_not_marked",
+                deliberation_id=deliberation_id,
+                error=str(mark_error)[:160],
+            )
         await websocket.send_text(json.dumps({
             "type": "error",
             "message": f"Deliberation failed: {str(e)}",

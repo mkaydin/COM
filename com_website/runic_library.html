@@ -3,33 +3,14 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>Runic Library - Council of Minds</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700;900&display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<!-- com:local-css -->
+<!-- Generated: desktop/build-css.js + desktop/fetch-fonts.js.
+     Replacing the CDN tags is what lets the app render offline. -->
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="tailwind.runic_library.css">
+<!-- /com:local-css -->
 <link href="styles.css" rel="stylesheet"/>
-<script>
-  tailwind.config = {
-    darkMode: "class",
-    theme: { extend: {
-      colors: {
-        "obsidian": "#1a1a2e","surface": "#141315","surface-dim": "#141315",
-        "surface-container": "#201f21","surface-container-low": "#1c1b1d","surface-container-lowest": "#0e0e10",
-        "surface-container-high": "#2a2a2b","surface-container-highest": "#353436",
-        "parchment": "#e8d5b7","on-surface": "#e5e1e3","runed-gold": "#ffd700",
-        "spectral-blue": "#87ceeb","ember-glow": "#ff6b6b","mystic-purple": "#9b59b6",
-        "warning": "#f39c12","success": "#27ae60","error": "#c0392b","neutral-gray": "#7f8c8d","outline": "#929097",
-      },
-      fontFamily: { "pixel-display": ["VT323","monospace"], "pixel-heading": ["VT323","monospace"], "pixel-body": ["VT323","monospace"], "pixel-small": ["VT323","monospace"] },
-      fontSize: {
-        "pixel-display": ["32px",{lineHeight:"1.2",fontWeight:"700"}],
-        "pixel-heading": ["24px",{lineHeight:"1.3",fontWeight:"700"}],
-        "pixel-body": ["18px",{lineHeight:"1.6",fontWeight:"400"}],
-        "pixel-small": ["14px",{lineHeight:"1.5",fontWeight:"400"}]
-      }
-    }}
-  }
-</script>
+
 <style>
   .doc-content { font-size: 18px; line-height: 1.7; white-space: pre-wrap; word-wrap: break-word; max-height: 70vh; overflow-y: auto; }
   .custom-scrollbar::-webkit-scrollbar { width: 8px; }

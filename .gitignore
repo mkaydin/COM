@@ -82,3 +82,9 @@ config.json
 
 # ===== Alembic / migration scratch =====
 backend/.pytest_cache/
+
+# ===== Web asset build scratch =====
+# The generated assets themselves ARE committed (com_website/tailwind.*.css,
+# fonts.css, fonts/, vendor/) — the app loads file:// with no build step on
+# install, so they have to be present in a fresh clone.
+.build-tmp/

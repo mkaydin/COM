@@ -199,16 +199,35 @@
 
     llmRoles: () => window.COM.api('/api/llm/roles'),
 
-    setLlmRole: (role, modelId) =>
+    setLlmRole: (role, modelId, provider) =>
       window.COM.api('/api/llm/roles', {
         method: 'POST',
-        body: JSON.stringify({ role, model_id: modelId }),
+        body: JSON.stringify({ role, model_id: modelId, provider }),
       }),
 
     clearLlmRole: (role) => window.COM.api(`/api/llm/roles/${role}`, { method: 'DELETE' }),
 
     llmModels: (provider) =>
       window.COM.api(`/api/llm/models${provider ? `?provider=${provider}` : ''}`),
+
+    // Live model listing for the picker: every model each provider can serve,
+    // chat and embedding, with reachability per provider.
+    llmDiscovery: (provider) =>
+      window.COM.api(`/api/llm/discovery${provider ? `?provider=${provider}` : ''}`),
+
+    llmEmbedding: () => window.COM.api('/api/llm/embedding'),
+
+    setLlmEmbedding: (backend, model) =>
+      window.COM.api('/api/llm/embedding', {
+        method: 'POST',
+        body: JSON.stringify({ backend, model }),
+      }),
+
+    testLlmEmbedding: (backend, model) =>
+      window.COM.api('/api/llm/embedding/test', {
+        method: 'POST',
+        body: JSON.stringify({ backend, model }),
+      }),
 
     testLlmModel: (modelId, provider) =>
       window.COM.api('/api/llm/test', {

@@ -1,7 +1,7 @@
 import os
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 WIKI_ROOT = Path(__file__).parent.parent.parent / "sage_wiki"
@@ -63,14 +63,14 @@ def update_index(entry: str):
 
 
 def append_log(entry: str):
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
     log = load_log()
     log += f"{entry}\n"
     _write_file(WIKI_DIR / "log.md", log)
 
 
 def write_wiki_page(category: str, slug: str, title: str, content: str, tags: list[str] = None):
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     frontmatter = f"""---
 title: "{title}"
 type: {category}
@@ -96,7 +96,7 @@ async def ingest_source(source_path: str, title: str) -> dict:
     slug = _slugify(title)
     summary_path = write_wiki_page("sources", slug, title, content[:5000], ["ingested"])
 
-    append_log(f"## [{datetime.utcnow().strftime('%Y-%m-%d')}] ingest | {title}\n- Created: [[wiki/sources/{slug}]]")
+    append_log(f"## [{datetime.now(timezone.utc).strftime('%Y-%m-%d')}] ingest | {title}\n- Created: [[wiki/sources/{slug}]]")
 
     return {"status": "ingested", "path": str(summary_path), "title": title}
 
@@ -131,7 +131,7 @@ async def file_insight(query: str, sage_response: dict) -> dict:
 
     path = write_wiki_page("queries", slug, query[:80], content, ["deliberation", "sage"])
 
-    append_log(f"## [{datetime.utcnow().strftime('%Y-%m-%d')}] query | {query[:60]}\n- Filed: [[wiki/queries/{slug}]]")
+    append_log(f"## [{datetime.now(timezone.utc).strftime('%Y-%m-%d')}] query | {query[:60]}\n- Filed: [[wiki/queries/{slug}]]")
 
     return {"status": "filed", "path": str(path)}
 
@@ -167,7 +167,7 @@ async def lint_wiki() -> dict:
             contradictions.append({"type": "flagged_contradiction", "page": path})
     issues.extend(contradictions)
 
-    append_log(f"## [{datetime.utcnow().strftime('%Y-%m-%d')}] lint | {len(issues)} issues found")
+    append_log(f"## [{datetime.now(timezone.utc).strftime('%Y-%m-%d')}] lint | {len(issues)} issues found")
     for issue in issues:
         append_log(f"  - {issue['type']}: {issue['page']}")
 

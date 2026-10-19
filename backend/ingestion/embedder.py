@@ -37,10 +37,16 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[st
 
 
 def generate_embedding(text: str) -> List[float]:
-    """Generate embedding vector for a text chunk using local sentence-transformers."""
+    """Generate an embedding vector for a text chunk.
+
+    Goes through `llm.embeddings` so the configured backend is used. This used
+    to hold a third hardcoded `SentenceTransformer("all-MiniLM-L6-v2")`.
+    """
+    from llm.embeddings import embed_sync
+
     try:
-        model = _get_local_model()
-        return model.encode(text).tolist()
+        vectors = embed_sync([text])
+        return vectors[0] if vectors else []
     except Exception as e:
         logger.error("embedding_failed", error=str(e))
         return []

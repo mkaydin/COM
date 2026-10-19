@@ -47,6 +47,10 @@ class LlmRole(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     role = Column(String(64), nullable=False, unique=True)
     model_id = Column(String(255), nullable=False)
+    #: Which provider `model_id` belongs to — `ollama`, `opencode-cli`, …
+    #: NULL means "whichever provider is globally active", which is the
+    #: behaviour every row pinned before this column existed had.
+    provider = Column(String(64), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (Index("idx_llm_roles_role", "role"),)
@@ -95,6 +99,13 @@ class Topic(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     concluded_at = Column(DateTime(timezone=True), nullable=True)
+
+    #: Why the run died, when `status == "failed"`.
+    #:
+    #: Without somewhere to put this, "failed" is not actionable — the thread
+    #: just stops and the user cannot tell a provider outage from a crash.
+    #: Cleared whenever a topic successfully starts running again.
+    error = Column(Text, nullable=True)
 
     posts = relationship(
         "Post", back_populates="topic", cascade="all, delete-orphan", order_by="Post.seq"

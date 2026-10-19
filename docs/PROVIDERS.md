@@ -128,15 +128,78 @@ LLM_MODEL_HISTORIAN=
 
 ### Resolution order
 
-For `model_for("ORACLE")`:
+A role resolves **a provider and a model**, and they are resolved together —
+the model comes from the *role's own* provider's defaults, so a character
+pinned to Ollama never silently receives a Zen model.
 
-1. a runtime override in the `llm_roles` table (`POST /api/llm/roles`)
+Provider (`provider_for("ORACLE")`):
+
+1. the `provider` column of that role's `llm_roles` row (`NULL` = the global
+   default, which is what every row written before the column existed means)
+2. `LLM_PROVIDER_ORACLE`
+3. the global `LLM_PROVIDER`
+
+Model (`model_for("ORACLE")`), against that provider:
+
+1. the role's `llm_roles` override
 2. `LLM_MODEL_ORACLE`
-3. the provider's built-in default for that role
+3. that provider's built-in default for the role
 4. `LLM_MODEL_DEFAULT`
-5. any default for the provider
+5. any default for that provider
+
+An unknown provider id raises rather than falling back — silently reverting to
+the global default would change which models run without saying so.
+`routing_for` reports it as `provider_error` so the UI can show it.
 
 Overrides live in Postgres, so a choice made in the UI survives a restart.
+
+### Per-character providers
+
+Because the provider is per role, the cast can be split:
+
+```bash
+# the Oracle local, everyone else on free Zen models
+curl -X POST localhost:8734/api/llm/roles -H 'Content-Type: application/json' \
+  -d '{"role":"ORACLE","model_id":"qwen3:4b","provider":"ollama"}'
+```
+
+### Embedding models
+
+Separate from the cast: one embedding model is shared by retrieval, the OKF
+bundle and ingestion. Backends are `ollama`, `local`
+(sentence-transformers), and the two OpenCode transports.
+
+```bash
+GET  /api/llm/embedding        the current selection
+POST /api/llm/embedding        {backend, model}
+POST /api/llm/embedding/test   embed a probe, report the width
+```
+
+**Recommended: `ollama` + `qwen3-embedding:0.6b`.** Measured on an RTX 4060 /
+RTX 5060 Ti with Ollama 0.40:
+
+| | batch (32×440 tok) | single query | window | dims |
+|---|---|---|---|---|
+| `qwen3-embedding:0.6b` @384 | 62 chunks/s | **6.0 ms** | 32k | 1024 → folded to 384 |
+| `all-MiniLM-L6-v2` (old default) | 754 chunks/s | 2.2 ms | **256** | 384 |
+
+Two caveats worth stating plainly:
+
+- The old model is ~12x faster per batch. At 6 ms per query the difference is
+  invisible next to a 1.4–3.2 s LLM call, but a large re-ingest is slower.
+- The old model's **256-token window was a live correctness bug**, not a
+  quality setting: `rag.chunker` emits 300–500 token chunks, so 32% of the OKF
+  bundle and 92% of the wiki were being discarded before they were ever
+  searchable. `encode` returns a shorter vector rather than raising.
+
+> **The vector stores are 384-dimensional.** A wider model is *folded* to 384
+> where it supports `dimensions` (the backend sends it), which is how
+> `qwen3-embedding` fits with no migration. Fixed-width models that cannot fold
+> — `bge-m3`, `nv-embed`, `text-embedding-ada-002` — are rejected.
+>
+> **Changing the model invalidates every stored vector.** The new model lives
+> in a different vector space; stored chunks must be re-embedded. There is no
+> re-embed command yet.
 
 ### The legacy `LLM_MODEL`
 
@@ -172,11 +235,15 @@ same local tag.
 
 ```
 GET    /api/llm/providers          every provider, whether it is configured
-GET    /api/llm/roles              the live role → model mapping + its source
-POST   /api/llm/roles              {role, model_id}   persists, takes effect now
+GET    /api/llm/roles              the live role → (provider, model) mapping
+POST   /api/llm/roles              {role, model_id, provider?}  persists, effective now
 DELETE /api/llm/roles/{role}       back to env/default
-GET    /api/llm/models             free catalogue + installed local tags
-POST   /api/llm/test               {model_id} — send a real completion
+GET    /api/llm/models             curated free catalogue + installed local tags
+GET    /api/llm/discovery          live listing for every provider, chat + embedding
+GET    /api/llm/embedding          the selected embedding backend/model
+POST   /api/llm/embedding          {backend, model}
+POST   /api/llm/embedding/test     embed a probe, report the vector width
+POST   /api/llm/test               {model_id, provider?} — send a real completion
 POST   /api/llm/reload             re-read persisted overrides
 ```
 
@@ -184,25 +251,39 @@ POST   /api/llm/reload             re-read persisted overrides
 
 ```jsonc
 {
-  "provider": "opencode",
-  "base_url": "https://opencode.ai/zen/v1",
+  "provider": "opencode-cli",
+  "base_url": "opencode://cli",
   "roles": [
     {"role": "MODERATOR", "model": "big-pickle",
-     "routed_model": "openai/big-pickle", "source": "default",
-     "is_free": true, "character": null, "character_name": null},
-    {"role": "ORACLE", "model": "longcat-2.5-preview-free", "…": "…",
+     "routed_model": "big-pickle", "provider": "opencode-cli",
+     "provider_source": "global", "transport": "cli_provider",
+     "source": "default", "is_free": true,
+     "character": null, "character_name": null},
+    {"role": "ORACLE", "model": "qwen3:4b", "provider": "ollama",
+     "provider_source": "runtime", "routed_model": "openai/qwen3:4b",
+     "provider_error": null, "…": "…",
      "character": "oracle", "character_name": "The Oracle"}
   ]
 }
 ```
 
-`source` is `runtime` · `env` · `default` · `fallback`. The UI shows it, so you
-can always tell why a character is on a given model.
+`source` is `runtime` · `env` · `default` · `fallback`.
+`provider_source` is `runtime` · `env` · `global`. Both are shown in the UI, so
+you can always tell why a character is on a given model *and* a given backend.
+`provider_error` is non-null when the configured provider id does not exist.
+
+> `GET /api/llm/discovery` is the live view (`opencode models` for Zen, roughly
+> 600 entries including embedding models; `/api/tags` for Ollama). It never
+> raises on an unreachable provider — it reports `reachable: false` plus a
+> `hint`, because a settings page that 500s when Ollama is down cannot explain
+> that Ollama is down.
 
 ### The UI
 
-`/llm_settings.html` — the mapping, the free catalogue, per-role dropdowns,
-and a reset for anything pinned.
+`/models.html` — per-character provider and model dropdowns, the embedding
+model with a width check, and a reset for anything pinned.
+`/llm_settings.html` still shows the curated free catalogue and is kept
+reachable for existing bookmarks.
 
 ---
 

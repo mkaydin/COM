@@ -18,9 +18,23 @@ class TestModelNaming:
     def test_already_prefixed_is_left_alone(self):
         assert cli_provider.to_cli_model("opencode/big-pickle") == "opencode/big-pickle"
 
-    def test_a_litellm_prefix_is_stripped(self):
-        """`openai/big-pickle` is not a model the CLI knows."""
-        assert cli_provider.to_cli_model("openai/big-pickle") == "opencode/big-pickle"
+    @pytest.mark.parametrize("model_id", [
+        "openai/text-embedding-3-small",
+        "openai/gpt-5-mini",
+        "openrouter/anthropic/claude-sonnet-5",
+        "nvidia/nv-embed-v1",
+        "ollama/qwen3:4b",
+    ])
+    def test_qualified_ids_survive_intact(self, model_id):
+        """A qualified id names a real model and must not be rewritten.
+
+        This used to `split("/", 1)[-1]` and re-prefix, which turned
+        `openrouter/anthropic/claude-sonnet-5` into
+        `opencode/anthropic/claude-sonnet-5` — a model that does not exist.
+        The catalogue is mostly qualified ids, so nearly every non-Zen entry
+        was broken.
+        """
+        assert cli_provider.to_cli_model(model_id) == model_id
 
     def test_empty_is_empty(self):
         assert cli_provider.to_cli_model("") == "opencode/"

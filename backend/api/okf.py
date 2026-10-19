@@ -21,12 +21,23 @@ async def get_concept(concept_id: str):
     """Read a single concept's full frontmatter + body."""
     from okf.bundle import BUNDLE_ROOT
     from okf.paths import parse_concept_id
-    from okf.document import OKFDocument
-    cid = parse_concept_id(concept_id)
+    from okf.document import OKFDocument, OKFDocumentError
+    try:
+        cid = parse_concept_id(concept_id)
+    except ValueError as e:
+        # A malformed or traversing id is a bad request, not a server fault.
+        raise HTTPException(status_code=400, detail=f"Invalid concept id: {e}") from e
     path = BUNDLE_ROOT.joinpath(*cid[:-1], f"{cid[-1]}.md") if len(cid) > 1 else BUNDLE_ROOT / f"{cid[0]}.md"
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Concept not found: {concept_id}")
-    doc = OKFDocument.parse(path.read_text(encoding="utf-8"))
+    try:
+        doc = OKFDocument.parse(path.read_text(encoding="utf-8"))
+    except (OKFDocumentError, OSError, UnicodeDecodeError) as e:
+        # The file exists but cannot be parsed — a corrupt bundle entry is a
+        # server-side data problem, unlike the 400 above.
+        raise HTTPException(
+            status_code=422, detail=f"Concept document is unreadable: {str(e)[:200]}"
+        ) from e
     return {
         "id": concept_id,
         "frontmatter": doc.frontmatter,

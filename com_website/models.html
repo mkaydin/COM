@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Council of Minds — Models</title>
+<!-- com:local-css -->
+<!-- Generated: desktop/build-css.js + desktop/fetch-fonts.js.
+     Replacing the CDN tags is what lets the app render offline. -->
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="tailwind.models.css">
+<!-- /com:local-css -->
+<link rel="stylesheet" href="styles.css"/>
+<script src="api.js"></script>
+
+</head>
+<body class="bg-surface-dim text-on-surface font-pixel-body min-h-screen">
+
+<header class="sticky top-0 w-full z-50 flex justify-between items-center px-4 h-16 bg-obsidian border-b-2 border-amber-400/30">
+  <a href="forum.html" class="text-xl font-black text-amber-400 font-['Be_Vietnam_Pro'] tracking-tighter uppercase">Council of Minds</a>
+  <span class="material-symbols-outlined text-amber-400"><a href="forum.html">arrow_back</a></span>
+</header>
+
+<main class="max-w-[1000px] mx-auto px-4 py-6">
+
+  <h1 class="font-pixel-display text-pixel-display text-runed-gold mb-1">MODELS</h1>
+  <p class="font-pixel-small text-pixel-small text-neutral-gray mb-6">
+    Every character speaks through its own model, and now through its own
+    provider. Embeddings are one global choice.
+  </p>
+
+  <!-- ── Characters ─────────────────────────────────────────────────────── -->
+  <section class="mb-10">
+    <h2 class="font-pixel-heading text-pixel-heading text-parchment border-b-2 border-runed-gold inline-block pb-1 mb-4">
+      CHARACTERS
+    </h2>
+    <p class="font-pixel-small text-pixel-small text-neutral-gray mb-3">
+      Each row is one character. Pick its provider first — the model list follows
+      that provider.
+    </p>
+    <div id="roles" class="space-y-3 mb-6"></div>
+  </section>
+
+  <!-- ── Embeddings ─────────────────────────────────────────────────────── -->
+  <section class="mb-10">
+    <h2 class="font-pixel-heading text-pixel-heading text-parchment border-b-2 border-runed-gold inline-block pb-1 mb-4">
+      EMBEDDING MODEL
+    </h2>
+    <p class="font-pixel-small text-pixel-small text-neutral-gray mb-3">
+      Retrieval, the OKF bundle and ingestion all share one embedding model.
+      <span class="text-warning">Existing chunks were embedded with a 384-dimension
+      model</span> — choosing a different width makes search return noise rather
+      than an error, so test it before applying.
+    </p>
+
+    <div class="bg-surface-container border-2 border-outline-variant p-3 mb-3">
+      <div class="flex flex-wrap gap-3 mb-3">
+        <div class="min-w-[180px] flex-1">
+          <label class="block font-pixel-small text-pixel-small text-neutral-gray mb-1">Backend</label>
+          <select id="emb-backend" class="w-full bg-surface-container-lowest border-2 border-neutral-gray focus:border-runed-gold text-parchment font-pixel-small text-pixel-small p-2 rounded"></select>
+        </div>
+        <div class="min-w-[220px] flex-1">
+          <label class="block font-pixel-small text-pixel-small text-neutral-gray mb-1">Model</label>
+          <input id="emb-model" list="emb-model-options" placeholder="all-MiniLM-L6-v2"
+                 class="w-full bg-surface-container-lowest border-2 border-neutral-gray focus:border-runed-gold text-parchment font-pixel-small text-pixel-small p-2 rounded">
+          <datalist id="emb-model-options"></datalist>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        <button id="emb-apply" class="bg-obsidian border-2 border-neutral-gray text-parchment font-pixel-small text-pixel-small px-3 py-2 rounded hover:border-runed-gold hover:text-runed-gold transition-colors">Apply</button>
+        <button id="emb-test" class="bg-obsidian border-2 border-neutral-gray text-parchment font-pixel-small text-pixel-small px-3 py-2 rounded hover:border-runed-gold hover:text-runed-gold transition-colors">Test</button>
+        <span id="emb-status" class="font-pixel-small text-pixel-small text-neutral-gray"></span>
+      </div>
+      <p id="emb-note" class="font-pixel-small text-pixel-small text-neutral-gray mt-2"></p>
+    </div>
+
+    <div id="embedding-models" class="space-y-1 mb-2"></div>
+  </section>
+
+  <!-- ── Providers ──────────────────────────────────────────────────────── -->
+  <section>
+    <h2 class="font-pixel-heading text-pixel-heading text-parchment border-b-2 border-runed-gold inline-block pb-1 mb-4">
+      PROVIDERS
+    </h2>
+    <div id="providers" class="mb-4"></div>
+  </section>
+
+</main>
+
+<script>
+'use strict';
+
+const $ = (id) => document.getElementById(id);
+const esc = (t) => { const d = document.createElement('div'); d.textContent = t ?? ''; return d.innerHTML; };
+
+const SOURCE_LABEL = {
+  runtime: 'pinned', env: '.env', default: 'built-in default', fallback: 'fallback',
+};
+const PROVIDER_SOURCE_LABEL = {
+  runtime: 'pinned', env: '.env', global: 'global default',
+};
+
+// Live discovery result, shared by every dropdown on the page.
+let DISCOVERY = { providers: {}, embedding: null, active: null };
+let ROLES = [];
+
+/* ── Model helpers ─────────────────────────────────────────────────────── */
+
+function modelsFor(pid) {
+  return (DISCOVERY.providers[pid] || {}).models || [];
+}
+
+/** Chat models only. An embedder in the chat list is the most confusing state
+ *  this page can land in, so they are filtered out of every role dropdown. */
+function chatModels(pid) {
+  return modelsFor(pid).filter((m) => !m.embedding);
+}
+
+function embedModels(pid) {
+  return modelsFor(pid).filter((m) => m.embedding);
+}
+
+function modelLabel(m) {
+  const bits = [m.id];
+  if (m.free) bits.push('free');
+  if (m.parameter_size) bits.push(m.parameter_size);
+  if (m.quantization && m.quantization !== 'F16') bits.push(m.quantization);
+  return bits.join(' · ');
+}
+
+/** Provider-first ordering: free models, then the rest, alphabetically. */
+function sortModels(list) {
+  return [...list].sort((a, b) => {
+    if (!!a.free !== !!b.free) return a.free ? -1 : 1;
+    return a.id.localeCompare(b.id);
+  });
+}
+
+/** The CLI lists `opencode/big-pickle`; roles store `big-pickle`. Same model.
+ *  Matching on the bare name keeps a character from appearing "not listed". */
+function bareId(id) {
+  return String(id || '').split('/').pop();
+}
+
+function isSelected(modelId, selected) {
+  return modelId === selected || bareId(modelId) === bareId(selected);
+}
+
+/** Which single model is the current one.
+
+  A stored bare tag (`longcat-2.5-preview-free`) has to be matched against the
+  catalogue, where the same model appears as `opencode/longcat-2.5-preview-free`
+  — but *also* as `opencode-go/longcat-2.5-preview-free`, a different route with
+  the same bare name. Picking alphabetically would highlight the wrong one and
+  quietly repoint the character.
+
+  So: exact id first, then the id the backend would actually route a bare tag
+  to (`opencode/` — mirrors `llm.cli_provider.to_cli_model`), and only then any
+  bare-name match.
+*/
+function currentModelId(all, selected) {
+  if (!selected) return null;
+  const exact = all.find((m) => m.id === selected);
+  if (exact) return exact.id;
+
+  const bare = bareId(selected);
+  const routed = `opencode/${bare}`;
+  if (all.some((m) => m.id === routed)) return routed;
+
+  const loose = all.find((m) => bareId(m.id) === bare);
+  return loose ? loose.id : null;
+}
+
+/* ── Searchable model picker ────────────────────────────────────────────────
+ *
+ * A native <select> held every model the provider serves: 612 entries for the
+ * CLI catalogue, rendered once per character — 3,649 <option> elements and
+ * ~117,000 characters of text on a page whose siblings render ~600. There was
+ * no way to search it either, so picking anything meant scrolling.
+ *
+ * This renders the current match only, as a real listbox. The whole catalogue
+ * stays in a JS array, so filtering is free and the DOM stays small.
+ */
+
+const MATCH_LIMIT = 60; // enough to scroll; more and it stops being a list
+
+function renderModelList(role, filter) {
+  const listBox = $(`models-${role}`);
+  const provider = document.querySelector(`select[data-role="${role}"][data-field="provider"]`).value;
+  const current = $(`model-${role}`).value;
+
+  const all = sortModels(chatModels(provider));
+  const needle = (filter || '').trim().toLowerCase();
+  const activeId = currentModelId(all, current);
+
+  // A pinned model the provider does not list stays reachable — opening the
+  // page must never silently change what a character runs on.
+  const missing = current && !activeId
+    ? [{ id: current, free: false, label: `${current} · current (not listed)` }]
+    : [];
+
+  let shown;
+  if (!needle) {
+    shown = missing.concat(all.slice(0, MATCH_LIMIT));
+  } else {
+    shown = missing.concat(
+      all.filter((m) =>
+        m.id.toLowerCase().includes(needle) ||
+        bareId(m.id).toLowerCase().includes(needle) ||
+        (m.parameter_size || '').toLowerCase().includes(needle) ||
+        (m.family || '').toLowerCase().includes(needle)
+      ).slice(0, MATCH_LIMIT)
+    );
+  }
+
+  if (!shown.length) {
+    listBox.innerHTML = `<li class="px-3 py-2 font-pixel-small text-pixel-small text-neutral-gray">
+      No model matches “${esc(filter)}”. Type a full id to use it anyway.</li>`;
+  } else {
+    listBox.innerHTML = shown.map((m) => {
+      const on = m.id === (m.id === current ? current : activeId);
+      return `<li role="option" aria-selected="${on}" data-model="${esc(m.id)}"
+        class="px-3 py-1.5 font-pixel-small text-pixel-small cursor-pointer flex items-center gap-2
+               ${on ? 'bg-runed-gold/15 text-runed-gold' : 'text-parchment hover:bg-surface-container-high'}">
+        <span class="truncate">${esc(m.label || modelLabel(m))}</span>
+        ${m.id !== (m.label || m.id) ? `<span class="ml-auto text-neutral-gray text-[11px] truncate">${esc(m.id)}</span>` : ''}
+      </li>`;
+    }).join('');
+
+    listBox.querySelectorAll('li[data-model]').forEach((li) => {
+      li.addEventListener('click', () => {
+        $(`model-${role}`).value = li.dataset.model;
+        renderModelList(role, $(`search-${role}`).value);
+      });
+    });
+  }
+
+  const total = needle ? all.filter((m) => m.id.toLowerCase().includes(needle) ||
+      bareId(m.id).toLowerCase().includes(needle)).length : all.length;
+  $(`count-${role}`).textContent = total > shown.length
+    ? `showing ${shown.length} of ${total}`
+    : `${shown.length} of ${total}`;
+}
+
+function pickModel(role) {
+  const box = $(`models-${role}`);
+  const open = box.classList.toggle('hidden');
+  $(`caret-${role}`).textContent = open ? 'expand_more' : 'expand_less';
+  if (!open) renderModelList(role, $(`search-${role}`).value);
+}
+
+/* ── Characters ────────────────────────────────────────────────────────── */
+
+async function loadRoles() {
+  const box = $('roles');
+  box.innerHTML = '<p class="text-neutral-gray">Loading…</p>';
+  try {
+    const res = await window.COM.llmRoles();
+    ROLES = res.roles;
+    box.innerHTML = res.roles.map((r) => `
+      <div class="bg-surface-container border-2 border-outline-variant p-3">
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="min-w-[150px]">
+            <div class="font-pixel-heading text-pixel-heading text-runed-gold">${esc(r.character_name || r.role)}</div>
+            <div class="font-pixel-small text-pixel-small text-neutral-gray">${esc(r.role)}</div>
+          </div>
+          <div class="min-w-[160px] flex-1">
+            <label class="block font-pixel-small text-pixel-small text-neutral-gray mb-1">Provider</label>
+            <select data-role="${esc(r.role)}" data-field="provider"
+                    class="w-full bg-surface-container-lowest border-2 border-neutral-gray focus:border-runed-gold text-parchment font-pixel-small text-pixel-small p-2 rounded">
+              ${providerOptions(r.provider)}
+            </select>
+          </div>
+          <div class="min-w-[240px] flex-[2] relative">
+            <label class="block font-pixel-small text-pixel-small text-neutral-gray mb-1">Model</label>
+            <div class="flex gap-1">
+              <input id="search-${esc(r.role)}" type="text" autocomplete="off"
+                     placeholder="filter ${chatModels(r.provider).length} models…"
+                     onfocus="pickModel('${esc(r.role)}')"
+                     oninput="pickModel('${esc(r.role)}')"
+                     class="flex-1 bg-surface-container-lowest border-2 border-neutral-gray focus:border-runed-gold text-parchment font-pixel-small text-pixel-small p-2 rounded">
+              <button onclick="pickModel('${esc(r.role)}')" aria-label="Browse models"
+                      class="border-2 border-neutral-gray hover:border-runed-gold px-2 rounded">
+                <span id="caret-${esc(r.role)}" class="material-symbols-outlined" style="font-size:18px">expand_less</span>
+              </button>
+            </div>
+            <input type="hidden" id="model-${esc(r.role)}" value="${esc(r.model || '')}">
+            <span id="count-${esc(r.role)}" class="font-pixel-small text-pixel-small text-neutral-gray"></span>
+            <ul id="models-${esc(r.role)}" role="listbox" class="hidden absolute z-20 mt-1 w-full max-h-72 overflow-y-auto
+                   bg-surface-container border-2 border-runed-gold shadow-lg"></ul>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="applyRole('${esc(r.role)}')"
+                    class="bg-obsidian border-2 border-neutral-gray text-parchment font-pixel-small text-pixel-small px-3 py-2 rounded hover:border-runed-gold hover:text-runed-gold transition-colors">Apply</button>
+            <button onclick="testRole('${esc(r.role)}')"
+                    class="font-pixel-small text-pixel-small text-neutral-gray hover:text-runed-gold underline">Test</button>
+            ${r.source === 'runtime' ? `<button onclick="resetRole('${esc(r.role)}')"
+                    class="font-pixel-small text-pixel-small text-neutral-gray hover:text-error underline">Reset</button>` : ''}
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 mt-2">
+          <span class="border border-outline-variant px-1 uppercase rounded font-pixel-small text-pixel-small">${esc(SOURCE_LABEL[r.source] || r.source)}</span>
+          <span class="border border-outline-variant px-1 uppercase rounded font-pixel-small text-pixel-small">${esc(PROVIDER_SOURCE_LABEL[r.provider_source] || r.provider_source)}</span>
+          <span class="${r.is_free ? 'text-success' : 'text-warning'} font-pixel-small text-pixel-small">${r.is_free ? 'free' : 'may cost'}</span>
+          <span class="text-neutral-gray font-pixel-small text-pixel-small">on <b class="text-parchment">${esc(r.model || '—')}</b></span>
+          ${r.transport !== 'litellm' ? `<span class="text-neutral-gray font-pixel-small text-pixel-small">via ${esc(r.transport)}</span>` : ''}
+          <span id="test-${esc(r.role)}" class="font-pixel-small text-pixel-small text-neutral-gray"></span>
+        </div>
+        ${r.provider_error
+          ? `<p class="text-error font-pixel-small text-pixel-small mt-1">${esc(r.provider_error)}</p>`
+          : ''}
+      </div>`).join('');
+
+    // Switching provider resets that row's model and re-renders its list.
+    box.querySelectorAll('select[data-field="provider"]').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        const role = sel.dataset.role;
+        const list = chatModels(sel.value);
+        const preferred = list.find((m) => m.free) || list[0];
+        $(`model-${role}`).value = preferred ? preferred.id : '';
+        $(`search-${role}`).placeholder = `filter ${list.length} models…`;
+        renderModelList(role, '');
+      });
+    });
+
+    // Clicking away closes an open list.
+    document.addEventListener('click', (e) => {
+      box.querySelectorAll('ul[role="listbox"]').forEach((ul) => {
+        const row = ul.closest('.relative');
+        if (!ul.contains(e.target) && row && !row.contains(e.target)) {
+          ul.classList.add('hidden');
+          $(`caret-${ul.id.replace('models-', '')}`).textContent = 'expand_less';
+        }
+      });
+    });
+  } catch (e) {
+    box.innerHTML = `<p class="text-error font-pixel-small text-pixel-small">${esc(e.message)}</p>`;
+  }
+}
+
+function providerOptions(selected) {
+  const entries = Object.values(DISCOVERY.providers);
+  const anyReachable = entries.some((e) => e.reachable);
+  return entries.map((e) => {
+    const mark = e.reachable ? '●' : '○';
+    const hint = e.reachable ? '' : ` (unreachable)`;
+    return `<option value="${esc(e.id)}"${e.id === selected ? ' selected' : ''}>${mark} ${esc(e.label)}${hint}</option>`;
+  }).join('') || `<option value="${esc(selected || '')}" selected>${esc(selected || 'unknown')}</option>`;
+}
+
+async function applyRole(role) {
+  const provider = document.querySelector(`select[data-role="${role}"][data-field="provider"]`).value;
+  const modelId = $(`model-${role}`).value;
+  if (!modelId) { alert('No model selected for ' + role + '.'); return; }
+  try {
+    await window.COM.setLlmRole(role, modelId, provider);
+    await loadRoles();
+  } catch (e) {
+    alert('Could not set model: ' + e.message);
+  }
+}
+
+async function resetRole(role) {
+  try {
+    await window.COM.clearLlmRole(role);
+    await loadRoles();
+  } catch (e) {
+    alert('Could not reset: ' + e.message);
+  }
+}
+
+async function testRole(role) {
+  const out = $(`test-${role}`);
+  const provider = document.querySelector(`select[data-role="${role}"][data-field="provider"]`).value;
+  const modelId = $(`model-${role}`).value;
+  out.innerHTML = '<span class="text-neutral-gray">testing…</span>';
+  try {
+    const res = await window.COM.testLlmModel(modelId, provider);
+    out.innerHTML = res.ok
+      ? `<span class="text-success">answered: ${esc((res.sample || '').slice(0, 40))}</span>`
+      : `<span class="text-error" title="${esc(res.error || '')}">no answer${res.diagnosis ? ' — ' + esc(res.diagnosis) : ''}</span>`;
+  } catch (e) {
+    out.innerHTML = `<span class="text-error">${esc(e.message)}</span>`;
+  }
+}
+
+/* ── Embeddings ────────────────────────────────────────────────────────── */
+
+async function loadEmbedding() {
+  const cur = DISCOVERY.embedding || await window.COM.llmEmbedding();
+
+  $('emb-backend').innerHTML = (cur.supported || []).map((b) => {
+    const label = b === 'local' ? 'local (sentence-transformers)'
+      : b === 'ollama' ? 'ollama (local server)'
+      : `opencode${b === 'opencode-cli' ? ' (via CLI)' : ' (HTTP)'}`;
+    return `<option value="${esc(b)}"${b === cur.backend ? ' selected' : ''}>${esc(label)}</option>`;
+  }).join('');
+
+  $('emb-model').value = cur.model || '';
+
+  // `local` is a sentence-transformers id, not one the providers serve.
+  const candidates = cur.backend === 'local' ? [] : embedModels(cur.backend);
+  $('emb-model-options').innerHTML = sortModels(candidates)
+    .map((m) => `<option value="${esc(m.id)}">${esc(modelLabel(m))}</option>`).join('');
+
+  $('emb-note').innerHTML = cur.compatible === false
+    ? `<span class="text-warning">${esc(cur.model)} is not 384-dimension. Re-embed existing chunks before relying on search.</span>`
+    : `Vector stores are fixed at ${esc(cur.dimension)} dimensions (from ${esc(cur.default_model)}).`;
+
+  renderEmbeddingList();
+}
+
+function renderEmbeddingList() {
+  const backend = $('emb-backend').value;
+  const list = backend === 'local' ? [] : embedModels(backend);
+  $('embedding-models').innerHTML = list.length
+    ? list.map((m) => `
+      <button onclick="pickEmbedding('${esc(backend)}', '${esc(m.id)}')"
+        class="w-full text-left bg-surface-container-low border border-outline-variant px-3 py-2 flex items-center gap-3 flex-wrap hover:border-runed-gold transition-colors">
+        <span class="font-pixel-small text-pixel-small text-parchment">${esc(m.id)}</span>
+        ${m.parameter_size ? `<span class="font-pixel-small text-pixel-small text-neutral-gray">${esc(m.parameter_size)}</span>` : ''}
+        ${m.quantization ? `<span class="font-pixel-small text-pixel-small text-neutral-gray">${esc(m.quantization)}</span>` : ''}
+        <span class="ml-auto font-pixel-small text-pixel-small text-runed-gold">use this</span>
+      </button>`).join('')
+    : `<p class="font-pixel-small text-pixel-small text-neutral-gray">${
+        backend === 'local'
+          ? 'The local backend uses any sentence-transformers id — type one above. For example all-MiniLM-L6-v2.'
+          : (DISCOVERY.providers[backend] || {}).hint || 'No embedding models found for this provider.'
+      }</p>`;
+}
+
+function pickEmbedding(backend, model) {
+  $('emb-backend').value = backend;
+  $('emb-model').value = model;
+  renderEmbeddingList();
+}
+
+async function applyEmbedding() {
+  const backend = $('emb-backend').value;
+  const model = $('emb-model').value.trim();
+  const status = $('emb-status');
+  if (!model) { status.innerHTML = '<span class="text-error">enter a model id</span>'; return; }
+  status.innerHTML = '<span class="text-neutral-gray">applying…</span>';
+  try {
+    const res = await window.COM.setLlmEmbedding(backend, model);
+    DISCOVERY.embedding = res;
+    await loadEmbedding();
+    status.innerHTML = res.compatible === false
+      ? '<span class="text-warning">applied — but that width does not match the vector stores</span>'
+      : `<span class="text-success">applied: ${esc(res.model)}</span>`;
+  } catch (e) {
+    status.innerHTML = `<span class="text-error">${esc(e.message)}</span>`;
+  }
+}
+
+async function testEmbedding() {
+  const backend = $('emb-backend').value;
+  const model = $('emb-model').value.trim();
+  const status = $('emb-status');
+  status.innerHTML = '<span class="text-neutral-gray">embedding a probe…</span>';
+  try {
+    const res = await window.COM.testLlmEmbedding(backend, model);
+    if (!res.ok) {
+      status.innerHTML = `<span class="text-error" title="${esc(res.error || '')}">${esc(res.diagnosis || res.error || 'failed')}</span>`;
+    } else {
+      status.innerHTML = res.matches_store
+        ? `<span class="text-success">${esc(res.dimension)} dims — matches the vector stores</span>`
+        : `<span class="text-warning">${esc(res.dimension)} dims, store expects ${esc(res.expected_dimension)} — ${esc(res.note || '')}</span>`;
+    }
+  } catch (e) {
+    status.innerHTML = `<span class="text-error">${esc(e.message)}</span>`;
+  }
+}
+
+/* ── Providers ─────────────────────────────────────────────────────────── */
+
+async function loadProviders() {
+  const box = $('providers');
+  try {
+    const res = await window.COM.llmProviders();
+    box.innerHTML = res.providers.map((p) => `
+      <div class="bg-surface-container border-2 ${p.active ? 'border-runed-gold' : 'border-outline-variant'} p-3 mb-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="material-symbols-outlined ${p.configured ? 'text-success' : 'text-error'}">${p.configured ? 'check_circle' : 'error'}</span>
+          <span class="font-pixel-heading text-pixel-heading text-parchment">${esc(p.label)}</span>
+          ${p.active ? '<span class="border border-runed-gold text-runed-gold px-1 text-[10px] uppercase rounded">default</span>' : ''}
+          ${p.configured
+            ? '<span class="border border-success/40 text-success px-1 text-[10px] uppercase rounded">ready</span>'
+            : '<span class="border border-error/40 text-error px-1 text-[10px] uppercase rounded">needs API key</span>'}
+          <span class="ml-auto font-pixel-small text-pixel-small text-neutral-gray">${esc(p.base_url)}</span>
+        </div>
+        ${p.notes ? `<p class="font-pixel-small text-pixel-small text-neutral-gray mt-1">${esc(p.notes)}</p>` : ''}
+      </div>`).join('');
+  } catch (e) {
+    box.innerHTML = `<p class="text-error font-pixel-small text-pixel-small">${esc(e.message)}</p>`;
+  }
+}
+
+/* ── Boot ──────────────────────────────────────────────────────────────── */
+
+async function boot() {
+  $('roles').innerHTML = '<p class="text-neutral-gray">Asking each provider what it can serve…</p>';
+
+  // Discovery is the slow part (it shells out to `opencode models`). Load the
+  // cheap panels first so the page is usable, then fill in the model lists.
+  loadProviders();
+  loadEmbedding();
+
+  try {
+    DISCOVERY = await window.COM.llmDiscovery();
+  } catch (e) {
+    $('roles').innerHTML = `<p class="text-error font-pixel-small text-pixel-small">
+      Could not list models: ${esc(e.message)}. Role selection still works with the pinned defaults.
+    </p>`;
+    await loadRoles();
+    return;
+  }
+
+  await loadEmbedding();
+  await loadRoles();
+
+  $('emb-backend').addEventListener('change', renderEmbeddingList);
+  $('emb-apply').addEventListener('click', applyEmbedding);
+  $('emb-test').addEventListener('click', testEmbedding);
+}
+
+boot();
+</script>
+</body>
+</html>

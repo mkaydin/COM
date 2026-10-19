@@ -61,6 +61,20 @@ class TopicStream:
         """One run per topic at a time — a double-click must not double-post."""
         return self._locks.setdefault(topic_id, asyncio.Lock())
 
+    def release_if_idle(self, topic_id: str) -> None:
+        """Drop a topic's lock once nobody is watching or working on it.
+
+        `_locks` is a plain dict on a process that can run for weeks, so holding
+        one lock per topic forever leaked an entry for every topic ever opened.
+        Only dropped when unlocked: recreating the object while another caller
+        still holds a reference would hand out two distinct locks, and two
+        holders of distinct locks do not exclude each other.
+        """
+        if self.watcher_count(topic_id) == 0:
+            existing = self._locks.get(topic_id)
+            if existing is not None and not existing.locked():
+                self._locks.pop(topic_id, None)
+
     async def publish(self, topic_id: str, message: dict) -> None:
         watchers = list(self._subscribers.get(topic_id, []))
         if not watchers:
@@ -149,6 +163,8 @@ async def forum_stream(websocket: WebSocket, topic_id: str,
         logger.error("forum_ws_error", topic_id=topic_id, error=str(e)[:160])
     finally:
         streams.unsubscribe(topic_id, websocket)
+        # Only meaningful once the last watcher leaves and no run holds the lock.
+        streams.release_if_idle(topic_id)
 
 
 async def _handle_user_reply(topic_id: str, ws: WebSocket, msg: dict) -> None:
@@ -176,12 +192,19 @@ async def _handle_user_reply(topic_id: str, ws: WebSocket, msg: dict) -> None:
             )
             if topic.status == "open":
                 topic.status = "debating"
+                # A reply on a previously-failed topic is a retry.
+                topic.error = None
                 await db.commit()
+            # Read here, inside the session. `topic.cast` was read *after* the
+            # block closed, which only worked because `expire_on_commit=False`
+            # leaves attributes loaded — flip that setting and it raises
+            # DetachedInstanceError on every user reply.
+            cast = list(topic.cast or [])
 
         # Broadcast to every watcher, then let the Council respond.
         await streams.publish(topic_id, {"type": "post_created", "post": post})
 
-        if msg.get("trigger_round", True) and topic.cast:
+        if msg.get("trigger_round", True) and cast:
             asyncio.create_task(_run_continuation(topic_id))
 
     except Exception as e:
@@ -325,4 +348,13 @@ async def run_topic_streaming(topic_id: str, question: str, *, cast=None, mode="
             )
         except Exception as e:
             logger.error("forum_stream_run_failed", topic_id=topic_id, error=str(e)[:160])
+            # The topic was left `debating` by the caller with nothing scheduled
+            # to move it on, so a failed run would strand it permanently.
+            from api.forum import _mark_topic_failed
+
+            await _mark_topic_failed(topic_id, e)
+            await streams.publish(
+                topic_id,
+                {"type": "run_failed", "topic_id": topic_id, "message": str(e)[:200]},
+            )
             await streams.publish(topic_id, {"type": "error", "message": str(e)[:200]})

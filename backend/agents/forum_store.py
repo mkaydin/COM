@@ -62,6 +62,9 @@ def topic_to_dict(t: Topic, *, with_posts: bool = False, posts: Optional[list] =
         "framing": t.framing,
         "origin": t.origin,
         "status": t.status,
+        # Only meaningful when status == "failed", but always present so the UI
+        # does not have to branch on the shape of the topic.
+        "error": getattr(t, "error", None),
         "mode": t.mode,
         "outcome": t.outcome,
         "cast": t.cast or [],
@@ -309,6 +312,52 @@ async def conclude_topic(
     return topic_to_dict(topic)
 
 
+async def fail_topic(db, topic_id, reason: str, commit: bool = True) -> dict | None:
+    """Mark a thread as failed, with the reason.
+
+    A run that raises leaves `status = "debating"` with nothing scheduled to
+    change it, so the thread sits there forever with no way to tell a provider
+    outage from a crash — and `POST /close` on it synthesises from an empty
+    half-written round. Recording the failure is what makes it recoverable:
+    the UI can show the reason, and the topic can be reopened.
+
+    Never raises. This runs in the error path of an already-failing run, so a
+    second failure here must not mask the first.
+    """
+    try:
+        topic = await get_topic(db, topic_id)
+        if topic is None:
+            logger.warning("forum_fail_topic_missing", topic_id=str(topic_id))
+            return None
+        topic.status = "failed"
+        topic.error = (reason or "")[:2000]
+        if commit:
+            await db.commit()
+        else:
+            await db.flush()
+        logger.warning("forum_topic_failed", topic_id=str(topic_id), reason=topic.error[:200])
+        return topic_to_dict(topic)
+    except Exception as e:  # pragma: no cover - defensive
+        logger.error(
+            "forum_fail_topic_error", topic_id=str(topic_id), error=str(e)[:200]
+        )
+        return None
+
+
+async def clear_topic_error(db, topic_id, commit: bool = True) -> None:
+    """Clear a previous failure when a topic starts running again."""
+    try:
+        topic = await get_topic(db, topic_id)
+        if topic is not None and topic.error:
+            topic.error = None
+            if commit:
+                await db.commit()
+            else:
+                await db.flush()
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning("forum_clear_error_failed", topic_id=str(topic_id), error=str(e)[:160])
+
+
 async def bump_round(db, topic_id, commit: bool = True) -> int:
     topic = await get_topic(db, topic_id)
     if topic is None:
@@ -354,6 +403,40 @@ async def enqueue_intake(
         "source": row.source,
         "received_at": row.received_at.isoformat() if row.received_at else None,
     }
+
+
+async def release_intake(db, intake_id, commit: bool = True) -> bool:
+    """Return a claimed item to the queue.
+
+    `claim_intake` commits `status = 'opened'` *before* the caller has created
+    a topic or scheduled the run. Anything that fails in between — topic
+    creation, background-task scheduling, a process restart — therefore left the
+    question marked `opened` with no topic and nothing left to pick it up: the
+    question was lost permanently, and `list_intake(status='queued')` no longer
+    showed it.
+
+    Putting it back is the only safe recovery. Guarded on `status = 'opened'`
+    so a concurrent drain that legitimately claimed it is not undone.
+    """
+    row = (
+        await db.execute(
+            select(TopicIntake)
+            .where(TopicIntake.id == intake_id)
+            .where(TopicIntake.status == "opened")
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return False
+
+    row.status = "queued"
+    row.opened_at = None
+    row.topic_id = None
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
+    logger.warning("forum_intake_released", intake_id=str(intake_id))
+    return True
 
 
 async def claim_intake(db, intake_id) -> Optional[dict]:

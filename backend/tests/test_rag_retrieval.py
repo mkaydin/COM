@@ -109,8 +109,9 @@ class TestVectorSearchIntegration:
         from sqlalchemy.pool import NullPool
         from sqlalchemy import text
         from config import get_settings
-        from rag.ingest import ingest, _get_embedder
+        from rag.ingest import ingest
         from rag.retrieval import _vector_search
+        from llm.embeddings import embed_one
 
         s = get_settings()
         engine = create_async_engine(s.postgres_url, poolclass=NullPool)
@@ -138,8 +139,11 @@ class TestVectorSearchIntegration:
             ), {"ids": list(v1_ids)})).fetchone()[0]
             assert still_live == 0, f"{still_live} v1 chunks were not superseded"
 
-            # Search for content that matches.
-            qvec = _get_embedder().encode(["supersede test content alpha beta"], normalize_embeddings=True)[0].tolist()
+            # Search for content that matches. The query must be embedded by
+            # the *selected* backend, the same one `ingest` used — reaching
+            # past it into a raw SentenceTransformer silently compared vectors
+            # from two different models.
+            qvec = await embed_one("supersede test content alpha beta")
             results = await _vector_search(db, qvec, top_k=10)
 
             leaked = v1_ids & {r["id"] for r in results}
@@ -157,12 +161,30 @@ class TestSupporterMode:
     async def test_supporter_returns_annotated_context(self):
         from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
         from sqlalchemy.pool import NullPool
+        from sqlalchemy import text
         from config import get_settings
+        from rag.ingest import ingest
         from rag.retrieval import retrieve_raw_context
 
         s = get_settings()
         engine = create_async_engine(s.postgres_url, poolclass=NullPool)
         async with AsyncSession(engine, expire_on_commit=False) as db:
+            # Seeds itself; this used to depend on whatever corpus the database
+            # happened to already hold, so it was the second of the two tests
+            # the README had to caveat as "needs a seeded corpus".
+            await db.execute(
+                text("DELETE FROM rag_chunks WHERE title LIKE 'TESTANNO_%'")
+            )
+            await db.commit()
+            await ingest(
+                db,
+                content="# Composite notes\n\n"
+                "Composite material analysis of laminate structure and fibre "
+                "orientation in aerospace panels. " * 8,
+                title="TESTANNO_doc",
+                source_type="web_search_raw",
+                source_url="https://example.invalid/composite",
+            )
             ctx = await retrieve_raw_context(db, "composite material analysis", top_k=3)
             assert "RAW KNOWLEDGE" in ctx
             # Trust-tier annotations present (at least one of the tiers).
@@ -189,12 +211,30 @@ class TestSupporterMode:
     async def test_supporter_truncates_at_max_chars(self):
         from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
         from sqlalchemy.pool import NullPool
+        from sqlalchemy import text
         from config import get_settings
+        from rag.ingest import ingest
         from rag.retrieval import retrieve_raw_context
 
         s = get_settings()
         engine = create_async_engine(s.postgres_url, poolclass=NullPool)
         async with AsyncSession(engine, expire_on_commit=False) as db:
+            # Seeds its own corpus. This used to depend on whatever was already
+            # in the database, so it passed or failed according to what previous
+            # runs had left behind — the reason the README carried a standing
+            # note about these two tests needing a seeded corpus.
+            await db.execute(
+                text("DELETE FROM rag_chunks WHERE title LIKE 'TESTTRUNC_%'")
+            )
+            await db.commit()
+            await ingest(
+                db,
+                content="# Material notes\n\n" + (
+                    "Composite material analysis notes about laminate structure. " * 12
+                ),
+                title="TESTTRUNC_doc",
+                source_type="user_upload",
+            )
             ctx = await retrieve_raw_context(db, "material", top_k=10, max_chars=500)
             assert len(ctx) <= 600
             assert "[RAG context truncated]" in ctx

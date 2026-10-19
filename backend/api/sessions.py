@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import func, select
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from uuid import UUID, uuid4
-from datetime import datetime
+from datetime import datetime, timezone
 
 from db.postgres import get_db
 from db.models import Session, Deliberation, User
@@ -47,7 +47,7 @@ async def create_session(body: SessionCreate, db: AsyncSession = Depends(get_db)
     session = Session(
         id=uuid4(),
         user_id=user.id,
-        title=body.title or f"Deliberation {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+        title=body.title or f"Deliberation {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}",
         topic=body.topic,
         status="active",
     )
@@ -129,7 +129,7 @@ async def start_session_deliberation(
         body.query,
     )
 
-    session.updated_at = datetime.utcnow()
+    session.updated_at = func.now()
     await db.commit()
 
     return {
