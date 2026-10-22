@@ -141,9 +141,35 @@ blocking Neo4j call on the event loop · **32%/92% silent embedding truncation**
 
 - Free tier is **CLI-only**: `POST /v1/chat/completions` for a `-free` model
   returns `403 FreeTierError — "can only be used from within OpenCode"`, and a
-  paid model returns `402 Insufficient account funds` on a zero balance. That
-  is why `opencode-cli` is the default rather than `opencode`. Verified
-  2026-10-22.
+  paid model returns `402 Insufficient account funds` on a zero balance.
+  Verified 2026-10-22.
+
+- [x] **Q8. Default to the Go subscription over HTTP, not the CLI.**
+
+  The CLI was the default only because it was the only route to free models.
+  On a subscription that constraint disappears, and the CLI costs a process
+  spawn per call: `big-pickle` took **26.9s** for a four-word reply, and a
+  one-round topic spent **426s** in the moderator's synthesis alone.
+
+  New provider `opencode-go` at
+  `https://opencode.ai/inference/go/openai/v1`, same key as Zen, with
+  `deepseek-v4.1-flash` for every role. Measured through the app's own
+  `llm_complete`: **2.9–6.2s per call**, against 1.0–27s for the CLI.
+
+  The endpoint is not quite plain OpenAI-compatible: it answers
+  `400 "Request is missing x-opencode-session and cannot be routed"` unless the
+  request carries a session header. `Provider.extra_headers` now exists for
+  exactly this, and `build_kwargs` attaches it — Zen and Ollama requests are
+  unchanged, which a test pins.
+
+  Free-tier access still requires the CLI, so `opencode-cli` stays available
+  and is no longer the default. Ollama is documented as the secondary local
+  fallback.
+
+  Verified: unit tests for provider shape, headers, routing, and discovery; and
+  three **live** tests against the real endpoint, including one that asserts
+  the header requirement still exists so the header can be deleted rather than
+  carried as folklore if it ever stops being true.
 
 ---
 

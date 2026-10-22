@@ -208,9 +208,9 @@ async def discover(provider_id: Optional[str] = None) -> dict:
     the frontend never branches on provider identity to find out what to render.
     """
     try:
-        pid = (provider_id or get_settings().llm_provider or "opencode-cli").lower()
+        pid = (provider_id or get_settings().llm_provider or "opencode-go").lower()
     except Exception:
-        pid = "opencode-cli"
+        pid = "opencode-go"
 
     out: dict = {
         # The same shape as `GET /api/llm/embedding`, so the page can render the
@@ -260,6 +260,47 @@ async def _discover_one(pid: str) -> dict:
             "models": res.get("models", []), "hint": res.get("hint"),
             "counts": res.get("counts"),
             "source": "/api/tags",
+            "note": provider.notes,
+        }
+
+    if pid == "opencode-go":
+        # The Go endpoint serves no `/models` (it 404s), so the catalogue has
+        # to come from somewhere else. `opencode models` already lists the Go
+        # models as `opencode-go/<id>`, so filter that rather than adding a
+        # 6 MB download of `models.opencode.ai/api.json`. Listing through the
+        # CLI does not make calls depend on it — only discovery does.
+        res = await list_cli_models()
+        prefix = "opencode-go/"
+        live = [m for m in res.get("models", []) if m.startswith(prefix)]
+        if live:
+            models = [
+                {"id": m[len(prefix):], "embedding": is_embedding_model(m),
+                 "free": m.endswith("-free"), "label": m[len(prefix):]}
+                for m in live
+            ]
+            hint = None
+            source = "opencode models (live, via the CLI)"
+        else:
+            # No CLI: still show something selectable rather than an empty
+            # picker, and say why it is short.
+            defaults = sorted(set(provider.role_defaults.values()))
+            models = [
+                {"id": m, "embedding": is_embedding_model(m),
+                 "free": m.endswith("-free"), "label": m}
+                for m in defaults
+            ]
+            hint = res.get("hint") or (
+                "The `opencode` CLI is not on PATH, so only the built-in "
+                "defaults are listed."
+            )
+            # The CLI being absent is a *listing* problem only; say so, or the
+            # operator will think the provider itself is unusable.
+            hint = f"{hint.rstrip()} Calls still work over HTTP."
+            source = "catalogue (static)"
+        return {
+            "id": pid, "label": label, "reachable": bool(provider.api_key),
+            "models": models, "hint": hint,
+            "counts": res.get("counts"), "source": source,
             "note": provider.notes,
         }
 

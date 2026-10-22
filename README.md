@@ -111,14 +111,21 @@ the model words it. That veto is the point of the whole design.
 
 Five characters, each with its own knowledge, its own model, and its own rules.
 
-| Character | Archetype | Knowledge | Model (free default) |
-|-----------|-----------|-----------|----------------------|
-| **Oracle** | Seeker of Truth | OKF knowledge bundle + raw RAG | `minimax-m3.1-flash-free` |
-| **Scholar** | Keeper of Lore | vector RAG, documents, archive | `nemotron-3.5-lightning-free` |
-| **Analyst** | Weaver of Connections | OKF + graph traversal | `glm-5.3-flash-free` |
-| **Historian** | Keeper of Time | wiki, prior sessions, OKF | `deepseek-v4.1-flash-free` |
-| **Sage** | Voice of Intuition | wiki | `mimo-v2.6-flash-free` |
-| **Moderator** | Master of Rules | the whole thread | `big-pickle` |
+| Character | Archetype | Knowledge | Model (default) |
+|-----------|-----------|-----------|-----------------|
+| **Oracle** | Seeker of Truth | OKF knowledge bundle + raw RAG | `deepseek-v4.1-flash` |
+| **Scholar** | Keeper of Lore | vector RAG, documents, archive | `deepseek-v4.1-flash` |
+| **Analyst** | Weaver of Connections | OKF + graph traversal | `deepseek-v4.1-flash` |
+| **Historian** | Keeper of Time | wiki, prior sessions, OKF | `deepseek-v4.1-flash` |
+| **Sage** | Voice of Intuition | wiki | `deepseek-v4.1-flash` |
+| **Moderator** | Master of Rules | the whole thread | `deepseek-v4.1-flash` |
+
+One model for the whole cast is deliberate on the Go subscription. The Zen
+provider spreads roles across distinct models to dodge *free-tier rate limits*,
+which a subscription does not have. The characters still differ by knowledge
+source and instructions — that is what makes their answers differ. Per-character
+models are selectable from `/models.html`, and the free-tier table lives in
+[docs/PROVIDERS.md](docs/PROVIDERS.md).
 
 > The characters differ by **how they think**, not just by which backend they
 > query — that distinction is the difference between a forum and one voice in
@@ -303,30 +310,43 @@ Run it from the repo root: `compose.yaml` there is a thin `include` of
 
 ### Configuration
 
-Nothing is required:
+Only a key is required:
 
 ```bash
-LLM_PROVIDER=opencode-cli     # the default; needs the `opencode` CLI on PATH
+OPENCODE_API_KEY=...          # https://opencode.ai/auth
+LLM_PROVIDER=opencode-go      # the default
+LLM_MODEL_DEFAULT=deepseek-v4.1-flash
 ```
 
-The free models are reached by shelling out to the OpenCode client, because
-**Zen's free tier refuses direct API calls**:
+The default is the **Go subscription over plain HTTP** — no CLI in the request
+path, and every character runs `deepseek-v4.1-flash`. It is a normal
+OpenAI-compatible endpoint at `/inference/go/openai/v1`, with one wrinkle: it
+refuses to route without an `x-opencode-session` header, which the backend
+generates once per process.
+
+| provider | how | needs |
+|----------|-----|-------|
+| `opencode-go` | HTTP, Go subscription | `OPENCODE_API_KEY` |
+| `opencode` | HTTP, Zen | key + account funds |
+| `opencode-cli` | shells out to `opencode run` | the CLI on PATH |
+| `ollama` | local | a pulled model |
+
+**Free-tier models are still CLI-only.** Zen refuses them for anything outside
+the OpenCode client:
 
 ```
 POST /zen/v1/chat/completions  →  FreeTierError:
   "OpenCode's free tier can only be used from within OpenCode."
 ```
 
-`opencode run --model opencode/big-pickle` works, needs no API key, and all six
-default models answer through it. The cost is latency: **1.4–3.2s per call**,
-so a five-character two-round topic takes ~3–5 minutes.
+So `opencode-cli` remains the option of choice if you want to run without
+spending anything — it is just no longer the default. The trade is latency:
+roughly 1.4–3.2s per call through the CLI versus ~2–6s over the subscription.
 
-> **The backend must run on the host** — the Docker image ships no `opencode`
-> binary, and the CLI also needs its own credential store. In Docker use
-> `LLM_PROVIDER=ollama` (free, local) or `opencode` (Zen over HTTP, billed).
-> This is why `python start.py` and Electron both run the backend on the host.
+> **The CLI provider requires the backend on the host** — the Docker image
+> ships no `opencode` binary, and the CLI needs its own credential store. In
+> Docker use `opencode-go` (HTTP), `opencode` (HTTP, billed) or `ollama`.
 
-Everything else has a working default, and **the default models are all free**.
 See [docs/PROVIDERS.md](docs/PROVIDERS.md).
 
 ---

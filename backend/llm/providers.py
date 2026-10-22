@@ -4,26 +4,36 @@ Every LLM call in the Council goes through a provider. A provider answers
 three questions: which base URL, which API key, and which LiteLLM model
 prefix to use.
 
-Three providers:
+Four providers, in the order they should be tried:
 
-* ``opencode-cli`` — the default. Shells out to the OpenCode CLI. This is the
-  only route to Zen's **free** models, because the API endpoint refuses them
-  with ``FreeTierError`` for any standalone client.
-* ``opencode`` — Zen over plain HTTP. Needs a funded account; fast.
-* ``ollama`` — optional local. Fast, free, private, no key.
+* ``opencode-go`` — the default. The Go subscription over plain HTTP, paid-tier
+  models on a subscription, no CLI involved. Sends ``x-opencode-session``.
+* ``opencode`` — Zen over plain HTTP. Free models are refused for standalone
+  clients, so this needs account funds.
+* ``opencode-cli`` — shells out to the ``opencode`` CLI. Still the only route
+  to Zen's **free** models, because the API answers ``FreeTierError`` for
+  anything outside the client.
+* ``ollama`` — secondary and local. Free and private, but a model tag has to be
+  pulled first.
 
-``opencode-cli`` and ``ollama`` share the same free-model defaults as
-``opencode``, so switching to either keeps the six-character free cast intact.
+``opencode`` and ``opencode-cli`` share the same free-model defaults, so
+switching between them keeps the six-character free cast intact. ``opencode-go``
+has its own table, because spreading across models exists to dodge free-tier
+rate limits that a subscription does not have.
 
 Adding a provider means adding one `Provider` and one branch in `BUILDERS`;
 nothing else in the codebase needs to change.
 """
 
+import uuid
 from dataclasses import dataclass, field
 from typing import Optional
 
 from llm import catalogue
 from logging_config import get_logger
+
+#: Generated once per process; see `_go_session`.
+_OPENCODE_SESSION: Optional[str] = None
 
 logger = get_logger(__name__)
 
@@ -59,6 +69,9 @@ class Provider:
     #: When set, calls go through this transport instead of LiteLLM. The
     #: value is the submodule under `llm/` implementing `complete()`.
     transport: Optional[str] = None
+    #: Headers every request to this provider must carry. The Go endpoint
+    #: refuses to route without `x-opencode-session`.
+    extra_headers: dict = field(default_factory=dict)
 
     def model_id(self, bare: str) -> str:
         """Prefix a bare model tag for routing.
@@ -75,6 +88,44 @@ class Provider:
         return f"{self.litellm_prefix}{bare}"
 
 
+def _go_session() -> str:
+    """The `x-opencode-session` value, stable for the life of the process.
+
+    A client-session identifier rather than a credential: the endpoint uses it
+    to route the request and refuses outright without one. Honour
+    `OPENCODE_SESSION` so a restart can stay in the same session.
+    """
+    global _OPENCODE_SESSION
+    from config import get_settings
+
+    configured = (get_settings().opencode_session or "").strip()
+    if configured:
+        return configured
+    if _OPENCODE_SESSION is None:
+        _OPENCODE_SESSION = str(uuid.uuid4())
+    return _OPENCODE_SESSION
+
+
+def _opencode_go() -> Provider:
+    from config import get_settings
+
+    s = get_settings()
+    return Provider(
+        id="opencode-go",
+        label="OpenCode Go (subscription)",
+        base_url=(s.opencode_go_base_url or catalogue.OPENCODE_GO_DEFAULT_BASE_URL).rstrip("/"),
+        # Same credential as Zen; the two endpoints differ by path, not key.
+        api_key=s.opencode_api_key or "",
+        requires_key=True,
+        role_defaults=catalogue.OPENCODE_GO_ROLE_DEFAULTS,
+        extra_headers={"x-opencode-session": _go_session()},
+        notes=(
+            "Default. Paid-tier models on the Go subscription over HTTP, no CLI "
+            "involved. Requires OPENCODE_API_KEY and sends x-opencode-session."
+        ),
+    )
+
+
 def _opencode() -> Provider:
     from config import get_settings
 
@@ -86,7 +137,10 @@ def _opencode() -> Provider:
         api_key=s.opencode_api_key or "",
         requires_key=True,
         role_defaults=catalogue.OPENCODE_ROLE_DEFAULTS,
-        notes="Default. Free-tier models available; see /api/llm/models.",
+        notes=(
+            "Zen over HTTP. Free-tier models are refused for standalone clients "
+            "— use opencode-cli for those — and paid models need account funds."
+        ),
     )
 
 
@@ -125,8 +179,10 @@ def _ollama() -> Provider:
 
 
 _BUILDERS = {
-    "opencode-cli": _opencode_cli,
+    # Ordered by preference: the subscription first, the local fallback last.
+    "opencode-go": _opencode_go,
     "opencode": _opencode,
+    "opencode-cli": _opencode_cli,
     "ollama": _ollama,
 }
 
@@ -144,7 +200,7 @@ def get(provider_id: Optional[str] = None) -> Provider:
     """
     from config import get_settings
 
-    pid = (provider_id or get_settings().llm_provider or "opencode-cli").strip().lower()
+    pid = (provider_id or get_settings().llm_provider or "opencode-go").strip().lower()
     builder = _BUILDERS.get(pid)
     if builder is None:
         raise ProviderError(
@@ -175,7 +231,7 @@ def describe(provider: Provider) -> dict:
         "needs_local_model": provider.needs_local_model,
         "notes": provider.notes,
         "transport": provider.transport or "litellm",
-        "active": provider.id == (s.llm_provider or "opencode-cli").lower(),
+        "active": provider.id == (s.llm_provider or "opencode-go").lower(),
         "free_models": catalogue.free_models_for(provider.id),
         "role_defaults": provider.role_defaults,
     }

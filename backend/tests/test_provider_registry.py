@@ -33,11 +33,39 @@ def _dummy_credentials(monkeypatch):
 
 
 class TestProviderResolution:
-    def test_default_provider_is_the_cli(self):
-        """The API refuses free models for standalone clients, so the CLI is
-        the only route to them — that makes it the default."""
+    def test_default_provider_is_the_go_subscription(self):
+        """The Go subscription over plain HTTP is the default.
+
+        Free-tier models are still CLI-only, but the Go endpoint serves paid
+        models on a subscription with no client involved, which is faster and
+        does not need the binary on PATH.
+        """
         p = providers.get()
-        assert p.id == "opencode-cli"
+        assert p.id == "opencode-go"
+        assert p.transport is None, "the Go provider speaks HTTP, not the CLI"
+        assert p.base_url == "https://opencode.ai/inference/go/openai/v1"
+
+    def test_the_go_provider_sends_a_session_header(self):
+        """Without it the endpoint answers 400 and refuses to route."""
+        p = providers.get("opencode-go")
+        session = p.extra_headers.get("x-opencode-session")
+        assert session, "no x-opencode-session — every call would 400"
+
+        import uuid
+        uuid.UUID(session)  # the endpoint expects a UUID, not an arbitrary string
+
+    def test_the_session_is_stable_within_a_process(self):
+        """A per-call UUID would open a new upstream session for every request."""
+        assert (providers.get("opencode-go").extra_headers["x-opencode-session"]
+                == providers.get("opencode-go").extra_headers["x-opencode-session"])
+
+    def test_only_the_go_provider_carries_extra_headers(self):
+        """Zen and Ollama requests must stay byte-identical to before."""
+        for pid in ("opencode", "opencode-cli", "ollama"):
+            assert providers.get(pid).extra_headers == {}, pid
+
+    def test_the_cli_is_still_available_for_free_models(self):
+        p = providers.get("opencode-cli")
         assert p.transport == "cli_provider"
 
     def test_ollama_is_available_and_optional(self):
@@ -52,8 +80,16 @@ class TestProviderResolution:
         with pytest.raises(providers.ProviderError, match="Unknown LLM provider"):
             providers.get("not-a-provider")
 
-    def test_provider_list_includes_all_three(self):
-        assert set(providers.available()) == {"opencode-cli", "opencode", "ollama"}
+    def test_provider_list_includes_all_four(self):
+        assert set(providers.available()) == {
+            "opencode-go", "opencode", "opencode-cli", "ollama",
+        }
+
+    def test_go_is_first_and_ollama_last(self):
+        """The list is a preference order: subscription first, local last."""
+        order = providers.available()
+        assert order[0] == "opencode-go"
+        assert order[-1] == "ollama"
 
     def test_model_id_gets_the_litellm_prefix(self):
         p = providers.get("opencode")
@@ -87,12 +123,24 @@ class TestRoleBinding:
 
     def test_defaults_come_from_the_provider(self):
         p = providers.get()
-        assert roles.model_for("MODERATOR", p) == "big-pickle"
-        assert roles.model_for("ORACLE", p) == "minimax-m3.1-flash-free"
+        assert roles.model_for("MODERATOR", p) == "deepseek-v4.1-flash"
+        assert roles.model_for("ORACLE", p) == "deepseek-v4.1-flash"
 
-    def test_each_character_gets_a_distinct_model(self):
-        """Spreading across models keeps free-tier rate limits off one endpoint."""
-        p = providers.get()
+    def test_every_go_role_uses_the_subscription_model(self):
+        """One model for every character is deliberate on a paid plan.
+
+        Spreading across models exists to dodge free-tier rate limits, which a
+        subscription does not have. The cast still differs by knowledge source
+        and instructions.
+        """
+        p = providers.get("opencode-go")
+        assert set(roles.model_for(r, p) for r in roles.KNOWN_ROLES) == {
+            "deepseek-v4.1-flash"
+        }
+
+    def test_zen_keeps_a_distinct_model_per_character(self):
+        """Zen *is* free-tier, so spreading across models still matters there."""
+        p = providers.get("opencode")
         models = [roles.model_for(r, p) for r in roles.KNOWN_ROLES]
         assert len(set(models)) == len(models)
 

@@ -55,6 +55,13 @@ Deliberately excluded from the chat-completions defaults:
 
 OPENCODE_DEFAULT_BASE_URL = "https://opencode.ai/zen/v1"
 
+# --- opencode-go (Go subscription) -------------------------------------------------
+
+#: From `https://models.opencode.ai/api.json` -> `providers["opencode-go"].api`.
+#: Same credential as Zen, but the request also needs `x-opencode-session`;
+#: without it the endpoint answers 400 and refuses to route.
+OPENCODE_GO_DEFAULT_BASE_URL = "https://opencode.ai/inference/go/openai/v1"
+
 #: `model id -> default role`. One model per role keeps load spread across
 #: distinct endpoints, which matters because every one of these is free-tier.
 OPENCODE_ROLE_DEFAULTS: dict[str, str] = {
@@ -64,6 +71,18 @@ OPENCODE_ROLE_DEFAULTS: dict[str, str] = {
     "SAGE": "mimo-v2.6-flash-free",
     "ANALYST": "glm-5.3-flash-free",
     "HISTORIAN": "deepseek-v4.1-flash-free",
+}
+
+#: `deepseek-v4.1-flash` for every role.
+#:
+#: This differs from the Zen table on purpose. The Zen defaults exist to spread
+#: free-tier *rate-limits* across distinct models, which has no analogue on a
+#: paid subscription. Giving every character the same strong model keeps the
+#: conversation comparable between runs — the cast still differs by knowledge
+#: source and instructions, which is what makes their answers differ.
+#: Override per role with `LLM_MODEL_<ROLE>` or from `/models.html`.
+OPENCODE_GO_ROLE_DEFAULTS: dict[str, str] = {
+    role: "deepseek-v4.1-flash" for role in OPENCODE_ROLE_DEFAULTS
 }
 
 #: Verified free models usable over `/v1/chat/completions`.
@@ -159,6 +178,9 @@ def free_models_for(provider: str) -> list[dict]:
     This used to match only ``"opencode"`` exactly, so under the shipped
     default ``LLM_PROVIDER=opencode-cli`` the setup UI listed *no* free models
     at all — even though the CLI is precisely how you reach them.
+
+    That default is now ``opencode-go``, which has no free tier, so this list
+    is naturally empty there; `llm.list_models` substitutes the Go role table.
     """
     if not uses_opencode_catalogue(provider):
         return []

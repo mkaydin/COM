@@ -15,13 +15,16 @@ class Settings(BaseSettings):
     log_dir: str = "/tmp/com-logs"
 
     # --- Provider selection -------------------------------------------------------
-    # "opencode-cli"  default — free Zen models via the `opencode` CLI, because
-    #                 the API refuses free models for standalone clients.
-    # "opencode"     Zen over plain HTTP. Needs a funded account.
-    # "ollama"       optional local.
+    # "opencode-go"   default — the Go subscription over plain HTTP. Paid-tier
+    #                 models on a subscription, no CLI involved.
+    # "opencode"      Zen over plain HTTP. Free models are refused for
+    #                 standalone clients; needs a funded account.
+    # "opencode-cli"  the `opencode` CLI. The only route to free-tier models,
+    #                 because the API refuses them outside the client.
+    # "ollama"        optional local fallback, secondary to all of the above.
     # See llm/providers.py.
-    llm_provider: str = "opencode-cli"
-    llm_model_default: str = "big-pickle"
+    llm_provider: str = "opencode-go"
+    llm_model_default: str = "deepseek-v4.1-flash"
 
     # Deprecated single-model setting, kept so an existing `.env` written for
     # the Ollama-only setup still works. When set and `llm_model_default` was
@@ -33,6 +36,14 @@ class Settings(BaseSettings):
     #: the free tier; setting one lets paid models work over the same path.
     opencode_api_key: str = ""
     opencode_base_url: str = "https://opencode.ai/zen/v1"
+    #: The Go subscription endpoint. Same key as Zen, different path, and it
+    #: additionally requires the session header below.
+    opencode_go_base_url: str = "https://opencode.ai/inference/go/openai/v1"
+    #: The Go endpoint refuses a request without `x-opencode-session`
+    #: ("Request is missing x-opencode-session and cannot be routed"). It is a
+    #: client-session identifier, not a credential — one per process is enough,
+    #: and pinning it in `.env` keeps a restart in the same billing session.
+    opencode_session: Optional[str] = None
     #: Path or name of the OpenCode binary for the `opencode-cli` provider.
     opencode_cli_bin: str = "opencode"
 

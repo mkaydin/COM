@@ -59,6 +59,11 @@ def build_kwargs(
             "api_base": provider.base_url,
             "api_key": provider.api_key or providers.PLACEHOLDER_KEY,
         })
+        # Some endpoints need headers to route at all — the Go subscription
+        # answers 400 without `x-opencode-session`. Sent only when the provider
+        # declares them, so Zen and Ollama requests stay byte-identical.
+        if provider.extra_headers:
+            kwargs["extra_headers"] = dict(provider.extra_headers)
         if s.supports_json_mode and "response_format" not in overrides:
             kwargs["response_format"] = {"type": "json_object"}
     kwargs.update(overrides)
@@ -141,11 +146,26 @@ async def list_models(provider_id: Optional[str] = None) -> dict:
         "hint": None,
     }
 
-    if provider.id in ("opencode", "opencode-cli"):
-        # The CLI provider resolves models through the opencode binary, not an
-        # HTTP endpoint, so there is nothing to list live — but the free
-        # catalogue still applies, and it is the same one.
+    if provider.id in ("opencode", "opencode-cli", "opencode-go"):
+        # None of these has a usable `/models` we can query for a free list:
+        # the CLI resolves through the binary, Zen's free entries are refused
+        # to standalone clients, and the Go endpoint 404s on `/models`.
         out["reachable"] = bool(provider.api_key) or provider.id == "opencode-cli"
+        if provider.id == "opencode-go":
+            # A subscription has no free tier, so the useful list is the set of
+            # models this build will actually route to.
+            out["catalogue"] = [
+                {
+                    "id": model,
+                    "name": model,
+                    "roles": sorted(
+                        role for role, default in provider.role_defaults.items()
+                        if default == model
+                    ),
+                }
+                for model in sorted(set(provider.role_defaults.values()))
+            ]
+            out["paid_suggestions"] = []
         out["hint"] = (
             None
             if provider.id == "opencode-cli" or provider.api_key

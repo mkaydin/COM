@@ -5,11 +5,14 @@ document is how that works and how to change it.
 
 ## Providers
 
-| id | default | transport | key | notes |
-|----|---------|-----------|-----|-------|
-| `opencode-cli` | ✅ host | shells out to `opencode run` | not needed | **The only route to the free models.** |
-| `opencode` | | HTTP `/chat/completions` | `OPENCODE_API_KEY` | Needs a **funded** account. Fast. |
-| `ollama` | ✅ in Docker | HTTP `/chat/completions` | — | Free, local, private. |
+Ordered by preference. The first is the default.
+
+| id | transport | key | notes |
+|----|-----------|-----|-------|
+| `opencode-go` | HTTP `/inference/go/openai/v1` | `OPENCODE_API_KEY` | **Default.** Go subscription, paid-tier models, no CLI. |
+| `opencode` | HTTP `/zen/v1` | `OPENCODE_API_KEY` | Zen. Free models refused; paid needs account funds. |
+| `opencode-cli` | shells out to `opencode run` | not needed | **The only route to the free models.** |
+| `ollama` | HTTP `/chat/completions` | — | Secondary. Local, private, needs a pulled tag. |
 
 The HTTP providers are reached through LiteLLM's `openai/` prefix with an
 explicit `api_base` and `api_key`. The environment is never consulted for
@@ -21,35 +24,72 @@ in `BUILDERS`. Nothing else changes.
 
 ---
 
-## Why the CLI is the default
+## The Go subscription
 
-Zen's free models **cannot** be called over the plain API. Verified on
-2026-10-13 against a valid key:
+The Go endpoint is a normal OpenAI-compatible surface with one extra
+requirement: every request must carry an `x-opencode-session` header, or it
+answers
 
 ```
-POST /zen/v1/chat/completions   (all 11 free models)
-  → FreeTierError: "OpenCode's free tier can only be used from within OpenCode."
+400  "Request is missing x-opencode-session and cannot be routed"
+```
+
+It is a client-**session** identifier, not a credential — a UUID is enough. The
+backend generates one per process and reuses it, so a restart does not open a
+new session; pin it with `OPENCODE_SESSION` if that matters for billing. The
+header is declared on the provider (`Provider.extra_headers`) and attached in
+`build_kwargs`, so Zen and Ollama requests are unchanged byte for byte.
+
+Same key as Zen. Different path:
+
+| | Zen | Go |
+|---|---|---|
+| base URL | `https://opencode.ai/zen/v1` | `https://opencode.ai/inference/go/openai/v1` |
+| free models | refused outside the client | none |
+| `/models` | lists | **404s** — enumerate elsewhere |
+| default model | free-tier cast | `deepseek-v4.1-flash` |
+
+Because `/models` 404s, the picker filters `opencode models` down to its
+`opencode-go/<id>` lines. That is a *listing* dependency only — calls never
+touch the CLI. If the CLI is absent the page falls back to the built-in
+defaults and says so.
+
+### Why the cast shares one model here
+
+The Zen table spreads roles across distinct models to keep free-tier rate limits
+in separate buckets. A subscription has no such limits, so the Go table gives
+every character `deepseek-v4.1-flash`. The characters still differ by knowledge
+source and instructions. Override per role with `LLM_MODEL_<ROLE>` or from
+`/models.html`.
+
+---
+
+## Why the CLI still exists
+
+Zen's free models **cannot** be called over the plain API. Verified 2026-10-22
+against a valid key:
+
+```
+POST /zen/v1/chat/completions   (free models)
+  → 403 FreeTierError: "OpenCode's free tier can only be used from within OpenCode."
 
 POST /zen/v1/chat/completions   (paid models, unfunded account)
-  → "Insufficient account funds"
+  → 402 "Upstream request failed: Insufficient account funds"
 ```
 
 The same models work from the OpenCode client, so `opencode-cli` shells out to
-it. **No API key is required** — the CLI uses its own credential store.
+it. **No API key is required** — the CLI uses its own credential store. It is no
+longer the default, but it is the free option.
 
 ### The trade-off, stated plainly
 
-| | `opencode-cli` | `opencode` (HTTP) |
+| | `opencode-go` | `opencode-cli` |
 |---|---|---|
-| free models | ✅ | ❌ refused |
-| needs a key | no | yes, **and billing** |
-| latency | **1.4–3.2s/call** | ~0.4s/call |
-| needs the CLI on PATH | ✅ | — |
-| works in Docker | ❌ | ✅ |
-
-A five-character, two-round topic makes ~15 calls, so expect **~3–5 minutes**
-rather than ~20 seconds. `FORUM_MAX_ROUNDS=1` and a three-character cast is a
-reasonable first configuration.
+| cost | subscription | free |
+| needs a key | yes | no |
+| needs the CLI on PATH | no | yes |
+| works in Docker | ✅ | ❌ |
+| latency | ~2–6s/call | 1.0–1.4s typical, 27s for `big-pickle` |
 
 ### Not available in Docker
 
@@ -58,8 +98,8 @@ credential mount is more machinery than the alternatives cost. Inside the
 compose stack:
 
 ```bash
-LLM_PROVIDER=ollama     # free, local, no key  (--profile local)
-LLM_PROVIDER=opencode   # Zen over HTTP, billed
+LLM_PROVIDER=opencode-go   # default, subscription over HTTP
+LLM_PROVIDER=ollama        # free, local, no key  (--profile local)
 ```
 
 If you set `LLM_PROVIDER=opencode-cli` in Docker, the health endpoint says so
