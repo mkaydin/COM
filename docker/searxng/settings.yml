@@ -1,0 +1,25 @@
+# SearxNG configuration for the Council's Scout.
+#
+# The stock image enables only the HTML format, so the backend's request —
+# which asks for `format=json` — is refused with a bare 403 Forbidden. That
+# 403 is indistinguishable from a limiter block, and it silently emptied every
+# divination: the synthesis still produced a report, but from parametric
+# knowledge only, with no sources at all.
+#
+# Enabling `json` is the entire reason this file exists.
+use_default_settings: true
+
+search:
+  formats:
+    - html
+    - json
+  # 0 = off. The default filters aggressively enough to drop results when
+  # researching a technical question, which is most of what the Council does.
+  safe_search: 0
+
+server:
+  # The limiter protects a public instance from browsers. These are
+  # server-to-server calls from the backend on the same host, so it only adds
+  # latency and a new way for divination to fail.
+  limiter: false
+  public_instance: false

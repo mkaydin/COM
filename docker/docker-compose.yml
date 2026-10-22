@@ -96,10 +96,18 @@ services:
       - "${SEARXNG_PORT:-8888}:8080"
     environment:
       SEARXNG_BASE_URL: http://localhost:${SEARXNG_PORT:-8888}/
+      # Overlaying settings.yml (below) also drops the secret_key the image
+      # generates into its volume, and SearxNG refuses to boot on its built-in
+      # default. Set it here so it is not committed to the repo. Local-only
+      # container, so the fallback is not protecting anything but tidiness.
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-com-council-local-searxng}
       UWSGI_WORKERS: ${SEARXNG_WORKERS:-4}
       UWSGI_THREADS: ${SEARXNG_THREADS:-4}
     volumes:
       - searxngdata:/etc/searxng
+      # Overlays the one file that matters. Without it `format=json` is
+      # disabled and every divination silently loses its sources.
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthz"]
       interval: 10s

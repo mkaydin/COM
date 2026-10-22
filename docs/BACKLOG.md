@@ -75,6 +75,57 @@ blocking Neo4j call on the event loop · **32%/92% silent embedding truncation**
 79 corrupted `openai/*` model ids · per-role provider selection dead in 3 callers ·
 `okf/bundle.py` bypassing the selected embedding backend.
 
+### Correctness — fixed 2026-10-22
+
+- [x] **B7. Saved research was never retrievable.** `ingestion/embedder.py`
+  reported `pgvector_stored` while storing nothing any retrieval path could
+  see. Four faults at once:
+
+  1. the chunk embedding was computed, checked for emptiness, then **never
+     passed to the row** — `documents.embedding` stayed NULL;
+  2. that column is `Vector(1536)` and the embedder emits `VECTOR_DIM` (384),
+     so storing it would have failed anyway (`ERROR: expected 1536 dimensions,
+     not 384`);
+  3. the rows went to `documents`, which retrieval never queries;
+  4. a copy went to ChromaDB, which **nothing reads** — `collection.query`
+     appears nowhere in the codebase — and which embedded with Chroma's own
+     default model, a different vector space.
+
+  Net effect: a divination was filed, returned `{"status":"saved"}`, and was
+  invisible to every retrieval path. `ingest_document` now delegates to
+  `rag.ingest.ingest`, which owns structure-aware chunking, batched embedding,
+  dedupe and trust tiers. `test_ingestion_pipeline.py` asserts the vectors
+  exist, that the width matches `VECTOR_DIM`, and that the content comes back
+  from retrieval — all three fail against the old code.
+
+  Verified end to end: divination (20 sources, 5 summaries, 17k chars) → save →
+  21 chunks, all 384-dim → found by a query sharing no words with the text
+  (cosine 0.708).
+
+- [x] **B8. Divination silently lost every source.** Two independent causes:
+
+  * **SearxNG answered 403.** The stock image enables only the `html` format,
+    so `format=json` is refused. Now `docker/searxng/settings.yml` enables it.
+    Note that overlaying that file also drops the `secret_key` the image
+    generates into its volume, and SearxNG refuses to boot on its built-in
+    default — hence `SEARXNG_SECRET` in the compose environment.
+  * **Wikipedia answered 403, then found nothing.** Two separate faults: the
+    request needed an explicit `Accept` header (httpx's default `*/*` is
+    refused — adding `Accept: text/html` turned 403 into 200 with the *same*
+    User-Agent), and the code then looked for a redirect to `/wiki/`, which
+    MediaWiki only does on an exact title match. It now uses the search API
+    with a relevance gate, because that API always returns *something* —
+    asked for "matryoshka representation learning" it offers "Cultural icon".
+
+  Result: sources 0 → 20, summaries 0 → 6.
+
+  Also verified *not* a bug: the Oracle was missing from one cast, which looked
+  like a grounding hole. `tools/cast_frequency.py` over ten varied questions
+  puts it in **8/10** casts — and 3/3 for both retrieval and knowledge
+  questions, excluded only from a normative-judgement question and an
+  ops-debugging one. It matches characters to question type correctly; the
+  single sample was misleading.
+
 ---
 
 ## 🟡 Quality
@@ -170,6 +221,17 @@ blocking Neo4j call on the event loop · **32%/92% silent embedding truncation**
   three **live** tests against the real endpoint, including one that asserts
   the header requirement still exists so the header can be deleted rather than
   carried as folklore if it ever stops being true.
+
+- [ ] **Q9. `db/chroma.py` is dead code and the container is unused.**
+
+  Fixing B7 removed the last write to ChromaDB, and it turns out nothing had
+  ever read it — `collection.query` does not appear anywhere. So `db/chroma.py`
+  now has no importers, and the `chromadb` service still starts on every run.
+
+  Two options, both a product decision rather than a bug fix: delete the
+  module and drop the service, or make Chroma a genuine second index (with the
+  configured embedder, not its own default). Leaving it running as-is implies
+  a second vector store that does not exist.
 
 ---
 

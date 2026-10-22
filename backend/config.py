@@ -109,6 +109,15 @@ class Settings(BaseSettings):
     # --- Web intelligence (Divination) ----------------------------------------------
     searxng_url: str = "http://localhost:8888"
 
+    #: Sent with outbound research requests. Two separate 403s came from
+    #: getting this wrong: Wikimedia's robot policy rejects a User-Agent with
+    #: no contact information, and it separately refuses a request whose
+    #: Accept is httpx's default `*/*`. Put a real contact here if you deploy
+    #: this — `scout@localhost` is a placeholder.
+    scout_user_agent: str = (
+        "CouncilOfMinds/1.0 (+https://github.com/council-of-minds; scout@localhost)"
+    )
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
     @property

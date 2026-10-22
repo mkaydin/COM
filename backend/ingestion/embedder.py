@@ -1,118 +1,65 @@
+"""Document ingestion for uploaded files and saved divinations.
+
+Converts a document into retrievable chunks. This delegates to
+`rag.ingest.ingest`, which owns structure-aware chunking, batched embedding
+through the configured backend, dedupe and trust tiers.
+
+This module used to carry its own copy of that pipeline, and the copy was
+broken in four ways at once:
+
+* each chunk's embedding was computed, checked for emptiness, and then never
+  passed to the row — the vector was discarded, so `documents.embedding`
+  stayed NULL while the log reported `pgvector_stored`;
+* that column is `Vector(1536)` while the embedder emits `VECTOR_DIM` (384), so
+  storing it would have failed even if it had been passed;
+* the rows went to `documents`, which retrieval never queries — retrieval reads
+  `rag_chunks`;
+* a second copy went to ChromaDB, which nothing reads (`collection.query`
+  appears nowhere in the codebase) and which embedded with Chroma's own
+  default model, a different vector space from the configured one.
+
+The visible effect was that a saved divination was filed, reported success, and
+was invisible to every retrieval path.
 """
-Embedding generation + vector store insertion.
-Chunks text, generates embeddings, stores in both pgvector and ChromaDB.
-"""
-import uuid
-from typing import List
+from __future__ import annotations
+
 from logging_config import get_logger
-from config import get_settings
 
 logger = get_logger(__name__)
-settings = get_settings()
-
-_st_model = None
 
 
-def _get_local_model():
-    global _st_model
-    if _st_model is None:
-        from sentence_transformers import SentenceTransformer
-        _st_model = SentenceTransformer("all-MiniLM-L6-v2")
-    return _st_model
+async def ingest_document(
+    doc_id: str,
+    title: str,
+    content: str,
+    source_type: str = "user_upload",
+) -> dict:
+    """Chunk, embed and store a document so retrieval can find it.
 
-
-def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
-    """Split text into overlapping chunks."""
-    if len(text) <= chunk_size:
-        return [text]
-
-    chunks = []
-    start = 0
-    while start < len(text):
-        end = start + chunk_size
-        chunk = text[start:end]
-        chunks.append(chunk)
-        start = end - overlap
-    return chunks
-
-
-def generate_embedding(text: str) -> List[float]:
-    """Generate an embedding vector for a text chunk.
-
-    Goes through `llm.embeddings` so the configured backend is used. This used
-    to hold a third hardcoded `SentenceTransformer("all-MiniLM-L6-v2")`.
+    Returns `rag.ingest.ingest`'s result: `{"status", "chunks",
+    "content_hash", "trust_tier"}`.
     """
-    from llm.embeddings import embed_sync
+    from db.postgres import async_session
+    from rag.ingest import ingest as rag_ingest
 
-    try:
-        vectors = embed_sync([text])
-        return vectors[0] if vectors else []
-    except Exception as e:
-        logger.error("embedding_failed", error=str(e))
-        return []
+    if not content or not content.strip():
+        logger.info("document_ingest_skipped", doc_id=doc_id, reason="empty content")
+        return {"status": "skipped", "chunks": 0, "reason": "empty content"}
 
-
-def store_in_chromadb(doc_id: str, title: str, chunks: List[str], collection_name: str = "documents_shared"):
-    """Store document chunks in ChromaDB for vector search."""
-    try:
-        from db.chroma import get_collection
-        collection = get_collection(collection_name)
-        if not collection:
-            logger.warning("chromadb_unavailable")
-            return False
-
-        ids = [f"{doc_id}_chunk_{i}" for i in range(len(chunks))]
-        metadatas = [{"doc_id": doc_id, "title": title, "chunk_index": i} for i in range(len(chunks))]
-
-        collection.add(
-            ids=ids,
-            documents=chunks,
-            metadatas=metadatas,
+    async with async_session() as db:
+        result = await rag_ingest(
+            db,
+            content=content,
+            title=title,
+            source_type=source_type,
+            source_doc_id=doc_id,
         )
-        logger.info("chromadb_stored", doc_id=doc_id, chunks=len(chunks))
-        return True
-    except Exception as e:
-        logger.error("chromadb_store_failed", error=str(e))
-        return False
 
-
-async def ingest_document(doc_id: str, title: str, content: str, source_type: str = "user_upload"):
-    """
-    Full ingestion pipeline for the Historian:
-    1. Chunk text
-    2. Generate embeddings
-    3. Store in ChromaDB (for vector search)
-    4. Store in pgvector (for relational+vector queries)
-    """
-    logger.info("ingesting_document", doc_id=doc_id, title=title[:50])
-
-    chunks = chunk_text(content)
-    logger.info("document_chunked", chunks=len(chunks))
-
-    store_in_chromadb(doc_id, title, chunks)
-
-    try:
-        from db.postgres import async_session
-        from db.models import Document
-
-        async with async_session() as db:
-            for i, chunk in enumerate(chunks):
-                embedding = generate_embedding(chunk)
-                if not embedding:
-                    continue
-
-                chunk_doc = Document(
-                    id=uuid.uuid4(),
-                    title=f"{title} [chunk {i+1}]",
-                    content=chunk,
-                    source_type=f"{source_type}_chunk",
-                    metadata_json={"parent_doc_id": doc_id, "chunk_index": i, "title": title},
-                )
-                db.add(chunk_doc)
-            await db.commit()
-            logger.info("pgvector_stored", doc_id=doc_id, chunks=len(chunks))
-    except Exception as e:
-        logger.error("pgvector_store_failed", error=str(e))
-
-    logger.info("document_ingested", doc_id=doc_id, chunks=len(chunks))
-    return {"status": "ingested", "chunks": len(chunks)}
+    logger.info(
+        "document_ingested",
+        doc_id=doc_id,
+        source_type=source_type,
+        chunks=result.get("chunks", 0),
+        status=result.get("status"),
+    )
+    return result

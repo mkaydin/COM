@@ -22,6 +22,28 @@ settings = get_settings()
 SEARXNG_URL = get_settings().searxng_url
 MAX_REDIRECTS = 5
 
+
+def scout_headers(accept: str = "text/html") -> dict:
+    """Headers for outbound research requests.
+
+    Both halves matter, and each was learned from a real 403:
+
+    * Wikimedia's robot policy rejects a User-Agent carrying no contact
+      information — hence the configurable address rather than a bare
+      ``CouncilOfMinds-Scout/1.0``.
+    * It *also* refuses a request whose ``Accept`` is httpx's default ``*/*``.
+      Holding the User-Agent constant and adding ``Accept: text/html`` turned
+      a 403 into a 200, so the default was the whole problem.
+
+    ``Accept`` is a parameter because SearXNG wants ``application/json``.
+    """
+    from config import get_settings
+
+    return {
+        "User-Agent": get_settings().scout_user_agent,
+        "Accept": accept,
+    }
+
 STRIP_SELECTORS = [
     "script", "style", "nav", "footer", "header", "noscript",
     ".ad", ".ads", ".advertisement", ".sidebar", ".menu",
@@ -54,7 +76,7 @@ async def searxng_search(query: str, num_results: int = 8, categories: str = "ge
             resp = await client.get(
                 f"{SEARXNG_URL}/search",
                 params=params,
-                headers={"User-Agent": "CouncilOfMinds-Scout/1.0", "Accept": "application/json"},
+                headers=scout_headers("application/json"),
             )
             resp.raise_for_status()
             data = resp.json()
@@ -96,7 +118,7 @@ async def scrape_with_httpx(url: str) -> Optional[str]:
             html = None
             for _ in range(MAX_REDIRECTS + 1):
                 ensure_public_url(current)
-                resp = await client.get(current, headers={"User-Agent": "CouncilOfMinds-Scout/1.0"})
+                resp = await client.get(current, headers=scout_headers())
                 if resp.is_redirect:
                     location = resp.headers.get("location")
                     if not location:

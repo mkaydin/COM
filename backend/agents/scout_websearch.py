@@ -13,6 +13,7 @@ Python handles parsing, filtering, and LLM summarization.
 
 import asyncio
 import os
+import re
 import signal
 from bs4 import BeautifulSoup
 from typing import Optional
@@ -178,19 +179,74 @@ async def summarize_page(page: ScrapedPage, topic: str) -> str:
         return f"(summarization failed: {e})"
 
 
+#: MediaWiki search endpoint. Using the API rather than the human search page
+#: is deliberate — see `search_wikipedia`.
+WIKIPEDIA_API = "https://en.wikipedia.org/w/api.php"
+
+
+def _title_relates(title: str, query: str) -> bool:
+    """Does this article title plausibly have anything to do with the query?
+
+    MediaWiki's text search always returns its best guess, however bad — asked
+    for "matryoshka representation learning" it offers "Cultural icon", and for
+    "asyncio task cancellation" it offers "Futures and promises". Handing those
+    to the summariser yields a confident paragraph about the wrong subject,
+    which is worse than admitting no source was found.
+
+    Overlap is checked in both directions so that "pgvector" still matches the
+    "Vector database" article — the query word contains the title word rather
+    than the other way round.
+    """
+    def words(text: str) -> set[str]:
+        return {w for w in re.findall(r"[a-z0-9]+", text.lower()) if len(w) > 3}
+
+    title_words, query_words = words(title), words(query)
+    if not title_words or not query_words:
+        return False
+    return any(q in t or t in q for q in query_words for t in title_words)
+
+
 async def search_wikipedia(query: str) -> Optional[str]:
-    """Resolve a Wikipedia article URL for a topic (uses httpx for lightweight API call)."""
+    """Resolve a Wikipedia article URL for a topic.
+
+    Queries the MediaWiki API instead of scraping
+    ``w/index.php?search=<q>`` and looking for a redirect to ``/wiki/``. That
+    page only redirects on an *exact title match* — for an ordinary query it
+    renders a search-results page and stays on ``w/index.php``, so the old
+    check returned ``None`` for every real query, including ones with an
+    obvious article.
+
+    The API fixes that, but always answers, so results are filtered through
+    `_title_relates` before being trusted.
+    """
     import httpx
-    url = f"https://en.wikipedia.org/w/index.php?search={query.replace(' ', '+')}"
+    from agents.web_search import scout_headers
+
+    params = {
+        "action": "query",
+        "list": "search",
+        "srsearch": query,
+        "srlimit": 3,
+        "format": "json",
+    }
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            resp = await client.get(url, headers={"User-Agent": "CouncilOfMinds-Scout/1.0"})
+            resp = await client.get(
+                WIKIPEDIA_API, params=params, headers=scout_headers("application/json")
+            )
             resp.raise_for_status()
-            final_url = str(resp.url)
-            if "/wiki/" in final_url and "w/index.php" not in final_url:
-                return final_url
+            hits = ((resp.json().get("query") or {}).get("search") or [])
     except Exception as e:
         logger.warning("wikipedia_lookup_failed", query=query, error=str(e))
+        return None
+
+    for hit in hits:
+        title = str(hit.get("title") or "")
+        if _title_relates(title, query):
+            return f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}"
+
+    logger.info("wikipedia_no_relevant_article", query=query[:60],
+                offered=[h.get("title") for h in hits][:3])
     return None
 
 
