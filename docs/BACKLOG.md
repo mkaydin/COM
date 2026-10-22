@@ -117,9 +117,33 @@ blocking Neo4j call on the event loop · **32%/92% silent embedding truncation**
 - [ ] **Q5. No reranker stage.** Every source consulted agreed a cross-encoder
   reranker lifts retrieval more than swapping embedders does.
 
-- [ ] **Q6. Free-tier guidance rots.** Two role defaults had already rotated
-  out of Zen's free tier while still being the recorded defaults.
-  → Add a freshness check against the live catalogue.
+- [ ] **Q6. Free-tier guidance rots.** *Catalogue re-verified; detection still
+  missing.*
+
+  Re-checked against the live catalogue on 2026-10-22 and the rot was worse
+  than recorded: `longcat-2.5-preview-free` (the **Oracle** default),
+  `space-bunny-free`, both `muse-spark-*-contributor-free` entries and three of
+  the eight paid suggestions no longer existed. `PROVIDERS.md` had drifted two
+  generations behind, still listing `ling-3.1-flash-free` and
+  `step-5-preview-free` for Analyst and Historian.
+
+  Oracle now defaults to `minimax-m3.1-flash-free`, verified by exercising
+  every free model through `opencode-cli`. Two measured findings: `jev-1.13-free`
+  is listed as free but is not a chat model and fails, and `flint-40b-free`
+  answers correctly but took **82s**, so neither is a default.
+
+  Still open: nothing *detects* this at runtime. Health verifies an Ollama model
+  is installed and that the CLI binary exists, but for Zen it only checks that
+  an API key is set. A role pointed at a delisted model reports healthy and then
+  produces nothing. The discovery layer already lists live models, so the check
+  is reachable — compare each role's model against it and report
+  `model_present: false` rather than `ok: true`.
+
+- Free tier is **CLI-only**: `POST /v1/chat/completions` for a `-free` model
+  returns `403 FreeTierError — "can only be used from within OpenCode"`, and a
+  paid model returns `402 Insufficient account funds` on a zero balance. That
+  is why `opencode-cli` is the default rather than `opencode`. Verified
+  2026-10-22.
 
 ---
 
@@ -271,8 +295,27 @@ the app has no build step on install, and `electron-builder` already packages
   challengers) is the biggest latency win available.
 - [ ] **O5. Cache `_bundle_fingerprint()`.** `okf/bundle.py` does
   `rglob("*.md")` + a `stat()` per file on *every* retrieval.
-- [ ] **O6. Lock the OKF index build.** `to_thread`'d but mutated shared state
+- [x] **O6. Lock the OKF index build.** `to_thread`'d but mutated shared state
   without a lock.
+
+  Two failure modes, both real. The check-then-act guard had no lock, so every
+  concurrent caller saw a cold cache as stale and built its own index — at the
+  opening of a debate five characters retrieve at once, so that was five
+  embedding passes over the whole bundle. Worse, the cache was a module-level
+  dict updated key-by-key, so a reader could see `ids` from one build beside
+  `embeddings` from another, pairing the wrong rows with the wrong vectors and
+  returning confidently wrong results instead of failing.
+
+  Now a frozen `_ConceptIndex` rebound under a `threading.Lock`, with the
+  fingerprint recomputed inside the lock and the build done before publication.
+  Readers take the returned snapshot rather than the module global, so a
+  concurrent republish cannot tear the read.
+
+  Verified two ways. `test_okf_index_race.py` fires 8 threads at a cold cache:
+  the old code reports **`assert 8 == 1`** — eight builds — and the new code
+  builds once. Against the real 30-concept bundle, 10 concurrent retrievals
+  produce one `count=30` embed followed by ten `count=1` query embeds, in 2.82s
+  with no errors.
 - [ ] **O7. Split the three oversized functions.** `moderator_synthesis`
   (154 lines) does prompt construction, the LLM call, fallback synthesis,
   signal enforcement and two DB writes.

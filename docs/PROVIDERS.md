@@ -69,20 +69,45 @@ specifically rather than complaining about PATH.
 
 ## The free defaults
 
-Verified against the live Zen catalogue on **2026-10-13** —
-`GET https://opencode.ai/zen/v1/models` returned 78 models, 11 free.
+Verified against the live Zen catalogue on **2026-10-22** —
+`GET https://opencode.ai/zen/v1/models` returned 49 models, 9 of them `-free`.
+Every model below was exercised through `opencode-cli` on that date.
 
 | model | default role | why |
 |-------|--------------|-----|
 | `big-pickle` | Moderator | the job is structured synthesis + JSON, not depth |
-| `longcat-2.5-preview-free` | Oracle | long context; reasons over whole concept bodies |
+| `minimax-m3.1-flash-free` | Oracle | grounded reasoning over whole concept bodies |
 | `nemotron-3.5-lightning-free` | Scholar | fast; makes many calls with large grounded context |
 | `mimo-v2.6-flash-free` | Sage | used at high temperature for analogy and ethics |
-| `ling-3.1-flash-free` | Analyst | |
-| `step-5-preview-free` | Historian | |
+| `glm-5.3-flash-free` | Analyst | |
+| `deepseek-v4.1-flash-free` | Historian | fastest measured (1.9s) |
 
 Spreading one model per role is deliberate: these are all free-tier, and
 distinct models mean distinct rate-limit buckets.
+
+**This table rots.** Two generations of defaults have already disappeared
+mid-release: `ling-3.1-flash-free` and `step-5-preview-free` first, then
+`longcat-2.5-preview-free`. Both times the recorded default kept pointing at a
+model the catalogue no longer served, and the only symptom was a character that
+produced nothing. Treat `GET /api/llm/discovery` as the authority and this
+table as a snapshot.
+
+Two measured oddities worth knowing: `flint-40b-free` answers correctly but
+took **82s**, so it is not a default; and `jev-1.13-free` is listed as free but
+is not a chat model — it fails.
+
+### Free tier over HTTP
+
+Free models answer only from inside OpenCode itself:
+
+```json
+{"error": {"type": "FreeTierError",
+           "message": "OpenCode's free tier can only be used from within OpenCode."}}
+```
+
+That is why `opencode-cli` is the default provider and `opencode` (HTTP) is
+not — the CLI *is* "within OpenCode". A paid model over HTTP returns
+`402 Insufficient account funds` when the account has no balance.
 
 **This is a snapshot, not a guarantee.** Zen rotates models. If a default 404s,
 pick another from the list below, or set `LLM_MODEL_DEFAULT` and let the

@@ -57,7 +57,7 @@ class TestEmbeddingClassification:
 
     @pytest.mark.parametrize("model_id", [
         "opencode/big-pickle",
-        "longcat-2.5-preview-free",
+        "minimax-m3.1-flash-free",
         "nemotron-3.5-lightning-free",
         "llama3.2",
         "qwen3-coder",

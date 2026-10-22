@@ -113,7 +113,7 @@ Five characters, each with its own knowledge, its own model, and its own rules.
 
 | Character | Archetype | Knowledge | Model (free default) |
 |-----------|-----------|-----------|----------------------|
-| **Oracle** | Seeker of Truth | OKF knowledge bundle + raw RAG | `longcat-2.5-preview-free` |
+| **Oracle** | Seeker of Truth | OKF knowledge bundle + raw RAG | `minimax-m3.1-flash-free` |
 | **Scholar** | Keeper of Lore | vector RAG, documents, archive | `nemotron-3.5-lightning-free` |
 | **Analyst** | Weaver of Connections | OKF + graph traversal | `glm-5.3-flash-free` |
 | **Historian** | Keeper of Time | wiki, prior sessions, OKF | `deepseek-v4.1-flash-free` |

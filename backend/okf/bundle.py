@@ -11,6 +11,8 @@ OKF markdown — browsable by humans, agents, git, and the OKF viewer.
 from __future__ import annotations
 
 import re
+import threading
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -72,7 +74,33 @@ def list_concepts(bundle_root: Path | None = None) -> list[dict[str, Any]]:
 # --- semantic retrieval (sentence-transformers, cached) ----------------------
 
 _st_model = None
-_concept_cache: dict[str, Any] = {"root": None, "ids": [], "embeddings": None, "mtime": None}
+
+
+@dataclass(frozen=True)
+class _ConceptIndex:
+    """One complete build of the concept index.
+
+    Frozen and never mutated after publication, so a reader that captures the
+    reference gets a coherent snapshot. The previous shape was a module-level
+    dict updated key-by-key, which let a reader observe `ids` from one build
+    next to `embeddings` from another — pairing the wrong rows with the wrong
+    vectors and returning confidently wrong results rather than failing.
+    """
+
+    root: Path
+    fingerprint: float
+    ids: list[str]
+    concepts: list[dict[str, Any]]
+    embeddings: np.ndarray
+
+
+#: The published snapshot. Rebound atomically, never mutated in place.
+_concept_index: _ConceptIndex | None = None
+
+#: Serialises the check-and-build. Callers reach this through
+#: `asyncio.to_thread`, so several OS threads can arrive at once — at the start
+#: of a debate all five characters retrieve simultaneously against a cold cache.
+_index_lock = threading.Lock()
 
 
 def invalidate_concept_cache(bundle_root: Path | None = None) -> None:
@@ -83,9 +111,16 @@ def invalidate_concept_cache(bundle_root: Path | None = None) -> None:
     retrieval until the process restarts — which would defeat the whole
     point of the bundle compounding.
     """
-    if bundle_root is not None and _concept_cache["root"] not in (None, Path(bundle_root).resolve()):
-        return
-    _concept_cache.update(root=None, ids=[], embeddings=None, mtime=None)
+    global _concept_index
+    with _index_lock:
+        index = _concept_index
+        if (
+            bundle_root is not None
+            and index is not None
+            and index.root != Path(bundle_root).resolve()
+        ):
+            return
+        _concept_index = None
 
 
 def _bundle_fingerprint(root: Path) -> float:
@@ -118,28 +153,45 @@ def _concept_text(c: dict[str, Any]) -> str:
     return " ".join(p for p in parts if p)
 
 
-def _ensure_index(bundle_root: Path) -> None:
-    root = Path(bundle_root).resolve()
-    fingerprint = _bundle_fingerprint(root)
-    if (
-        _concept_cache["root"] == root
-        and _concept_cache["embeddings"] is not None
-        and _concept_cache["mtime"] == fingerprint
-    ):
-        return
-    concepts = list_concepts(root)
-    # Through the shared embedder so the user's selection applies here too.
-    from llm.embeddings import embed_sync
+def _ensure_index(bundle_root: Path) -> _ConceptIndex:
+    """Return the index for `bundle_root`, rebuilding it if the bundle moved.
 
-    texts = [_concept_text(c) for c in concepts] or ["empty"]
-    emb = embed_sync(texts)
-    _concept_cache.update(
-        root=root,
-        ids=[c["id"] for c in concepts],
-        embeddings=np.asarray(emb, dtype=np.float32),
-        concepts=concepts,
-        mtime=fingerprint,
-    )
+    Double-checked: the fast path avoids the lock entirely, and the second
+    check catches the case where another thread built it while this one waited.
+    Only one thread ever embeds, so a cold cache costs one pass instead of one
+    per concurrent caller.
+    """
+    global _concept_index
+    root = Path(bundle_root).resolve()
+
+    index = _concept_index
+    if index is not None and index.root == root and index.fingerprint == _bundle_fingerprint(root):
+        return index
+
+    with _index_lock:
+        # Recompute under the lock: the bundle can change between the fast-path
+        # check and acquiring it, and publishing an index built from the older
+        # fingerprint would leave the new concept invisible until the next call.
+        fingerprint = _bundle_fingerprint(root)
+        index = _concept_index
+        if index is not None and index.root == root and index.fingerprint == fingerprint:
+            return index
+
+        concepts = list_concepts(root)
+        # Through the shared embedder so the user's selection applies here too.
+        from llm.embeddings import embed_sync
+
+        texts = [_concept_text(c) for c in concepts] or ["empty"]
+        emb = embed_sync(texts)
+        built = _ConceptIndex(
+            root=root,
+            fingerprint=fingerprint,
+            ids=[c["id"] for c in concepts],
+            concepts=concepts,
+            embeddings=np.asarray(emb, dtype=np.float32),
+        )
+        _concept_index = built
+        return built
 
 
 def retrieve_relevant(
@@ -155,12 +207,13 @@ def retrieve_relevant(
     """
     root = Path(bundle_root or BUNDLE_ROOT)
     try:
-        _ensure_index(root)
+        # The returned snapshot, not the module global: another thread may
+        # republish the index between here and the read below.
+        index = _ensure_index(root)
     except Exception:
         return _keyword_retrieve(query, root, top_k)
 
-    cache = _concept_cache
-    if cache["embeddings"] is None or len(cache["ids"]) == 0:
+    if index.embeddings is None or len(index.ids) == 0:
         return []
 
     # The query must come from the same backend that built the index above, or
@@ -174,9 +227,9 @@ def retrieve_relevant(
     except Exception:
         return _keyword_retrieve(query, root, top_k)
 
-    scores = cache["embeddings"] @ q_emb
+    scores = index.embeddings @ q_emb
     order = np.argsort(-scores)[:top_k]
-    concepts = cache["concepts"]
+    concepts = index.concepts
     out = []
     for i in order:
         c = dict(concepts[i])

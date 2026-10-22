@@ -87,11 +87,11 @@ class TestPickerBehaviour:
     def test_matching_prefers_the_routed_id(self):
         """A bare tag must not highlight the wrong provider route.
 
-        `longcat-2.5-preview-free` is in the catalogue twice, as
-        `opencode/…` and `opencode-go/…`. The backend routes a bare tag to
-        `opencode/` (see `llm.cli_provider.to_cli_model`), so that is the one
-        the page has to mark as current — otherwise opening the page looks like
-        it re-points the character.
+        The same model is often listed more than once, as `opencode/…` and
+        `opencode-go/…`. The backend routes a bare tag to `opencode/` (see
+        `llm.cli_provider.to_cli_model`), so that is the one the page has to
+        mark as current — otherwise opening the page looks like it re-points
+        the character.
         """
         src = _code()
         assert "currentModelId" in src

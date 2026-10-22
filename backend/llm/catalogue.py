@@ -13,20 +13,33 @@ what LiteLLM's `openai/` prefix speaks):
 
 * ``big-pickle``            — general workhorse; the Moderator's job is
                                structured synthesis + JSON, not depth.
-* ``longcat-2.5-preview-free`` — long-context; the Oracle reasons over whole
-                               OKF concept bodies.
+* ``minimax-m3.1-flash-free`` — the Oracle's grounded reasoning; replaced
+                               ``longcat-2.5-preview-free``, which left the
+                               catalogue (see below).
 * ``nemotron-3.5-lightning-free`` — fast, retrieval-heavy; the Scholar makes
                                many calls with large grounded context.
 * ``mimo-v2.6-flash-free``  — used at high temperature for the Sage's analogy
                                and ethics work.
 * ``glm-5.3-flash-free`` / ``deepseek-v4.1-flash-free`` — reserve cast for the
   Analyst and Historian, and for spreading rate-limit pressure across distinct
-  endpoints. These replaced ``ling-3.1-flash-free`` and
-  ``step-5-preview-free``, which rotated out of the free tier: they were still
-  the recorded defaults here while `opencode models` stopped listing them, so
-  those two characters could not answer at all. The free tier turns over, so
-  `GET /api/llm/discovery` is the authority on what exists now and this file is
-  only the curated snapshot.
+  endpoints.
+
+**This file rots, and it has rotted twice.** ``ling-3.1-flash-free`` and
+``step-5-preview-free`` rotated out first; then ``longcat-2.5-preview-free``
+and ``space-bunny-free`` went too, leaving two characters unable to answer at
+all because the recorded default was no longer served. Both times the failure
+was silent until a run produced nothing. The free tier turns over, so
+`GET /api/llm/discovery` is the authority on what exists *now* and this file is
+only the curated snapshot — re-verify it against the live catalogue before
+trusting it, and prefer the discovery endpoint when choosing models in the UI.
+
+Last verified against the live catalogue on **2026-10-22**: 49 models served,
+9 marked ``-free``, plus ``big-pickle``. Every free model below was exercised
+through ``opencode-cli`` on that date. Two observations worth keeping:
+``jev-1.13-free`` is listed but is not a chat model and fails, and
+``flint-40b-free`` answers correctly but took 82s, so it is unsuitable as a
+default. ``beam-free`` (0.7s) and ``deepseek-v4.1-flash-free`` (1.9s) are the
+fastest.
 
 Deliberately excluded from the chat-completions defaults:
 
@@ -46,7 +59,7 @@ OPENCODE_DEFAULT_BASE_URL = "https://opencode.ai/zen/v1"
 #: distinct endpoints, which matters because every one of these is free-tier.
 OPENCODE_ROLE_DEFAULTS: dict[str, str] = {
     "MODERATOR": "big-pickle",
-    "ORACLE": "longcat-2.5-preview-free",
+    "ORACLE": "minimax-m3.1-flash-free",
     "SCHOLAR": "nemotron-3.5-lightning-free",
     "SAGE": "mimo-v2.6-flash-free",
     "ANALYST": "glm-5.3-flash-free",
@@ -60,10 +73,10 @@ OPENCODE_FREE_MODELS: dict[str, dict] = {
         "roles": ["MODERATOR"],
         "notes": "general default",
     },
-    "longcat-2.5-preview-free": {
-        "name": "LongCat 2.5 Preview Free",
+    "minimax-m3.1-flash-free": {
+        "name": "MiniMax M3.1 Flash Free",
         "roles": ["ORACLE"],
-        "notes": "long context",
+        "notes": "grounded reasoning over concept bodies",
     },
     "nemotron-3.5-lightning-free": {
         "name": "Nemotron 3.5 Lightning Free",
@@ -77,30 +90,41 @@ OPENCODE_FREE_MODELS: dict[str, dict] = {
     },
     "glm-5.3-flash-free": {"name": "GLM 5.3 Flash Free", "roles": ["ANALYST"]},
     "deepseek-v4.1-flash-free": {"name": "DeepSeek V4.1 Flash Free", "roles": ["HISTORIAN"]},
-    "space-bunny-free": {"name": "Space Bunny Free", "roles": []},
+    # Verified but unassigned — spare endpoints, useful for spreading
+    # rate-limit pressure when a role is repointed from the GUI.
+    "beam-free": {"name": "Beam Free", "roles": [], "notes": "fastest measured (0.7s)"},
+    "nemotron-3.5-super-vl-free": {"name": "Nemotron 3.5 Super VL Free", "roles": []},
+    "flint-40b-free": {
+        "name": "Flint 40B Free",
+        "roles": [],
+        "notes": "correct but ~82s per call; not a default",
+    },
 }
 
 #: Free models that exist but are not reachable over `/v1/chat/completions`.
 #: Listed so the UI can explain *why* they are not offered rather than hiding them.
 OPENCODE_FREE_UNSUPPORTED: dict[str, str] = {
-    "muse-spark-1.2-contributor-free": "served on /v1/responses, not chat/completions",
-    "muse-spark-1.3-contributor-free": "served on /v1/responses, not chat/completions",
-    "jev-1.13-free": "bespoke /v1/systemone endpoint, not a chat model",
+    "jev-1.13-free": (
+        "listed as free but is not a chat model — fails through the CLI too"
+    ),
 }
 
 #: Paid models, offered as opt-in upgrades. Never a default.
+#: Re-checked against the live catalogue on 2026-10-22; the previous list had
+#: rotted the same way the free one had (`claude-sonnet-4-6`, `claude-opus-4-8`
+#: and `gemini-3.5-flash` were all gone).
 OPENCODE_PAID_SUGGESTIONS: list[str] = [
-    "claude-sonnet-4-6",
-    "claude-opus-4-8",
-    "gpt-5.4",
+    "claude-sonnet-5",
+    "claude-opus-5-5",
+    "gpt-5.5",
     "gpt-5.4-mini",
-    "gemini-3.5-flash",
+    "gemini-3.8-flash",
     "deepseek-v4-pro",
     "glm-5.3",
     "kimi-k3",
 ]
 
-OPENCODE_SNAPSHOT_DATE = "2026-10-13"
+OPENCODE_SNAPSHOT_DATE = "2026-10-22"
 
 
 # --- ollama (optional local provider) ---------------------------------------------

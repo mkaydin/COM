@@ -88,7 +88,7 @@ class TestRoleBinding:
     def test_defaults_come_from_the_provider(self):
         p = providers.get()
         assert roles.model_for("MODERATOR", p) == "big-pickle"
-        assert roles.model_for("ORACLE", p) == "longcat-2.5-preview-free"
+        assert roles.model_for("ORACLE", p) == "minimax-m3.1-flash-free"
 
     def test_each_character_gets_a_distinct_model(self):
         """Spreading across models keeps free-tier rate limits off one endpoint."""
