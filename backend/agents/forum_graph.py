@@ -28,6 +28,7 @@ from agents import registry, forum_signals
 from agents.forum_store import (
     append_post,
     create_topic,
+    final_answers,
     list_posts,
     bump_round,
     conclude_topic,
@@ -195,6 +196,7 @@ async def open_topic(state: ForumState) -> dict:
             author_kind="moderator",
             stance="open",
             round=0,
+            kind="opening",
             extra={"reasoning": opening.get("reasoning"), "mode": mode},
             commit=False,
         )
@@ -242,7 +244,7 @@ async def statements(state: ForumState) -> dict:
 
     results = await asyncio.gather(
         *(run_character(k, question, posts=existing, session_id=state.get("session_id"),
-                        is_opening=True) for k in cast),
+                        mode="statement") for k in cast),
         return_exceptions=True,
     )
 
@@ -269,6 +271,7 @@ async def statements(state: ForumState) -> dict:
                 author_kind="character",
                 stance="propose",
                 round=0,
+                kind="statement",
                 confidence=result.get("confidence"),
                 claims=result.get("claims"),
                 citations=result.get("citations"),
@@ -315,7 +318,7 @@ async def exchange(state: ForumState) -> dict:
                 so_far = await list_posts(db, UUID(topic_id))
                 result = await run_character(
                     key, question, posts=so_far, session_id=state.get("session_id"),
-                    is_opening=False,
+                    mode="exchange",
                 )
                 if not result or not result.get("ok"):
                     failed.append(key)
@@ -334,6 +337,7 @@ async def exchange(state: ForumState) -> dict:
                     author_kind="character",
                     stance=result["stance"],
                     round=round_no,
+                    kind="reply",
                     reply_to=reply_to_id,
                     reply_to_seq=reply_to_seq,
                     confidence=result.get("confidence"),
@@ -350,6 +354,98 @@ async def exchange(state: ForumState) -> dict:
 
     logger.info("forum_exchange_complete", topic_id=topic_id, round=round_no,
                 posted=len(new_posts), failed=failed)
+    return {"posts": new_posts, "round": round_no, "failed_characters": failed}
+
+
+# ======================================================================================
+# Node: every character revises its own answer
+# ======================================================================================
+
+
+async def revise(state: ForumState) -> dict:
+    """Each character restates its own answer after reading the discussion.
+
+    Parallel, unlike `exchange`. A revision is not a reply, so nobody should be
+    able to react to somebody else's revision — sequential revisions would give
+    the last speaker an advantage and make "who changed their mind" partly an
+    artefact of speaking order.
+
+    This pass is what makes a final answer exist. Without it a character's last
+    word was whatever they happened to reply to.
+    """
+    import asyncio
+
+    from db.postgres import async_session
+    from uuid import UUID
+
+    question = state.get("question", "")
+    topic_id = state.get("topic_id")
+    cast = state.get("cast") or []
+    round_no = (state.get("round") or 0) + 1
+
+    async with async_session() as db:
+        posts = await list_posts(db, UUID(topic_id))
+
+    openings = {
+        p["author"]: p
+        for p in posts
+        if p.get("author_kind") == "character" and p.get("kind") == "statement"
+    }
+
+    results = await asyncio.gather(
+        *(
+            run_character(
+                key, question, posts=posts, session_id=state.get("session_id"),
+                mode="revision",
+            )
+            for key in cast
+        ),
+        return_exceptions=True,
+    )
+
+    new_posts = []
+    failed = []
+    async with async_session() as db:
+        for key, result in zip(cast, results):
+            if isinstance(result, Exception) or not result or not result.get("ok"):
+                logger.warning(
+                    "forum_revision_skipped",
+                    character=key,
+                    error=(str(result)[:160] if isinstance(result, Exception)
+                           else (result or {}).get("extra", {}).get("error", "")[:160]),
+                )
+                failed.append(key)
+                continue
+
+            opening = openings.get(key)
+            post = await append_post(
+                db,
+                UUID(topic_id),
+                key,
+                result["body"],
+                author_kind="character",
+                kind="revision",
+                stance="propose",
+                round=round_no,
+                revision_of=opening["id"] if opening else None,
+                confidence=result.get("confidence"),
+                claims=result.get("claims"),
+                citations=result.get("citations"),
+                extra=result.get("extra"),
+                commit=False,
+            )
+            new_posts.append(post)
+
+        await bump_round(db, UUID(topic_id), commit=False)
+        await db.commit()
+
+    logger.info(
+        "forum_revision_complete",
+        topic_id=topic_id,
+        round=round_no,
+        revised=len(new_posts),
+        failed=failed,
+    )
     return {"posts": new_posts, "round": round_no, "failed_characters": failed}
 
 
@@ -433,10 +529,15 @@ async def moderator_synthesis(state: ForumState) -> dict:
 
     signals = forum_signals.compute(posts)
 
+    # The finals are derived from the posts, never authored by the Moderator:
+    # it summarises them, and cannot paraphrase away what a character said.
+    # `changed` is computed the same way (opening vs final, token overlap).
+    finals = final_answers(posts)
+
     # `forced` means "the round budget ran out" — the moderator is told to
     # report the real state rather than assume another round will fix it.
     # Derived here rather than in `decide_continue`, which cannot write state.
-    forced = bool(state.get("forced")) or (state.get("round", 0) >= state.get("max_rounds", 2))
+    forced = bool(state.get("forced")) or (state.get("round", 0) >= state.get("max_rounds", 1))
 
     # Exhausting the budget does NOT mean plurality. It only means "stop
     # hoping they will converge". A thread that converged before the budget ran
@@ -449,6 +550,15 @@ async def moderator_synthesis(state: ForumState) -> dict:
         if p["author_kind"] == "character"
     )
     thread_text = thread_text[-24000:]
+
+    # The revision pass is the point of the thread; show the Moderator the
+    # finals separately so it is not asked to infer them from the transcript.
+    final_text = "\n\n".join(
+        f"{f['author'].upper()} (final, #{f['seq']}"
+        + (", CHANGED POSITION" if f["changed"] else "")
+        + f"):\n{(f['body'] or '').strip()}"
+        for f in finals
+    ) or "(no character produced a final answer)"
 
     # If the cast could not speak at all, say so in the synthesis rather than
     # publishing an empty verdict that reads like a considered position.
@@ -475,6 +585,8 @@ async def moderator_synthesis(state: ForumState) -> dict:
                 f"TOPIC: {state.get('title') or question}\n"
                 f"QUESTION: {question}\n\n"
                 f"THE THREAD:\n{thread_text}\n\n"
+                f"FINAL ANSWERS (after the revision pass — these are what the "
+                f"topic concludes with):\n{final_text}\n\n"
                 "DETERMINISTIC SIGNALS (computed for you — these are verified, not your opinion):\n"
                 f"- converged: {signals.get('converged')}\n"
                 f"- largest agreement cluster: {signals.get('largest_cluster')} "
@@ -510,8 +622,27 @@ async def moderator_synthesis(state: ForumState) -> dict:
         logger.error("forum_synthesis_failed", error=str(e)[:160])
         synthesis = _fallback_synthesis(question, signals)
 
+    # The fallback predates these fields; keep the shape identical either way so
+    # the UI never has to branch on whether the Moderator was reachable.
+    synthesis.setdefault("process", "")
+    synthesis.setdefault("changes", [])
+
     if forced_mode:
         synthesis["mode"] = forced_mode
+
+    # Attach the derived finals and the Moderator's per-character reasons.
+    # The answers stay exactly as the characters wrote them; only the "why"
+    # comes from the Moderator, and only for characters that actually moved.
+    reasons = {
+        c.get("author"): c.get("reason")
+        for c in (synthesis.get("changes") or [])
+        if isinstance(c, dict)
+    }
+    for final in finals:
+        final["changed_because"] = (
+            reasons.get(final["author"], "") if final["changed"] else ""
+        )
+    synthesis["final_answers"] = finals
 
     outcome, override_note = forum_signals.enforce(signals, synthesis.get("mode", "plurality"))
     synthesis["mode"] = outcome
@@ -540,6 +671,7 @@ async def moderator_synthesis(state: ForumState) -> dict:
             author_kind="moderator",
             stance="synthesize",
             round=state.get("round", 0),
+            kind="synthesis",
             claims=[
                 {"text": p.get("position", ""), "sources": p.get("backers", [])}
                 for p in synthesis.get("positions", [])
@@ -577,23 +709,26 @@ async def moderator_synthesis(state: ForumState) -> dict:
 
 
 def decide_continue(state: ForumState) -> str:
-    """Synthesise now, or run another exchange round.
+    """Run another exchange round, or move to the revision pass.
 
     The bound is `max_rounds`, checked here and nowhere else, so a cast that
-    disagrees forever still terminates. When the budget runs out we route to
-    synthesis, which derives `forced` itself and reports the real state of the
-    discussion — a topic must always end with an outcome.
+    disagrees forever still terminates.
+
+    Both exits go to `revise`, never directly to synthesis: a character's last
+    exchange reply is not their final answer, and the Moderator cannot summarise
+    finals that do not exist. Synthesis still derives `forced` itself and
+    reports the real state of the discussion.
     """
     round_no = state.get("round", 0)
-    max_rounds = state.get("max_rounds", 2)
+    max_rounds = state.get("max_rounds", 1)
 
     if round_no >= max_rounds:
-        return "synthesise"
+        return "revise"
 
     signals = state.get("signals") or {}
     if signals.get("converged"):
-        # Converged early — no point burning another round of free-tier calls.
-        return "synthesise"
+        # Converged early — no point burning another round of calls.
+        return "revise"
 
     return "exchange"
 
@@ -606,17 +741,22 @@ def build_workflow():
     workflow.add_node("open_topic", open_topic)
     workflow.add_node("statements", statements)
     workflow.add_node("exchange", exchange)
+    workflow.add_node("revise", revise)
     workflow.add_node("synthesis", moderator_synthesis)
 
     workflow.set_entry_point("open_topic")
     workflow.add_edge("open_topic", "statements")
     workflow.add_edge("statements", "exchange")
 
+    # The discussion loop always exits into a revision pass, never straight
+    # into synthesis. That pass is what produces a per-character final answer;
+    # going straight to synthesis was how a "final answer" could be missing.
     workflow.add_conditional_edges(
         "exchange",
         decide_continue,
-        {"exchange": "exchange", "synthesise": "synthesis"},
+        {"exchange": "exchange", "revise": "revise"},
     )
+    workflow.add_edge("revise", "synthesis")
     workflow.add_edge("synthesis", END)
 
     return workflow

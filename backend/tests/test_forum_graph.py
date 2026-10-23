@@ -15,7 +15,7 @@ from agents.forum_graph import ForumState, build_workflow, decide_continue, get_
 class TestWiring:
     def test_all_forum_nodes_registered(self):
         nodes = set(build_workflow().nodes)
-        assert nodes == {"open_topic", "statements", "exchange", "synthesis"}
+        assert nodes == {"open_topic", "statements", "exchange", "revise", "synthesis"}
 
     def test_compiles(self):
         assert get_graph() is not None
@@ -43,7 +43,7 @@ class TestRoundBound:
         assert decide_continue({"round": 0, "max_rounds": 2, "signals": {}}) == "exchange"
 
     def test_stops_at_the_budget(self):
-        assert decide_continue({"round": 2, "max_rounds": 2, "signals": {}}) == "synthesise"
+        assert decide_continue({"round": 2, "max_rounds": 2, "signals": {}}) == "revise"
 
     @pytest.mark.parametrize("max_rounds", [1, 2, 3, 5])
     def test_always_disagreeing_cast_terminates(self, max_rounds):
@@ -60,7 +60,7 @@ class TestRoundBound:
         """Converging early must not burn more free-tier calls."""
         state = {"round": 0, "max_rounds": 5,
                  "signals": {"converged": True}}
-        assert decide_continue(state) == "synthesise"
+        assert decide_continue(state) == "revise"
 
     def test_not_converged_keeps_going(self):
         state = {"round": 0, "max_rounds": 5, "signals": {"converged": False}}
@@ -69,8 +69,9 @@ class TestRoundBound:
     def test_missing_state_still_terminates(self):
         """A malformed state must fail closed, not spin.
 
-        `{}` means round 0 of a 2-round budget, so one exchange is correct —
-        what matters is that it is bounded, not that it starts by synthesising.
+        `{}` means round 0 of the default 1-round budget, so one exchange is
+        correct — what matters is that it is bounded, not that it starts by
+        going to revision.
         """
         state = {}
         rounds = 0
@@ -78,10 +79,11 @@ class TestRoundBound:
             rounds += 1
             state["round"] = rounds
             assert rounds < 50, "empty state failed to terminate"
-        assert rounds == 2  # the default budget
+        assert rounds == 1  # the default budget
 
-    def test_zero_budget_synthesises_immediately(self):
-        assert decide_continue({"round": 0, "max_rounds": 0}) == "synthesise"
+    def test_zero_budget_goes_straight_to_revision(self):
+        """No discussion still needs a final answer, so revision always runs."""
+        assert decide_continue({"round": 0, "max_rounds": 0}) == "revise"
 
 
 class TestState:

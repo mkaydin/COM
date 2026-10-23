@@ -178,26 +178,57 @@ async def run_character(
     *,
     posts: Optional[list[dict]] = None,
     session_id: Optional[str] = None,
-    is_opening: bool = False,
+    mode: str = "exchange",
 ) -> dict:
-    """Produce one character's statement.
+    """Produce one character's contribution for a stage.
+
+    `mode` is one of:
+
+    * ``statement`` — the opening pass: state a position, nobody has spoken yet.
+    * ``exchange`` — a discussion round: reply to a specific claim.
+    * ``revision`` — the final pass: restate or change their own answer after
+      reading the whole discussion. This is what makes a "final answer" exist;
+      without it a character's last word was whatever they last replied to.
 
     Returns a dict shaped like a post body plus the structured fields the
     convergence check reads (`claims`, `confidence`, `stance`).
     """
     character = registry.require(key)
     posts = posts or []
+    mine = [p for p in posts if p.get("author") == key]
 
     context = await gather_context(character, query, session_id)
 
-    if is_opening:
+    if mode == "statement":
         instruction = (
             "This is the opening of a new topic. State your position on the question "
             "in your own voice, following your rules. Set stance to \"propose\"."
         )
+    elif mode == "revision":
+        # The revision sees the whole discussion, not a truncated window: the
+        # point of the pass is to answer everything that was raised.
+        thread = _render_thread(posts, limit=40)
+        opening = next(
+            (p for p in mine if p.get("kind") == "statement"),
+            mine[0] if mine else None,
+        )
+        instruction = (
+            "This is the REVISION pass. The discussion is over. Write your FINAL "
+            "answer to the topic question.\n\n"
+            f"THE DISCUSSION:\n{thread or '(no posts yet)'}\n\n"
+            + (
+                f"YOUR OPENING ANSWER:\n{(opening.get('body') or '').strip()}\n\n"
+                if opening
+                else ""
+            )
+            + "Decide for yourself whether your opening still holds. If the "
+            "discussion changed your position, answer differently and say what "
+            "changed it. If it did not, restate it more precisely. Write a position "
+            "the Moderator can publish as your final answer — do not comment on other "
+            "characters in general terms. Set stance to \"propose\"."
+        )
     else:
         thread = _render_thread(posts)
-        mine = [p for p in posts if p.get("author") == key]
         instruction = (
             "The thread so far:\n\n"
             f"{thread or '(no posts yet)'}\n\n"
@@ -260,8 +291,10 @@ async def run_character(
     stance = (statement.stance or "propose").strip().lower()
     if stance not in character.stances:
         # The model invented a stance this character does not take; fall back
-        # to its opening default rather than storing something meaningless.
-        stance = "propose" if is_opening else character.stances[0]
+        # to a meaningful one rather than storing something meaningless.
+        # Statements and revisions both mean "here is my position"; only an
+        # exchange reply falls back to the character's characteristic stance.
+        stance = "propose" if mode in ("statement", "revision") else character.stances[0]
 
     claims = [c.model_dump() for c in statement.claims]
     citations = [c.model_dump() for c in statement.citations]

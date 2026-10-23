@@ -68,7 +68,8 @@
       <input id="trigger-round" type="checkbox" checked class="form-checkbox"/>
       Ask the Council to respond
     </label>
-    <button id="close-topic" class="ml-auto font-pixel-small text-pixel-small text-neutral-gray hover:text-warning transition-colors underline">Close topic now</button>
+    <button id="save-topic" class="ml-auto font-pixel-small text-pixel-small text-spectral-blue hover:text-runed-gold transition-colors underline">Save to library</button>
+    <button id="close-topic" class="font-pixel-small text-pixel-small text-neutral-gray hover:text-warning transition-colors underline">Close topic now</button>
   </div>
 </div>
 
@@ -80,6 +81,7 @@ const topicId = params.get('id');
 
 let CAST = [];
 let POSTS = new Map();          // seq -> post
+let FINALS = new Map();         // seq -> final answer (from the topic payload)
 let SOCKET = null;
 let TOPIC = null;
 let CONCLUDED = false;
@@ -128,9 +130,41 @@ async function loadTopic(sinceSeq = null) {
   const thread = document.getElementById('thread');
   thread.innerHTML = '';
   POSTS = new Map();
+  FINALS = new Map((t.final_answers || []).map(f => [f.seq, f]));
   (t.posts || []).forEach(addPost);
   if (t.outcome) renderOutcome(t.outcome, t.synthesis, t.signals);
   document.getElementById('close-topic').classList.toggle('hidden', CONCLUDED);
+  // Filing only makes sense once the thread has finals; an open topic has none.
+  const saveBtn = document.getElementById('save-topic');
+  saveBtn.classList.toggle('hidden', !CONCLUDED);
+  saveBtn.textContent = t.source_meta?.library_document_id ? 'In library' : 'Save to library';
+}
+
+async function saveTopic() {
+  const btn = document.getElementById('save-topic');
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const res = await window.COM.api(`/api/forum/topics/${topicId}/save`, { method: 'POST' });
+    if (res.status === 'already_saved') {
+      setStatus('Already in the library.');
+      btn.textContent = 'In library';
+    } else if (res.status === 'saved') {
+      setStatus(`Saved to the library — ${res.chunks} chunk${res.chunks === 1 ? '' : 's'} indexed.`);
+      btn.textContent = 'In library';
+    } else {
+      // `saved_not_indexed`: the document exists but embedding failed, so it
+      // is not retrievable yet. Say that rather than claim success.
+      setStatus(res.detail || 'Saved, but indexing failed.');
+      btn.textContent = original;
+    }
+  } catch (e) {
+    setStatus('Could not save: ' + e.message);
+    btn.textContent = original;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function renderHeader() {
@@ -144,7 +178,7 @@ function renderHeader() {
     <div class="bg-surface-container border-2 border-runed-gold p-4">
       <div class="flex flex-wrap items-center gap-2 mb-2">
         <span class="border border-outline-variant text-neutral-gray px-1 text-[10px] uppercase rounded">${esc(t.origin)}</span>
-        <span class="border border-outline-variant text-neutral-gray px-1 text-[10px] uppercase rounded">${t.round_count}/${t.max_rounds} rounds</span>
+        <span class="border border-outline-variant text-neutral-gray px-1 text-[10px] uppercase rounded">${Math.min(t.round_count || 0, t.max_rounds || 0)}/${t.max_rounds} discussion rounds + revision</span>
       </div>
       <h1 class="font-pixel-display text-pixel-display text-runed-gold mb-1">${esc(t.title)}</h1>
       <p class="font-pixel-small text-pixel-small text-on-surface-variant opacity-80 mb-2">${esc(t.question)}</p>
@@ -218,6 +252,18 @@ function addPost(p) {
   if (p.extra?.insufficient_data)
     extras.push(`<div class="font-pixel-small text-pixel-small text-warning">Insufficient data in its knowledge sources.</div>`);
 
+  // Stage badge: makes the revision pass visible instead of leaving the
+  // reader to guess which post is the character's final word.
+  const final = FINALS.get(p.seq);
+  const kindBadge = p.kind === 'revision'
+    ? `<span class="border border-success/60 text-success px-1 text-[10px] uppercase rounded">Final answer</span>`
+      + (final?.changed
+        ? `<span class="border border-warning/60 text-warning px-1 text-[10px] uppercase rounded">Changed position</span>`
+        : '')
+    : p.kind === 'statement'
+      ? `<span class="border border-outline-variant text-neutral-gray px-1 text-[10px] uppercase rounded">Opening</span>`
+      : '';
+
   const el = document.createElement('div');
   el.className = `post-new bg-surface-container border-2 border-${color}/50 p-3 ${indent}`;
   el.id = `post-${p.seq}`;
@@ -227,6 +273,7 @@ function addPost(p) {
       <span class="font-pixel-heading text-pixel-heading text-${color} uppercase">${esc(nameOf(p.author))}</span>
       <span class="border border-${sm.color}/40 text-${sm.color} px-1 text-[10px] uppercase rounded inline-flex items-center gap-1">
         <span class="material-symbols-outlined" style="font-size:11px">${sm.icon}</span>${sm.label}</span>
+      ${kindBadge}
       <span class="text-neutral-gray font-pixel-small text-pixel-small">#${p.seq}</span>
       ${p.round != null ? `<span class="text-neutral-gray font-pixel-small text-pixel-small">round ${p.round}</span>` : ''}
       ${p.confidence != null ? `<span class="ml-auto text-neutral-gray font-pixel-small text-pixel-small">${Math.round(p.confidence*100)}% confident</span>` : ''}
@@ -404,6 +451,7 @@ async function closeTopic() {
 
 document.getElementById('reply-send').onclick = sendReply;
 document.getElementById('close-topic').onclick = closeTopic;
+document.getElementById('save-topic').onclick = saveTopic;
 document.getElementById('reply-input').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); }
 });

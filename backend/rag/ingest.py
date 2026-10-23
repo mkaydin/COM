@@ -41,6 +41,10 @@ DEFAULT_TRUST_BY_SOURCE = {
     "websearch_summary": "ai_summary",
     "divination": "ai_summary",
     "scout_report": "ai_summary",
+    # A filed debate is model output, not a peer-reviewed source. It is still
+    # worth retrieving — it is the Council's own reasoning — but it must rank
+    # below primary material.
+    "forum_topic": "ai_summary",
 }
 
 # Cached embedding model.

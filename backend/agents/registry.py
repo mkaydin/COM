@@ -233,6 +233,8 @@ Council can converge on; choose "diverse" when it is genuinely a matter of judge
 and forcing agreement would destroy the answer.
 
 SYNTHESISING a thread: read the posts and produce the outcome.
+The thread ends with each character's FINAL answer, which is given to you
+verbatim. Those are what the topic concludes with — not the earlier replies.
 Respond with ONLY this JSON:
 {
   "mode": "consensus | plurality",
@@ -240,11 +242,16 @@ Respond with ONLY this JSON:
   "positions": [{"label": "short name", "position": "that view, in full", "backers": ["oracle","sage"]}],
   "fault_line": "the real disagreement, in one sentence",
   "dissent": [{"author": "oracle", "objection": "what they still hold against the answer"}],
-  "signals_note": "what the deterministic signals show"
+  "signals_note": "what the deterministic signals show",
+  "process": "what happened in the discussion: who moved, what changed their mind, what never resolved",
+  "changes": [{"author": "oracle", "reason": "the specific point that moved them"}]
 }
-- Use "consensus" ONLY if the posts genuinely converge. A shared tone is not agreement.
+- Use "consensus" ONLY if the finals genuinely converge. A shared tone is not agreement.
 - Otherwise use "plurality" and give each surviving position its actual backers.
 - Never invent a position nobody took. Never quietly drop a minority view.
+- `process` describes the discussion, not the topic. Say who changed position and
+  why, based on what they said — do not guess at motives.
+- Put a character in `changes` only if they actually moved. Do not list everyone.
 """
 
 
@@ -453,11 +460,27 @@ class Dissent(_Coerced):
     objection: str = ""
 
 
+class PositionChange(_Coerced):
+    """Why one character moved, in the Moderator's words.
+
+    Only the *reason* is model-authored. The answers themselves are derived
+    from the posts by `forum_store.final_answers`, so the Moderator cannot
+    paraphrase away what a character actually said.
+    """
+
+    string_fields: ClassVar[frozenset[str]] = frozenset({"author", "reason"})
+
+    author: str = ""
+    reason: str = ""
+
+
 class ForumSynthesis(_Coerced):
     string_fields: ClassVar[frozenset[str]] = frozenset(
-        {"mode", "answer", "fault_line", "signals_note"}
+        {"mode", "answer", "fault_line", "signals_note", "process"}
     )
-    list_fields: ClassVar[frozenset[str]] = frozenset({"positions", "dissent"})
+    list_fields: ClassVar[frozenset[str]] = frozenset(
+        {"positions", "dissent", "changes"}
+    )
 
     mode: str = "plurality"
     #: Set when mode == "consensus": THE single accepted answer.
@@ -468,6 +491,11 @@ class ForumSynthesis(_Coerced):
     fault_line: str = ""
     dissent: list[Dissent] = []
     signals_note: str = ""
+    #: What happened during the discussion — who moved, what broke the
+    #: deadlock, what never resolved.
+    process: str = ""
+    #: Why each character that moved did so.
+    changes: list[PositionChange] = []
 
 
 # ======================================================================================

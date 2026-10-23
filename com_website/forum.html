@@ -122,18 +122,24 @@
         </p>
       </div>
       <div>
-        <label class="block text-parchment font-pixel-small text-pixel-small uppercase mb-1" for="topic-rounds">Rounds</label>
+        <label class="block text-parchment font-pixel-small text-pixel-small uppercase mb-1" for="topic-rounds">Discussion rounds</label>
         <select id="topic-rounds" class="w-full bg-surface-container-lowest border-2 border-neutral-gray text-parchment font-pixel-small text-pixel-small p-2 rounded">
-          <option value="1">1 — quick</option>
-          <option value="2" selected>2 — standard</option>
-          <option value="3">3 — thorough</option>
+          <option value="1" selected>1 — standard</option>
+          <option value="2">2 — thorough</option>
+          <option value="3">3 — exhaustive</option>
         </select>
-        <p class="text-neutral-gray font-pixel-small text-pixel-small mt-1 opacity-70">More rounds = more free-tier model calls. Each round is minutes, not seconds.</p>
+        <p class="text-neutral-gray font-pixel-small text-pixel-small mt-1 opacity-70">After the discussion every character revises its answer once, then the Moderator summarises. More rounds = more model calls; each is minutes, not seconds.</p>
       </div>
     </div>
 
     <label class="block text-parchment font-pixel-small text-pixel-small uppercase mb-1">Invite the cast</label>
     <div id="cast-picker" class="flex flex-wrap gap-2 mb-2"></div>
+    <div class="flex items-center gap-3 mb-2">
+      <button id="cast-all" type="button"
+        class="font-pixel-small text-pixel-small text-spectral-blue hover:text-runed-gold underline">Select all</button>
+      <button id="cast-none" type="button"
+        class="font-pixel-small text-pixel-small text-neutral-gray hover:text-warning underline">Clear</button>
+    </div>
     <p id="cast-hint" class="text-neutral-gray font-pixel-small text-pixel-small mb-4 opacity-70">Leave all off to let the Moderator invite whoever suits the question.</p>
 
     <label class="block text-parchment font-pixel-small text-pixel-small uppercase mb-1" for="topic-tags">Tags (comma separated)</label>
@@ -430,7 +436,7 @@ function renderTopicRow(t) {
         <div class="font-pixel-small text-pixel-small text-neutral-gray/80 mt-1 flex flex-wrap items-center gap-x-3">
           <span>${posts === 1 ? '1 post' : `${posts} posts`}</span>
           <span>${(t.cast || []).length} speakers</span>
-          <span>round ${t.round_count || 0}/${t.max_rounds || '?'}</span>
+          <span>round ${Math.min(t.round_count || 0, t.max_rounds || 0)}/${t.max_rounds || '?'}</span>
           ${resolution ? `<span class="text-on-surface-variant/70">· ${escapeHtml(resolution.slice(0, 60))}</span>` : ''}
         </div>
       </div>
@@ -513,28 +519,23 @@ function renderCastGrid() {
     `<a href="#cast-grid" class="px-4 font-pixel-small text-pixel-small text-neutral-gray uppercase hover:text-amber-400 transition-colors">${CAST.length} characters</a>`;
 }
 
+function castChipClass(c, on) {
+  return on
+    ? `cast-chip on bg-obsidian border-2 border-${c.color} text-${c.color} px-3 py-1 font-pixel-small text-pixel-small uppercase`
+    : `cast-chip bg-obsidian border border-${c.color}/50 text-${c.color}/60 px-3 py-1 font-pixel-small text-pixel-small uppercase`;
+}
+
 function renderCastPicker() {
   document.getElementById('cast-picker').innerHTML = CAST.map(c => `
-    <button class="cast-chip bg-obsidian border border-${c.color}/50 text-${c.color}/60 px-3 py-1 font-pixel-small text-pixel-small uppercase"
+    <button class="${castChipClass(c, selectedCast.has(c.key))}"
             onclick="toggleCast('${c.key}', this)">
       <span class="material-symbols-outlined align-middle" style="font-size:14px">${c.icon}</span> ${escapeHtml(c.display_name)}
     </button>`).join('');
 }
 
-function toggleCast(key, el) {
-  const c = CAST.find(x => x.key === key);
-  const base = 'cast-chip bg-obsidian border border-${c.color}/50 text-${c.color}/60 px-3 py-1 font-pixel-small text-pixel-small uppercase';
-  if (selectedCast.has(key)) {
-    selectedCast.delete(key);
-    el.className = base;
-  } else {
-    selectedCast.add(key);
-    el.className = `cast-chip on bg-obsidian border-2 border-${c.color} text-${c.color} px-3 py-1 font-pixel-small text-pixel-small uppercase`;
-  }
-
-  // The hint used to be static prose. It now says what will actually happen,
-  // because "leave all off" is only useful advice if you can see that you
-  // have in fact selected someone.
+function updateCastHint() {
+  // The hint says what will actually happen, because "leave all off" is only
+  // useful advice if you can see that you have in fact selected someone.
   const hint = document.getElementById('cast-hint');
   const n = selectedCast.size;
   hint.textContent = n === 0
@@ -544,6 +545,19 @@ function toggleCast(key, el) {
   hint.className = n === 1
     ? 'text-warning font-pixel-small text-pixel-small mb-4'
     : 'text-neutral-gray font-pixel-small text-pixel-small mb-4 opacity-70';
+}
+
+function toggleCast(key, el) {
+  if (selectedCast.has(key)) selectedCast.delete(key);
+  else selectedCast.add(key);
+  renderCastPicker();
+  updateCastHint();
+}
+
+function setCastAll(on) {
+  selectedCast = new Set(on ? CAST.map(c => c.key) : []);
+  renderCastPicker();
+  updateCastHint();
 }
 
 function openModal() {
@@ -596,6 +610,8 @@ let searchTimer = null;
 document.getElementById('new-topic-btn').onclick = openModal;
 document.getElementById('new-topic-btn-mobile').onclick = openModal;
 document.getElementById('submit-topic').onclick = submitTopic;
+document.getElementById('cast-all').onclick = () => setCastAll(true);
+document.getElementById('cast-none').onclick = () => setCastAll(false);
 document.getElementById('refresh-btn').onclick = loadTopics;
 document.getElementById('filter-status').onchange = loadTopics;
 document.getElementById('filter-outcome').onchange = loadTopics;

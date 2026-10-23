@@ -158,7 +158,7 @@ class _PatchContinue:
         monkeypatch.setattr(forum_api, "list_posts", _async_return([]))
         monkeypatch.setattr(forum_store, "bump_round", self._bump)
 
-        async def fake_run_character(key, question, posts=None, is_opening=False):
+        async def fake_run_character(key, question, posts=None, mode="exchange"):
             return results[key]
 
         monkeypatch.setattr(forum_characters, "run_character", fake_run_character)

@@ -233,6 +233,56 @@ blocking Neo4j call on the event loop · **32%/92% silent embedding truncation**
   configured embedder, not its own default). Leaving it running as-is implies
   a second vector store that does not exist.
 
+- [x] **Q10. The forum had no final answers.** Characters replied to each
+  other, but nothing ever made them restate their own position — so a
+  character's "final answer" was whatever they last commented on, and the
+  Moderator had no finals to summarise. The graph went straight from the
+  discussion loop to synthesis.
+
+  Now: `statements → exchange (N rounds) → revision → synthesis`, where the
+  revision pass runs in **parallel** (a revision is not a reply; sequential
+  revisions would let the last speaker react and make "who moved" partly an
+  artefact of speaking order).
+
+  `posts.kind` records the stage and `posts.revision_of` links a revision to
+  the post it supersedes. The original is kept: whether a character actually
+  moved is the interesting part.
+
+  Finals are **derived** from the posts (`forum_store.final_answers`), never
+  authored by the Moderator, so it cannot paraphrase away what a character
+  said. A character who failed to revise falls back to their last post — a
+  debate must not end with a character silently absent. The Moderator adds the
+  `process` narrative and the per-character reasons.
+
+  `changed` was calibrated rather than guessed: genuine revisions scored
+  0.135–0.208 Jaccard against the opening, restatements "without changing"
+  scored 0.50–0.66, and the threshold is 0.30. The naive 0.85 would have
+  reported every rephrasing as a change of mind. Known limit: a reversal that
+  reuses the wording ("we should adopt X because A" → "we should not adopt X
+  because A") scores high and reads as unchanged; lexical overlap cannot see
+  negation, so the Moderator's `changes` list is shown alongside.
+
+  `POST /api/forum/topics/{id}/save` files a concluded topic into the library:
+  Markdown with finals first, ingested through the RAG pipeline so future
+  topics can retrieve it. Idempotent (the document id is remembered on the
+  topic), 409 for an open topic, trust tier `ai_summary`.
+
+  UI: `FINAL ANSWER` / `OPENING` badges, a `CHANGED POSITION` badge, a Save to
+  library button, a Select-all control on the cast picker (which also fixes
+  `toggleCast` building its class from a single-quoted template literal, so
+  deselecting set a literal `${c.color}` class), and the round counter clamped
+  because the revision pass pushed it past `max_rounds`.
+
+  Verified end to end: a real 4-character topic produced 14 posts
+  (opening/statement/reply/revision/synthesis), 4 finals all marked changed,
+  and filed as 22 embedded chunks retrievable at cosine 0.835.
+
+  One schema-helper bug found on the way: `_add_missing_columns` interpolated
+  a string `server_default` unquoted (`DEFAULT reply`), which Postgres reads as
+  a column reference, and a rejected `ALTER` aborted the transaction so every
+  later column failed with "current transaction is aborted". Now quoted, and
+  each `ALTER` runs in its own savepoint.
+
 ---
 
 ## 🟠 GUI

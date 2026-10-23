@@ -130,6 +130,23 @@ class Post(Base):
     #: Which exchange round produced this (0 = opening statements).
     round = Column(Integer, nullable=False, default=0)
 
+    #: What *stage* produced this post:
+    #: 'statement' | 'reply' | 'revision' | 'synthesis' | 'user'.
+    #:
+    #: Independent of `stance`, which describes *how* it argues. A revision can
+    #: be a concession; a reply can be a proposal. Keeping them separate is what
+    #: lets the UI mark a character's final answer without guessing from prose.
+    #: `server_default` matters: existing rows predate this column and would
+    #: otherwise be NULL, which no query expects.
+    kind = Column(String(32), nullable=False, default="reply", server_default="reply")
+
+    #: For a revision, the earlier post it supersedes — usually the author's own
+    #: opening. The old post is kept: whether a character actually moved is the
+    #: interesting part, and erasing it would destroy the evidence.
+    revision_of = Column(
+        UUID(as_uuid=True), ForeignKey("posts.id", ondelete="SET NULL"), nullable=True
+    )
+
     #: 'user' | 'moderator' | 'character'
     author_kind = Column(String(32), nullable=False)
     #: Character key, or 'moderator' / 'user'.
@@ -157,13 +174,21 @@ class Post(Base):
     #: Self-referential thread structure. `remote_side` points at the parent
     #: side; without it SQLAlchemy cannot tell this one-to-many from its
     #: inverse and mapper configuration fails outright.
+    #:
+    #: `foreign_keys` is required because `revision_of` is a second
+    #: self-referential FK: with two of them SQLAlchemy cannot guess which one
+    #: joins a reply to its parent, and mapper configuration raises
+    #: "Could not determine join condition".
     replies_to = relationship(
         "Post",
         back_populates="replies",
         remote_side=[id],
+        foreign_keys=[reply_to],
         order_by="Post.seq",
     )
-    replies = relationship("Post", back_populates="replies_to")
+    replies = relationship(
+        "Post", back_populates="replies_to", foreign_keys=[reply_to]
+    )
 
     __table_args__ = (
         UniqueConstraint("topic_id", "seq", name="uq_posts_topic_seq"),

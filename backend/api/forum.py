@@ -37,6 +37,7 @@ from agents.forum_store import (
     claim_intake,
     link_intake_to_topic,
     count_posts,
+    final_answers,
 )
 from logging_config import get_logger
 
@@ -232,7 +233,11 @@ async def open_topic(body: TopicCreate, background_tasks: BackgroundTasks,
             "topic_id": topic["id"],
             "status": (t.status if t else "unknown"),
             "topic": topic_to_dict(t) if t else None,
+            "cast": (t.cast if t else cast),
             "posts": posts,
+            # Derived, not model-authored: every successful character has a
+            # final answer even if the revision pass missed them.
+            "final_answers": final_answers(posts),
             "outcome": result.get("outcome"),
             "signals": result.get("signals"),
             "synthesis": result.get("synthesis"),
@@ -271,12 +276,16 @@ async def get_one_topic(topic_id: UUID, since_seq: Optional[int] = None,
     if topic is None:
         raise HTTPException(status_code=404, detail="Topic not found")
     posts = await list_posts(db, topic_id, since_seq=since_seq)
-    return {
-        **topic_to_dict(topic, with_posts=True, posts=[]),
-        "posts": posts,
-        "post_count": await count_posts(db, topic_id),
-        "partial": since_seq is not None,
-    }
+    # Finals are derived from the whole thread. A `since_seq` fetch only has the
+    # tail, so it reports none rather than a wrong set computed from a fragment;
+    # the client already holds the earlier posts.
+    payload = topic_to_dict(
+        topic, with_posts=True, posts=posts if since_seq is None else []
+    )
+    payload["posts"] = posts
+    payload["post_count"] = await count_posts(db, topic_id)
+    payload["partial"] = since_seq is not None
+    return payload
 
 
 @router.patch("/topics/{topic_id}")
@@ -345,7 +354,7 @@ async def post_reply(topic_id: UUID, body: UserReply,
         raise HTTPException(status_code=404, detail="Topic not found")
 
     post = await append_post(
-        db, topic_id, "user", body.body, author_kind="user",
+        db, topic_id, "user", body.body, author_kind="user", kind="user",
         stance="question", round=topic.round_count or 0,
     )
 
@@ -384,7 +393,7 @@ async def _continue_thread(topic_id: str):
     async with async_session() as db:
         for key in cast:
             so_far = await list_posts(db, UUID(topic_id))
-            result = await run_character(key, question, posts=so_far, is_opening=False)
+            result = await run_character(key, question, posts=so_far, mode="exchange")
             # `run_character` reports a provider-level failure as a *truthy*
             # dict with ok=False (see forum_characters). Checking truthiness
             # alone would write an empty post per silent character, burying
@@ -400,7 +409,7 @@ async def _continue_thread(topic_id: str):
                 reply_to_id = m["id"] if m else None
             p = await append_post(
                 db, UUID(topic_id), key, result["body"], author_kind="character",
-                stance=result["stance"], round=(topic.round_count or 0) + 1,
+                kind="reply", stance=result["stance"], round=(topic.round_count or 0) + 1,
                 reply_to=reply_to_id, reply_to_seq=reply_to_seq,
                 confidence=result.get("confidence"), claims=result.get("claims"),
                 citations=result.get("citations"), extra=result.get("extra"), commit=False,
@@ -508,6 +517,110 @@ async def reopen_topic(topic_id: UUID, background_tasks: BackgroundTasks,
 # ======================================================================================
 # API intake
 # ======================================================================================
+
+
+@router.post("/topics/{topic_id}/save", status_code=201)
+async def save_topic_to_library(
+    topic_id: UUID,
+    force: bool = Query(default=False, description="File again even if already saved."),
+    db: AsyncSession = Depends(get_db),
+):
+    """File a concluded topic into the library, and make it retrievable.
+
+    The document is ingested through the normal RAG pipeline, so a past debate
+    becomes knowledge the Oracle can cite in later topics — the compounding the
+    project is built around. It is opt-in per topic, and trust is recorded as
+    `ai_summary`: a debate is a model output, not a peer-reviewed source.
+
+    Idempotent by default. The document id is remembered on the topic, so a
+    second click returns the existing document instead of filing a duplicate.
+    `force=true` files it again.
+    """
+    _forum_enabled()
+
+    topic = await get_topic(db, topic_id)
+    if topic is None:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    if topic.status not in ("concluded", "failed"):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Only a concluded topic can be filed (status is "
+                f"{topic.status!r}); it has no final answers yet."
+            ),
+        )
+
+    meta = dict(topic.source_meta or {})
+    existing = meta.get("library_document_id")
+    if existing and not force:
+        return {
+            "status": "already_saved",
+            "id": existing,
+            "title": f"[Forum] {topic.title}",
+            "hint": "pass force=true to file it again",
+        }
+
+    from db.models import Document
+    from agents.forum_store import topic_markdown
+    from ingestion.embedder import ingest_document
+
+    posts = await list_posts(db, topic_id)
+    body = topic_markdown(
+        topic_to_dict(topic, with_posts=True, posts=posts), posts
+    )
+
+    document = Document(
+        id=uuid.uuid4(),
+        title=f"[Forum] {topic.title}"[:500],
+        content=body[:100000],
+        source_type="forum_topic",
+        metadata_json={
+            "topic_id": str(topic.id),
+            "outcome": topic.outcome,
+            "final_answers": len(
+                topic_to_dict(topic, with_posts=True, posts=posts)["final_answers"]
+            ),
+        },
+    )
+    db.add(document)
+    meta["library_document_id"] = str(document.id)
+    topic.source_meta = meta
+    await db.commit()
+
+    # Inline rather than a background task: this is a user-initiated save, and
+    # reporting "saved" before it is indexed would make the button look broken
+    # when the topic is not immediately retrievable.
+    try:
+        result = await ingest_document(
+            str(document.id), document.title, body, "forum_topic"
+        )
+    except Exception as e:
+        logger.error(
+            "forum_topic_ingest_failed",
+            topic_id=str(topic.id), document_id=str(document.id), error=str(e)[:200],
+        )
+        return {
+            "status": "saved_not_indexed",
+            "id": str(document.id),
+            "title": document.title,
+            "detail": (
+                "The document is in the library but embedding failed, so it is "
+                f"not yet retrievable: {str(e)[:160]}"
+            ),
+        }
+
+    logger.info(
+        "forum_topic_saved",
+        topic_id=str(topic.id), document_id=str(document.id),
+        chunks=result.get("chunks", 0),
+    )
+    return {
+        "status": "saved",
+        "id": str(document.id),
+        "title": document.title,
+        "chunks": result.get("chunks", 0),
+        "trust_tier": result.get("trust_tier"),
+    }
 
 
 @router.post("/intake", status_code=202)

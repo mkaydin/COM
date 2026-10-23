@@ -128,9 +128,23 @@ def _add_missing_columns(conn) -> None:
             )
             if column.server_default is not None:
                 default = column.server_default.arg
-                sql += f" DEFAULT {default.text if hasattr(default, 'text') else default}"
+                if hasattr(default, "text"):
+                    # Already a SQL expression (`text("now()")`).
+                    sql += f" DEFAULT {default.text}"
+                elif isinstance(default, str):
+                    # A plain string is a *value*, not SQL. Interpolating it raw
+                    # turned `server_default="reply"` into `DEFAULT reply`, which
+                    # Postgres reads as a column reference and rejects with
+                    # "cannot use column reference in DEFAULT expression".
+                    sql += " DEFAULT '" + default.replace("'", "''") + "'"
+                else:
+                    sql += f" DEFAULT {default}"
             try:
-                conn.execute(text(sql))
+                # Savepoint per column: without it a rejected ALTER aborts the
+                # whole transaction, and every later column fails with
+                # "current transaction is aborted" instead of its own reason.
+                with conn.begin_nested():
+                    conn.execute(text(sql))
                 logger.info("db_column_added", table=table.name, column=column.name)
             except SQLAlchemyError as e:
                 logger.warning(

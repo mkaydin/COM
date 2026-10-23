@@ -79,6 +79,9 @@ stateful services; the app runs where you can see it.
  │              Scholar   ▸ replies to Oracle's claim #1 (challenges)  │
  │              Analyst   ▸ connects two claims nobody connected        │
  │              … bounded by max_rounds                               │
+ │                                                                    │
+ │    revision  every character restates its OWN answer, in parallel,  │
+ │              after reading the whole discussion                    │
  └──────────────────────────────┬─────────────────────────────────────┘
                                 ▼
                   ┌────────────────────────────┐
@@ -104,6 +107,18 @@ Council **agreed** — that is measured by `agents/forum_signals.py`, which
 compares claim overlap, confidence spread and unanswered challenges. A thread
 that has not converged cannot be published as consensus, however confidently
 the model words it. That veto is the point of the whole design.
+
+A character's **final answer** is its revision, or its last post if the
+revision call failed — never blank. Finals are derived from the posts rather
+than written by the Moderator, so it cannot paraphrase away what a character
+actually said; it writes the `process` narrative and the reasons individuals
+moved. `changed` is computed by comparing the opening against the final, and
+is calibrated so that rephrasing is not reported as a change of mind.
+
+A concluded topic can be filed with **Save to library** on the topic page. It
+becomes a Markdown document — finals first, then the transcript — and is
+ingested through the normal RAG pipeline, so a past debate is knowledge the
+Oracle can cite later. Opt-in per topic, trust tier `ai_summary`, idempotent.
 
 ---
 

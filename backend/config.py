@@ -94,7 +94,11 @@ class Settings(BaseSettings):
 
     # --- Forum ---------------------------------------------------------------------
     forum_enabled: bool = True
-    forum_max_rounds: int = 2
+    #: Discussion rounds *before* the revision pass. One is the default: the
+    #: revision pass costs another full round of calls, and a second discussion
+    #: round mostly repeats the first. Total passes per topic is this plus
+    #: statements and revision.
+    forum_max_rounds: int = 1
     #: Optional shared secret for POST /api/forum/intake. Empty = local only.
     forum_intake_key: str = ""
 

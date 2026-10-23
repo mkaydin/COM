@@ -12,6 +12,7 @@ and the WebSocket layer all work on dicts, not ORM objects, which keeps them
 testable without a database.
 """
 
+import re
 from typing import Any, Optional
 
 from sqlalchemy import select, func, desc, asc
@@ -36,11 +37,16 @@ def post_to_dict(p: Post, *, include_reply_to_seq: bool = False) -> dict:
         "topic_id": str(p.topic_id),
         "seq": p.seq,
         "round": p.round,
+        # `kind` may be NULL on rows written before the column existed; they
+        # were all replies or openings, and the UI treats "reply" as the
+        # ordinary case, so the fallback is harmless rather than a guess.
+        "kind": p.kind or "reply",
         "author_kind": p.author_kind,
         "author": p.author,
         "body": p.body,
         "stance": p.stance,
         "reply_to": str(p.reply_to) if p.reply_to else None,
+        "revision_of": str(p.revision_of) if p.revision_of else None,
         "confidence": p.confidence,
         "claims": p.claims or [],
         "citations": p.citations or [],
@@ -50,6 +56,155 @@ def post_to_dict(p: Post, *, include_reply_to_seq: bool = False) -> dict:
     if include_reply_to_seq:
         out["reply_to_seq"] = p.extra.get("reply_to_seq") if p.extra else None
     return out
+
+
+#: Posts that count as a character's own answer, as opposed to the Moderator's
+#: or the user's.
+_ANSWER_KINDS = ("statement", "reply", "revision")
+
+#: Jaccard similarity below which a revision counts as a real change of position.
+#:
+#: Calibrated against real output rather than guessed:
+#:
+#:   genuine revisions from a debate   0.135 - 0.208
+#:   restatements "without changing"   0.50 - 0.66  (model output)
+#:   an aggressive human rewrite       0.341
+#:
+#: 0.30 sits below every restatement measured and above every real revision.
+#:
+#: Known limit: a reversal that reuses the same wording ("we should adopt X
+#: because A, B" -> "we should not adopt X because A, B") scores high and is
+#: reported as unchanged. Lexical overlap cannot see negation. The Moderator's
+#: `changes` list is the cross-check for that case, and both are shown.
+_CHANGED_THRESHOLD = 0.30
+
+
+def _tokens(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9']+", (text or "").lower()) if len(w) > 2}
+
+
+def _similarity(a: str, b: str) -> float:
+    ta, tb = _tokens(a), _tokens(b)
+    if not ta or not tb:
+        return 0.0
+    return len(ta & tb) / len(ta | tb)
+
+
+def final_answers(posts: list[dict]) -> list[dict]:
+    """One entry per character: their revision, else their latest post.
+
+    A character who never revised still has a final answer — their last word in
+    the thread. A debate must not end with a character silently absent just
+    because their revision call failed.
+
+    `changed` is deterministic, not the Moderator's opinion: it compares the
+    opening against the final with token overlap, and reports True when the
+    revision differs enough to be a new position rather than the same one
+    rephrased.
+    """
+    by_author: dict[str, list[dict]] = {}
+    for post in posts:
+        if post.get("author_kind") != "character":
+            continue
+        # Rows written before `kind` existed have no value here; they were
+        # openings and replies, and defaulting to "reply" keeps them counted.
+        if (post.get("kind") or "reply") not in _ANSWER_KINDS:
+            continue
+        by_author.setdefault(post["author"], []).append(post)
+
+    out: list[dict] = []
+    for author, mine in by_author.items():
+        mine = sorted(mine, key=lambda p: p["seq"])
+        opening = next((p for p in mine if p.get("kind") == "statement"), mine[0])
+        final = next(
+            (p for p in reversed(mine) if p.get("kind") == "revision"), mine[-1]
+        )
+        revised = final["seq"] != opening["seq"]
+        out.append({
+            "author": author,
+            "seq": final["seq"],
+            "body": final["body"],
+            "stance": final["stance"],
+            "confidence": final.get("confidence"),
+            "kind": final.get("kind"),
+            "revision_of": final.get("revision_of"),
+            "opening_seq": opening["seq"],
+            "opening_body": opening["body"],
+            # A revision that restates the opening is not a change.
+            "changed": bool(
+                revised and _similarity(opening["body"], final["body"]) < _CHANGED_THRESHOLD
+            ),
+        })
+
+    out.sort(key=lambda r: r["seq"])
+    return out
+
+
+def topic_markdown(topic: dict, posts: list[dict]) -> str:
+    """Render a concluded topic for the library.
+
+    Finals first, because that is what a reader wants and what retrieval
+    matches on; the full transcript follows so the reasoning is not lost. The
+    document is ordinary Markdown so it stays readable in the library and
+    chunks sensibly on ingestion.
+    """
+    finals = final_answers(posts)
+    synthesis = topic.get("synthesis") or {}
+
+    lines: list[str] = [f"# {topic.get('title') or topic.get('question') or 'Forum topic'}", ""]
+    lines += [f"**Question:** {topic.get('question') or ''}", ""]
+    if topic.get("framing"):
+        lines += [str(topic["framing"]).strip(), ""]
+    if topic.get("outcome"):
+        lines += [f"**Outcome:** {topic['outcome']}", ""]
+
+    if finals:
+        lines += ["## Final answers", ""]
+        for final in finals:
+            lines += [f"### {final['author'].title()}", ""]
+            lines += [(final["body"] or "").strip(), ""]
+            if final["changed"] and final.get("changed_because"):
+                lines += [f"_Changed position: {final['changed_because']}_", ""]
+            elif final["changed"]:
+                lines += ["_Changed position during the discussion._", ""]
+            else:
+                lines += ["_Maintained their opening position._", ""]
+
+    lines += ["## Discussion", ""]
+    for post in posts:
+        lines += [
+            f"### #{post['seq']} — {post['author'].title()} [{post['stance']}]",
+            "",
+            (post.get("body") or "").strip(),
+            "",
+        ]
+
+    if synthesis.get("answer") or synthesis.get("positions"):
+        lines += ["## Moderator synthesis", ""]
+        if synthesis.get("answer"):
+            lines += [str(synthesis["answer"]).strip(), ""]
+        for position in synthesis.get("positions") or []:
+            backers = ", ".join(position.get("backers") or [])
+            heading = position.get("label") or "Position"
+            lines += [f"**{heading}**" + (f" — {backers}" if backers else ""), ""]
+            lines += [(position.get("position") or "").strip(), ""]
+        if synthesis.get("fault_line"):
+            lines += [f"**Fault line:** {synthesis['fault_line']}", ""]
+        if synthesis.get("process"):
+            lines += ["### What happened in the discussion", "", synthesis["process"], ""]
+
+    seen: set[str] = set()
+    citations: list[str] = []
+    for post in posts:
+        for citation in post.get("citations") or []:
+            url = citation.get("url") or ""
+            if url and url not in seen:
+                seen.add(url)
+                citations.append(f"- [{citation.get('title') or url}]({url})")
+    if citations:
+        lines += ["## Sources", ""] + citations + [""]
+
+    return "\n".join(lines).strip() + "\n"
 
 
 def topic_to_dict(t: Topic, *, with_posts: bool = False, posts: Optional[list] = None) -> dict:
@@ -78,7 +233,17 @@ def topic_to_dict(t: Topic, *, with_posts: bool = False, posts: Optional[list] =
         "concluded_at": t.concluded_at.isoformat() if t.concluded_at else None,
     }
     if with_posts:
-        out["posts"] = [post_to_dict(p) for p in (posts or [])]
+        # Callers pass either ORM rows (straight from a query) or the dicts
+        # `list_posts` already returns. Accept both: serialising a dict would
+        # raise `'dict' object has no attribute 'id'` at request time.
+        serialised = [
+            p if isinstance(p, dict) else post_to_dict(p) for p in (posts or [])
+        ]
+        out["posts"] = serialised
+        # Derived here so every caller — API, WebSocket, save-to-library —
+        # agrees on what a character finally said. Deriving it in the UI would
+        # mean three implementations drifting apart.
+        out["final_answers"] = final_answers(serialised)
     return out
 
 
@@ -94,8 +259,10 @@ async def append_post(
     author_kind: str = "character",
     stance: str = "propose",
     round: int = 0,
+    kind: str = "reply",
     reply_to: Optional[str] = None,
     reply_to_seq: Optional[int] = None,
+    revision_of: Optional[str] = None,
     confidence: Optional[float] = None,
     claims: Optional[list] = None,
     citations: Optional[list] = None,
@@ -124,11 +291,13 @@ async def append_post(
         topic_id=topic_id,
         seq=int(next_seq),
         round=round,
+        kind=kind,
         author_kind=author_kind,
         author=author,
         body=body,
         stance=stance,
         reply_to=reply_to,
+        revision_of=revision_of,
         confidence=confidence,
         claims=claims or [],
         citations=citations or [],
