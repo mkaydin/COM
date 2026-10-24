@@ -38,8 +38,18 @@ CONVERGENCE_SPREAD = 0.25
 #: Content words shorter than this are dropped — they are noise, not signal.
 MIN_TOKEN_LEN = 4
 
-#: Stances that mean "I am not standing behind this".
-CHALLENGE_STANCES = ("challenge", "concede")
+#: Stances that put a claim in dispute.
+#:
+#: A concession is the opposite — it resolves one — and a question is a
+#: challenge even when politely phrased.
+#:
+#: This was ("challenge", "concede"), which was wrong in three ways at once: a
+#: concession marked the post it *agreed* with as unresolved, a question did
+#: not count at all, and a challenge that was conceded to still reported
+#: unresolved because the concession itself was read as a new challenge. The
+#: effect was that threads looked more divided than they were, which feeds the
+#: Moderator a false picture.
+CHALLENGE_STANCES = ("challenge", "question")
 
 
 def tokens(text: str) -> set[str]:
@@ -138,6 +148,36 @@ def unresolved_challenges(posts: Iterable[dict]) -> list[dict]:
             if not conceded:
                 out.append(p)
     return out
+
+
+def next_round_speakers(
+    posts: Iterable[dict], cast: Iterable[str], *, minimum: int = 1
+) -> list[str]:
+    """Who still has a reason to speak in another round?
+
+    Everyone speaks in the first round. After that, only the characters whose
+    claim is still in dispute — the ones who were challenged or questioned and
+    have not conceded. Everyone else has already said their piece, and inviting
+    them again costs a full model call to produce a restatement.
+
+    Returns [] when nobody qualifies: the round would be pure cost, and the
+    caller should move on to the revision pass. `minimum` exists because a
+    round with a single speaker is still worth running — that one character owes
+    an answer — but a caller can raise it to demand an actual exchange.
+    """
+    invited = [c for c in (cast or []) if c]
+    if not invited:
+        return []
+
+    owed = {
+        p.get("author")
+        for p in unresolved_challenges(posts)
+        if p.get("author") in invited
+    }
+    # Preserve the cast's speaking order rather than the order in which the
+    # challenges happened to appear.
+    chosen = [c for c in invited if c in owed]
+    return chosen if len(chosen) >= minimum else []
 
 
 def agreement_matrix(posts: Iterable[dict]) -> dict[tuple[str, str], float]:

@@ -480,9 +480,34 @@ the app has no build step on install, and `electron-builder` already packages
   are both empty — is noted, not acted on.
   is lossy — currently paying for a 1024-dim model and storing 384.
   **Only worth it before `rag_chunks` has data**, or you re-embed twice.
-- [ ] **O4. Cut free-tier cost of a topic run.** 6 characters × 2 rounds ×
-  1.4–3.2s ≈ 40–60s. Tiered rounds (one round, then only unresolved
-  challengers) is the biggest latency win available.
+- [x] **O4. Cut the cost of extra discussion rounds.** Tiered rounds: everyone
+  speaks in the first round, then only characters whose claim is still in
+  dispute — challenged or questioned and not yet conceded. A round nobody needs
+  is skipped entirely rather than run for the same cast.
+
+  Measured on a real two-round topic: round 1 had all four characters, round 2
+  had **one** (the only one owed an answer). The topic finished in 114s with 15
+  posts.
+
+  Re-measuring first changed the premise: with the Go provider the exchange
+  round dominates (~111s of a 161s topic), not synthesis — the backlog's
+  40-60s estimate came from a different provider and cast size. So the win is
+  real for multi-round runs, but the default is one discussion round and most
+  of the cost is the first round, which cannot be tiered.
+
+  **Building this exposed a real bug in the signal it depends on.**
+  `CHALLENGE_STANCES` was `("challenge", "concede")`, which did three wrong
+  things at once:
+
+  * a concession marked the post it *agreed* with as unresolved;
+  * a question did not count as a challenge at all;
+  * a challenge that *was* conceded to still reported unresolved, because the
+    concession itself was read as a new challenge.
+
+  The effect was that threads looked more divided than they were, and that
+  signal is fed to the Moderator and shown in the UI. Now
+  `("challenge", "question")`, with tests for all four cases. One existing test
+  asserted the buggy behaviour and has been corrected.
 - [ ] **O5. Cache `_bundle_fingerprint()`.** `okf/bundle.py` does
   `rglob("*.md")` + a `stat()` per file on *every* retrieval.
 - [x] **O6. Lock the OKF index build.** `to_thread`'d but mutated shared state

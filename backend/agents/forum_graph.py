@@ -68,6 +68,9 @@ class ForumState(TypedDict, total=False):
     outcome: Optional[str]
     synthesis: dict
     converged: bool
+    #: Set when a round found nobody with an open challenge. Another round
+    #: would invite the same cast to repeat itself.
+    no_speakers: bool
     should_continue: bool
     forced: bool
     status: str
@@ -307,6 +310,27 @@ async def exchange(state: ForumState) -> dict:
     cast = state.get("cast") or []
     round_no = (state.get("round") or 0) + 1
 
+    async with async_session() as db:
+        existing = await list_posts(db, UUID(topic_id))
+
+    # Everyone speaks in the first round. After that, only characters whose
+    # claim is still in dispute — a second full round of the same cast is the
+    # most expensive way to produce restatements. `decide_continue` still owns
+    # the round bound; this only decides who is worth inviting.
+    speakers = cast
+    if round_no > 1:
+        speakers = forum_signals.next_round_speakers(existing, cast)
+        if not speakers:
+            logger.info(
+                "forum_exchange_skipped",
+                topic_id=topic_id, round=round_no,
+                reason="no unresolved challenges",
+            )
+            return {
+                "posts": [], "round": state.get("round", 0),
+                "failed_characters": [], "no_speakers": True,
+            }
+
     new_posts = []
     failed = []
     async with async_session() as db:
@@ -314,7 +338,7 @@ async def exchange(state: ForumState) -> dict:
         # the previous characters just wrote in this same round.
         async def _loop():
             nonlocal new_posts, failed
-            for key in cast:
+            for key in speakers:
                 so_far = await list_posts(db, UUID(topic_id))
                 result = await run_character(
                     key, question, posts=so_far, session_id=state.get("session_id"),
@@ -721,6 +745,11 @@ def decide_continue(state: ForumState) -> str:
     """
     round_no = state.get("round", 0)
     max_rounds = state.get("max_rounds", 1)
+
+    if state.get("no_speakers"):
+        # Nobody has an open challenge. Running the round again would invite
+        # the same cast to restate themselves at full price.
+        return "revise"
 
     if round_no >= max_rounds:
         return "revise"

@@ -14,6 +14,7 @@ from agents.forum_signals import (
     enforce,
     clusters,
     jaccard,
+    next_round_speakers,
     tokens,
     unresolved_challenges,
 )
@@ -159,12 +160,40 @@ class TestChallenges:
         s = compute(posts)
         assert s["unresolved_challenges"] == 0
 
-    def test_concede_stance_is_itself_a_challenge(self):
+    def test_concession_is_not_a_challenge(self):
+        """A concession agrees with the post it replies to.
+
+        This test used to assert the opposite — that a concession was itself a
+        challenge — which made every agreement look like an open disagreement.
+        The signal is fed to the Moderator and to the UI, so the effect was a
+        thread that read as more divided than it was.
+        """
         posts = [
             post(1, "oracle", [SAME]),
             post(2, "scholar", [SAME], stance="concede", reply=1),
         ]
+        assert unresolved_challenges(posts) == []
+
+    def test_a_question_is_a_challenge(self):
+        """An unanswered question is a live disagreement, however politely put."""
+        posts = [
+            post(1, "oracle", [SAME]),
+            post(2, "scholar", [SAME], stance="question", reply=1),
+        ]
         assert len(unresolved_challenges(posts)) == 1
+
+    def test_a_conceded_challenge_is_resolved(self):
+        """A challenge answered by a concession must not stay open.
+
+        With `concede` in the challenge set, the concession itself was read as a
+        new challenge against the challenger, so the thread never settled.
+        """
+        posts = [
+            post(1, "oracle", [SAME]),
+            post(2, "scholar", [SAME], stance="challenge", reply=1),
+            post(3, "oracle", [SAME], stance="concede", reply=2),
+        ]
+        assert unresolved_challenges(posts) == []
 
     def test_challenge_without_a_target_is_ignored(self):
         """A challenge that names nobody cannot be resolved, so it is not counted."""
@@ -288,3 +317,65 @@ class TestEdgeCases:
         s = compute(posts)
         assert s["mean_confidence"] == 0.925
         assert s["confidence_spread"] < 0.1
+
+
+class TestNextRoundSpeakers:
+    """Tiered rounds: after the first, only the disputed characters speak.
+
+    A second full round of the same cast is the most expensive way to produce
+    restatements. These pin who is worth inviting.
+    """
+
+    def test_only_the_challenged_author_is_invited(self):
+        posts = [
+            post(1, "oracle", [SAME]),
+            post(2, "scholar", [SAME]),
+            post(3, "sage", [SAME]),
+            post(4, "scholar", ["wrong"], stance="challenge", reply=1),
+        ]
+        # Oracle owes an answer; scholar and sage have nothing open.
+        assert next_round_speakers(posts, ["oracle", "scholar", "sage"]) == ["oracle"]
+
+    def test_nobody_owed_means_no_round(self):
+        posts = [
+            post(1, "oracle", [SAME]),
+            post(2, "scholar", [SAME], stance="concede", reply=1),
+        ]
+        assert next_round_speakers(posts, ["oracle", "scholar"]) == []
+
+    def test_a_conceded_challenge_removes_the_speaker(self):
+        posts = [
+            post(1, "oracle", [SAME]),
+            post(2, "scholar", [SAME], stance="challenge", reply=1),
+            post(3, "oracle", [SAME], stance="concede", reply=2),
+        ]
+        assert next_round_speakers(posts, ["oracle", "scholar"]) == []
+
+    def test_a_question_also_creates_a_speaker(self):
+        posts = [
+            post(1, "oracle", [SAME]),
+            post(2, "sage", [SAME], stance="question", reply=1),
+        ]
+        assert next_round_speakers(posts, ["oracle", "sage"]) == ["oracle"]
+
+    def test_cast_order_is_preserved(self):
+        """Speaking order is the cast's, not the order challenges appeared in."""
+        posts = [
+            post(1, "sage", [SAME]),
+            post(2, "oracle", [SAME]),
+            post(3, "scholar", ["wrong"], stance="challenge", reply=2),
+            post(4, "scholar", ["also wrong"], stance="challenge", reply=1),
+        ]
+        assert next_round_speakers(posts, ["oracle", "scholar", "sage"]) == [
+            "oracle", "sage",
+        ]
+
+    def test_an_empty_cast_is_safe(self):
+        assert next_round_speakers([], []) == []
+
+    def test_minimum_can_demand_an_exchange(self):
+        posts = [
+            post(1, "oracle", [SAME]),
+            post(2, "scholar", ["wrong"], stance="challenge", reply=1),
+        ]
+        assert next_round_speakers(posts, ["oracle", "scholar"], minimum=2) == []

@@ -81,6 +81,12 @@ class TestRoundBound:
             assert rounds < 50, "empty state failed to terminate"
         assert rounds == 1  # the default budget
 
+    def test_nobody_to_speak_ends_the_loop(self):
+        """A round with no disputed characters would be a full-price restatement."""
+        assert decide_continue(
+            {"round": 0, "max_rounds": 5, "no_speakers": True, "signals": {}}
+        ) == "revise"
+
     def test_zero_budget_goes_straight_to_revision(self):
         """No discussion still needs a final answer, so revision always runs."""
         assert decide_continue({"round": 0, "max_rounds": 0}) == "revise"
@@ -200,3 +206,46 @@ class TestCastSelection:
     def test_legacy_cast_key_is_accepted(self):
         """`validate_cast` resolves legacy keys, so a stored cast still works."""
         assert registry.validate_cast(["rag"]) == ["scholar"]
+
+
+class TestTieredRounds:
+    """After the first round, only disputed characters are invited."""
+
+    async def test_a_round_with_nobody_to_hear_is_skipped(self, monkeypatch):
+        """Not an error — the graph moves straight to revision.
+
+        `exchange` imports `async_session` from `db.postgres` inside the
+        function, so the patch has to land there rather than on forum_graph.
+        """
+        import uuid
+
+        import db.postgres as pg
+        from agents import forum_graph
+
+        class FakeSession:
+            async def __aenter__(self):
+                return object()
+
+            async def __aexit__(self, *exc):
+                return False
+
+        async def no_posts(db, topic_id, **kw):
+            return []
+
+        monkeypatch.setattr(pg, "async_session", lambda: FakeSession())
+        monkeypatch.setattr(forum_graph, "list_posts", no_posts)
+        monkeypatch.setattr(
+            forum_graph.forum_signals, "next_round_speakers", lambda *a, **k: []
+        )
+
+        out = await forum_graph.exchange({
+            "topic_id": str(uuid.uuid4()),
+            "question": "q",
+            "cast": ["oracle", "sage"],
+            "round": 1,          # next round is 2, i.e. tiered
+        })
+
+        assert out["no_speakers"] is True
+        assert out["posts"] == []
+        # The round counter must not advance for a round that never happened.
+        assert out["round"] == 1
