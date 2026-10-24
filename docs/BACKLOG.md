@@ -179,9 +179,29 @@ blocking Neo4j call on the event loop · **32%/92% silent embedding truncation**
   Verified: 614 pass from the repo root, from `backend/`, and with `.env`
   removed.
 
-- [ ] **Q3. Ten routers still untested:** `websocket`, `deliberations`,
-  `documents`, `verdicts`, `divination`, `wiki`, `okf`, `sessions`, `agents`,
-  `rag`, `llm`.
+- [x] **Q3. Ten routers had no tests:** `deliberations`, `documents`,
+  `verdicts`, `divination`, `wiki`, `okf`, `sessions`, `agents`, `rag`, `llm`.
+
+  `tests/test_api_contracts.py` adds 28 contract tests covering all of them —
+  error paths (404 for missing ids, 400 for malformed input), the pure
+  responses, and the two divination stages that matter (sources survive into
+  the saved document; ingestion is scheduled).
+
+  Deliberately contract-level, not exhaustive: the point is that every router
+  now has something that fails when its error handling regresses.
+
+  **Found and fixed:** `GET /api/verdicts/{id}` called `UUID()` on a raw string
+  while `POST /api/verdicts` validated it. The same malformed id was a 400 on
+  one route and a 500 on the other. The regression test fails against the old
+  code with `ValueError: badly formed hexadecimal UUID string`.
+
+  Two of my initial expectations were wrong, not the code: `okf.get_concept`
+  normalises `/etc/passwd` into bundle-relative segments (404, and it cannot
+  escape), and an empty embedding model is rejected by the Pydantic schema
+  before the endpoint runs.
+
+  Still untested by these: `api/websocket.py` (the legacy WS loop) and
+  `api/forum_ws.py` beyond its existing orchestration tests.
 
 - [ ] **Q4. The "cast differs by *how it thinks*" claim is untested.**
   `registry.py` documents the knowledge sources as "deliberately disjoint";

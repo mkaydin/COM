@@ -107,8 +107,17 @@ async def submit_verdict(body: VerdictCreate, background_tasks: BackgroundTasks,
 
 @router.get("/{deliberation_id}")
 async def get_verdict(deliberation_id: str, db: AsyncSession = Depends(get_db)):
+    try:
+        # The POST validates this and the GET did not, so a malformed id was a
+        # 500 on one route and a 400 on the other. Same input, same answer.
+        deliberation_uuid = UUID(deliberation_id)
+    except (ValueError, AttributeError, TypeError) as e:
+        raise HTTPException(
+            status_code=400, detail="deliberation_id must be a UUID"
+        ) from e
+
     result = await db.execute(
-        select(Verdict).where(Verdict.deliberation_id == UUID(deliberation_id))
+        select(Verdict).where(Verdict.deliberation_id == deliberation_uuid)
     )
     verdict = result.scalar_one_or_none()
     if not verdict:
