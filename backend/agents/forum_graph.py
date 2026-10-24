@@ -534,73 +534,63 @@ def _fallback_synthesis(question: str, signals: dict) -> dict:
     }
 
 
-async def moderator_synthesis(state: ForumState) -> dict:
-    """Read the whole thread and produce the outcome.
-
-    This is where a topic earns one of two shapes: a single accepted answer
-    signed by its backers, or a small set of distinct attributed positions.
-    Which one is the Moderator's call — but `forum_signals.enforce` gets a veto
-    on claiming consensus when the thread demonstrably has not converged.
-    """
-    from db.postgres import async_session
-    from uuid import UUID
-
-    question = state.get("question", "")
-    topic_id = state.get("topic_id")
-
-    async with async_session() as db:
-        posts = await list_posts(db, UUID(topic_id))
-
-    signals = forum_signals.compute(posts)
-
-    # The finals are derived from the posts, never authored by the Moderator:
-    # it summarises them, and cannot paraphrase away what a character said.
-    # `changed` is computed the same way (opening vs final, token overlap).
-    finals = final_answers(posts)
-
-    # `forced` means "the round budget ran out" — the moderator is told to
-    # report the real state rather than assume another round will fix it.
-    # Derived here rather than in `decide_continue`, which cannot write state.
-    forced = bool(state.get("forced")) or (state.get("round", 0) >= state.get("max_rounds", 1))
-
-    # Exhausting the budget does NOT mean plurality. It only means "stop
-    # hoping they will converge". A thread that converged before the budget ran
-    # out has still converged, and must be publishable as consensus.
-    forced_mode = "plurality" if (forced and not signals.get("converged")) else None
-
-    thread_text = "\n\n".join(
+def _thread_for_moderator(posts: list[dict]) -> str:
+    """The character posts as the Moderator sees them, truncated by recency."""
+    text = "\n\n".join(
         f"#{p['seq']} {p['author'].upper()} [{p['stance']}]\n{(p['body'] or '').strip()}"
         for p in posts
         if p["author_kind"] == "character"
     )
-    thread_text = thread_text[-24000:]
+    # Context is not free: the tail is what the discussion ended on.
+    return text[-24000:]
 
-    # The revision pass is the point of the thread; show the Moderator the
-    # finals separately so it is not asked to infer them from the transcript.
-    final_text = "\n\n".join(
+
+def _finals_for_moderator(finals: list[dict]) -> str:
+    """The revision-pass answers, shown separately from the transcript.
+
+    The Moderator is asked to summarise the finals; making it infer them from
+    the thread invited it to paraphrase the discussion instead.
+    """
+    return "\n\n".join(
         f"{f['author'].upper()} (final, #{f['seq']}"
         + (", CHANGED POSITION" if f["changed"] else "")
         + f"):\n{(f['body'] or '').strip()}"
         for f in finals
     ) or "(no character produced a final answer)"
 
-    # If the cast could not speak at all, say so in the synthesis rather than
-    # publishing an empty verdict that reads like a considered position.
-    silent = [k for k in (state.get("cast") or []) if k not in signals.get("cast", [])]
-    outage_note = ""
-    if silent and not signals.get("cast"):
-        outage_note = (
+
+def _outage_note(cast: list[str], signals: dict) -> str:
+    """Say it when invited characters could not speak.
+
+    Publishing an empty verdict reads like a considered position; naming the
+    outage does not.
+    """
+    silent = [k for k in cast if k not in signals.get("cast", [])]
+    if not silent:
+        return ""
+    if not signals.get("cast"):
+        return (
             f"NO CHARACTER POSTED. {', '.join(silent)} were invited but could not "
             "produce a statement (provider error). Do NOT synthesise an answer — "
             "report the outage."
         )
-    elif silent:
-        outage_note = (
-            f"NOTE: {', '.join(silent)} were invited but did not post "
-            "(provider error). Base the outcome only on those who did."
-        )
+    return (
+        f"NOTE: {', '.join(silent)} were invited but did not post "
+        "(provider error). Base the outcome only on those who did."
+    )
 
-    messages = [
+
+def _synthesis_messages(
+    state: ForumState,
+    question: str,
+    thread_text: str,
+    final_text: str,
+    signals: dict,
+    *,
+    forced: bool,
+    outage_note: str,
+) -> list[dict]:
+    return [
         {"role": "system", "content": registry.MODERATOR_PROMPT},
         {
             "role": "user",
@@ -632,7 +622,13 @@ async def moderator_synthesis(state: ForumState) -> dict:
         },
     ]
 
-    data = {}
+
+async def _ask_moderator(messages: list[dict], question: str, signals: dict) -> dict:
+    """Call the Moderator, falling back to a deterministic synthesis.
+
+    A topic must always end with an outcome; a provider outage produces the
+    fallback rather than an error.
+    """
     try:
         response = await llm_complete(
             messages, role=MODERATOR_ROLE, temperature=0.25, max_tokens=3072
@@ -640,9 +636,8 @@ async def moderator_synthesis(state: ForumState) -> dict:
         data = extract_json(response.content)
         if not data:
             raise ValueError("no parseable JSON in moderator output")
-        parsed = registry.ForumSynthesis(**data)
-        synthesis = parsed.model_dump()
-    except Exception as e:
+        synthesis = registry.ForumSynthesis(**data).model_dump()
+    except Exception as e:  # noqa: BLE001 - a topic must still conclude
         logger.error("forum_synthesis_failed", error=str(e)[:160])
         synthesis = _fallback_synthesis(question, signals)
 
@@ -650,13 +645,15 @@ async def moderator_synthesis(state: ForumState) -> dict:
     # the UI never has to branch on whether the Moderator was reachable.
     synthesis.setdefault("process", "")
     synthesis.setdefault("changes", [])
+    return synthesis
 
-    if forced_mode:
-        synthesis["mode"] = forced_mode
 
-    # Attach the derived finals and the Moderator's per-character reasons.
-    # The answers stay exactly as the characters wrote them; only the "why"
-    # comes from the Moderator, and only for characters that actually moved.
+def _attach_finals(synthesis: dict, finals: list[dict]) -> None:
+    """Merge the derived finals with the Moderator's reasons.
+
+    The answers stay exactly as the characters wrote them; only the "why" comes
+    from the Moderator, and only for characters that actually moved.
+    """
     reasons = {
         c.get("author"): c.get("reason")
         for c in (synthesis.get("changes") or [])
@@ -668,17 +665,13 @@ async def moderator_synthesis(state: ForumState) -> dict:
         )
     synthesis["final_answers"] = finals
 
-    outcome, override_note = forum_signals.enforce(signals, synthesis.get("mode", "plurality"))
-    synthesis["mode"] = outcome
-    if override_note:
-        synthesis["signals_note"] = (
-            f"{synthesis.get('signals_note', '')} | {override_note}"
-        ).strip(" |")
-    synthesis["signals"] = signals
 
-    # Persist the synthesis as the closing post, then close the topic.
-    from db.postgres import async_session as _session
-    from uuid import UUID as _UUID
+async def _publish_synthesis(
+    topic_id: str, state: ForumState, synthesis: dict, outcome: str, signals: dict
+) -> None:
+    """Write the closing post and close the topic, in one transaction."""
+    from db.postgres import async_session
+    from uuid import UUID
 
     body = (
         synthesis.get("answer", "")
@@ -686,10 +679,10 @@ async def moderator_synthesis(state: ForumState) -> dict:
         else "The Council did not converge. These are the positions that survived."
     )
 
-    async with _session() as db:
+    async with async_session() as db:
         await append_post(
             db,
-            _UUID(topic_id),
+            UUID(topic_id),
             "moderator",
             body,
             author_kind="moderator",
@@ -704,10 +697,76 @@ async def moderator_synthesis(state: ForumState) -> dict:
             commit=False,
         )
         await conclude_topic(
-            db, _UUID(topic_id), outcome=outcome, synthesis=synthesis, signals=signals,
+            db, UUID(topic_id), outcome=outcome, synthesis=synthesis, signals=signals,
             commit=False,
         )
         await db.commit()
+
+
+async def moderator_synthesis(state: ForumState) -> dict:
+    """Read the whole thread and produce the outcome.
+
+    This is where a topic earns one of two shapes: a single accepted answer
+    signed by its backers, or a small set of distinct attributed positions.
+    Which one is the Moderator's call — but `forum_signals.enforce` gets a veto
+    on claiming consensus when the thread demonstrably has not converged.
+
+    The pieces are separate because each answers a different question: what the
+    thread said, what the finals are, what to tell the Moderator, how to ask it,
+    and how to publish the result.
+    """
+    from db.postgres import async_session
+    from uuid import UUID
+
+    question = state.get("question", "")
+    topic_id = state.get("topic_id")
+
+    async with async_session() as db:
+        posts = await list_posts(db, UUID(topic_id))
+
+    signals = forum_signals.compute(posts)
+
+    # Derived from the posts, never authored by the Moderator.
+    finals = final_answers(posts)
+
+    # `forced` means "the round budget ran out" — the moderator is told to
+    # report the real state rather than assume another round will fix it.
+    forced = bool(state.get("forced")) or (
+        state.get("round", 0) >= state.get("max_rounds", 1)
+    )
+
+    # Exhausting the budget does NOT mean plurality. It only means "stop
+    # hoping they will converge". A thread that converged before the budget ran
+    # out has still converged, and must be publishable as consensus.
+    forced_mode = "plurality" if (forced and not signals.get("converged")) else None
+
+    messages = _synthesis_messages(
+        state, question,
+        _thread_for_moderator(posts),
+        _finals_for_moderator(finals),
+        signals,
+        forced=forced,
+        outage_note=_outage_note(state.get("cast") or [], signals),
+    )
+
+    synthesis = await _ask_moderator(messages, question, signals)
+
+    if forced_mode:
+        synthesis["mode"] = forced_mode
+
+    _attach_finals(synthesis, finals)
+
+    outcome, override_note = forum_signals.enforce(
+        signals, synthesis.get("mode", "plurality")
+    )
+    synthesis["mode"] = outcome
+    if override_note:
+        synthesis["signals_note"] = (
+            f"{synthesis.get('signals_note', '')} | {override_note}"
+        ).strip(" |")
+    synthesis["signals"] = signals
+
+    await _publish_synthesis(topic_id, state, synthesis, outcome, signals)
 
     logger.info(
         "forum_synthesis_complete",

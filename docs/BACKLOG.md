@@ -508,8 +508,24 @@ the app has no build step on install, and `electron-builder` already packages
   signal is fed to the Moderator and shown in the UI. Now
   `("challenge", "question")`, with tests for all four cases. One existing test
   asserted the buggy behaviour and has been corrected.
-- [ ] **O5. Cache `_bundle_fingerprint()`.** `okf/bundle.py` does
-  `rglob("*.md")` + a `stat()` per file on *every* retrieval.
+- [x] **O5. Cache `_bundle_fingerprint()`.** — **Measured, and rejected.**
+
+  The claim was that `rglob("*.md")` plus a `stat()` per file on every retrieval
+  is a real cost. Measured on the live bundle (32 files):
+
+  ```
+  _bundle_fingerprint   0.145 ms/call
+  warm retrieval        8.8 ms   (of which fingerprint is 1.6%)
+  per 18-retrieval topic 2.6 ms
+  ```
+
+  A cache would add invalidation logic — including a way for
+  `invalidate_concept_cache` to clear it, or a filed deliberation would be
+  invisible until the TTL expired — to save 1.6% of a path whose real cost is
+  the Ollama round-trip. Even at 1,000 files it is ~4.5 ms/call.
+
+  Revisit only if the bundle grows by orders of magnitude or moves to network
+  storage.
 - [x] **O6. Lock the OKF index build.** `to_thread`'d but mutated shared state
   without a lock.
 
@@ -531,9 +547,17 @@ the app has no build step on install, and `electron-builder` already packages
   builds once. Against the real 30-concept bundle, 10 concurrent retrievals
   produce one `count=30` embed followed by ten `count=1` query embeds, in 2.82s
   with no errors.
-- [ ] **O7. Split the three oversized functions.** `moderator_synthesis`
-  (154 lines) does prompt construction, the LLM call, fallback synthesis,
-  signal enforcement and two DB writes.
+- [x] **O7. Split the three oversized functions.** Behaviour-preserving; the
+  full suite passed unchanged after each one.
+
+  | function | before | after | extracted |
+  |---|---|---|---|
+  | `moderator_synthesis` | 191 | 81 | thread/finals rendering, outage note, prompt, LLM+fallback, publish |
+  | `run_character` | 149 | 46 | per-mode instruction, messages, failure shape, normalisation |
+  | `rag.ingest` | 148 | 78 | `_dedupe`, `_build_chunk_rows`, `_link_section_parents` |
+
+  `run_character` had grown because the revision mode was added to it; the
+  three modes ask genuinely different questions and are now separate.
 
 ---
 

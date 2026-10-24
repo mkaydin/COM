@@ -13,7 +13,7 @@ import asyncio
 import hashlib
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import NamedTuple, Optional
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -78,6 +78,135 @@ def _content_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+class _Dedupe(NamedTuple):
+    """Outcome of the duplicate checks.
+
+    `early` is set when the document is an exact duplicate and the caller should
+    return it without embedding anything.
+    """
+
+    early: Optional[dict]
+    supersedes_id: Optional[uuid.UUID]
+    near_dup: Optional[RagChunk]
+
+
+async def _dedupe(db: AsyncSession, chash: str, title: str) -> _Dedupe:
+    """Exact-duplicate and near-duplicate checks (spec §2.3).
+
+    An exact duplicate only updates `last_seen` and is skipped. A near-duplicate
+    (same title, different content) is kept and linked, never overwritten:
+    revisions of scientific content matter.
+    """
+    existing = await db.execute(
+        select(RagChunk).where(RagChunk.content_hash == chash).limit(1)
+    )
+    if existing.scalar_one_or_none() is not None:
+        await db.execute(
+            update(RagChunk)
+            .where(RagChunk.content_hash == chash)
+            .values(last_seen=datetime.now(timezone.utc))
+        )
+        await db.commit()
+        logger.info("rag_dedupe_skip", hash=chash[:12], title=title[:50])
+        return _Dedupe(
+            early={
+                "status": "skipped", "reason": "exact duplicate",
+                "chunks": 0, "content_hash": chash,
+            },
+            supersedes_id=None,
+            near_dup=None,
+        )
+
+    near_dup = (
+        await db.execute(
+            select(RagChunk)
+            .where(RagChunk.title == title[:512])
+            .where(RagChunk.superseded_by.is_(None))
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+    supersedes_id = None
+    if near_dup is not None and near_dup.content_hash != chash:
+        supersedes_id = near_dup.id
+        logger.info(
+            "rag_supersede",
+            old_hash=near_dup.content_hash[:12],
+            new_hash=chash[:12],
+            title=title[:50],
+        )
+    return _Dedupe(early=None, supersedes_id=supersedes_id, near_dup=near_dup)
+
+
+def _build_chunk_rows(
+    db: AsyncSession,
+    raw_chunks: list[Chunk],
+    embeddings: list[list[float]],
+    embedder: Optional[str],
+    *,
+    chash: str,
+    title: str,
+    source_type: str,
+    source_url: Optional[str],
+    authors: Optional[list[str]],
+    publish_date: Optional[datetime],
+    trust_tier: str,
+    tags: Optional[list[str]],
+    source_doc_id: Optional[str],
+    supersedes_id: Optional[uuid.UUID],
+    now: datetime,
+) -> list[RagChunk]:
+    """Turn chunks plus vectors into rows, and hand them to the session."""
+    created: list[RagChunk] = []
+    for i, rchunk in enumerate(raw_chunks):
+        emb = embeddings[i] if i < len(embeddings) else None
+        row = RagChunk(
+            id=uuid.uuid4(),
+            chunk_text=rchunk.text,
+            embedding=emb,
+            # Which model made this vector. Without it a later change to
+            # EMBEDDING_MODEL silently mixes incomparable vector spaces.
+            embedding_model=embedder if emb is not None else None,
+            section=rchunk.section,
+            chunk_index=i,
+            parent_section_text=rchunk.parent_section_text,
+            parent_chunk_id=None,  # filled by _link_section_parents
+            source_type=source_type,
+            source_url=source_url,
+            title=title[:512],
+            authors=authors,
+            publish_date=publish_date,
+            content_hash=chash,
+            supersedes=supersedes_id,
+            superseded_by=None,
+            trust_tier=trust_tier,
+            tags=tags or [],
+            promoted_to_okf=False,
+            okf_concept_ref=None,
+            source_doc_id=uuid.UUID(source_doc_id) if source_doc_id else None,
+            created_at=now,
+            last_seen=now,
+        )
+        db.add(row)
+        created.append(row)
+    return created
+
+
+def _link_section_parents(created: list[RagChunk], raw_chunks: list[Chunk]) -> None:
+    """Point each chunk at its section's first chunk.
+
+    A chunk can be its own parent when it is the only one in the section, which
+    is what lets a caller expand a section without a special case.
+    """
+    section_parents: dict[str, uuid.UUID] = {}
+    for row, rchunk in zip(created, raw_chunks):
+        if rchunk.section not in section_parents:
+            section_parents[rchunk.section] = row.id
+            row.parent_chunk_id = row.id
+        else:
+            row.parent_chunk_id = section_parents[rchunk.section]
+
+
 async def ingest(
     db: AsyncSession,
     *,
@@ -102,110 +231,40 @@ async def ingest(
     content = content.strip()
     chash = _content_hash(content)
 
-    # --- Dedupe check (spec §2.3) ---
-    existing = await db.execute(
-        select(RagChunk).where(RagChunk.content_hash == chash).limit(1)
-    )
-    existing_chunk = existing.scalar_one_or_none()
-    if existing_chunk is not None:
-        # Exact duplicate: update last_seen, skip.
-        await db.execute(
-            update(RagChunk)
-            .where(RagChunk.content_hash == chash)
-            .values(last_seen=datetime.now(timezone.utc))
-        )
-        await db.commit()
-        logger.info("rag_dedupe_skip", hash=chash[:12], title=title[:50])
-        return {"status": "skipped", "reason": "exact duplicate", "chunks": 0,
-                "content_hash": chash}
+    dedupe = await _dedupe(db, chash, title)
+    if dedupe.early is not None:
+        return dedupe.early
 
-    # Near-duplicate check: same title, different hash → supersedes.
-    near_dup = await db.execute(
-        select(RagChunk)
-        .where(RagChunk.title == title[:512])
-        .where(RagChunk.superseded_by.is_(None))
-        .limit(1)
-    )
-    near_dup_chunk = near_dup.scalar_one_or_none()
-    supersedes_id = None
-    if near_dup_chunk is not None and near_dup_chunk.content_hash != chash:
-        supersedes_id = near_dup_chunk.id
-        logger.info("rag_supersede", old_hash=near_dup_chunk.content_hash[:12],
-                     new_hash=chash[:12], title=title[:50])
-
-    # --- Structure-aware chunking (spec §2.4) ---
     raw_chunks: list[Chunk] = chunk_document(content)
     if not raw_chunks:
         return {"status": "skipped", "reason": "no chunks produced", "chunks": 0}
 
-    # --- Embed (batch) ---
-    texts_to_embed = [c.text for c in raw_chunks]
-    embeddings = await asyncio.to_thread(_embed, texts_to_embed)
+    # One batched embed for the whole document.
+    embeddings = await asyncio.to_thread(_embed, [c.text for c in raw_chunks])
 
-    # Stamp which embedder produced these vectors. Recorded per chunk so that a
-    # later change to EMBEDDING_MODEL is detectable rather than silent: vectors
-    # from two models are not comparable, and nothing else in the row says so.
     from llm.embeddings import identity as _embedding_identity
 
     embedder = _embedding_identity() if embeddings else None
 
-    # --- Resolve trust tier ---
     if trust_tier is None:
         trust_tier = DEFAULT_TRUST_BY_SOURCE.get(source_type, "web_secondary")
 
     now = datetime.now(timezone.utc)
-
-    # --- Store with parent-child links ---
-    # First pass: insert all chunks (parent_chunk_id filled in second pass).
-    created: list[RagChunk] = []
-    for i, rchunk in enumerate(raw_chunks):
-        emb = embeddings[i] if i < len(embeddings) else None
-        row = RagChunk(
-            id=uuid.uuid4(),
-            chunk_text=rchunk.text,
-            embedding=emb,
-            embedding_model=embedder if emb is not None else None,
-            section=rchunk.section,
-            chunk_index=i,
-            parent_section_text=rchunk.parent_section_text,
-            parent_chunk_id=None,  # Set in second pass (see below).
-            source_type=source_type,
-            source_url=source_url,
-            title=title[:512],
-            authors=authors,
-            publish_date=publish_date,
-            content_hash=chash,
-            supersedes=supersedes_id,
-            superseded_by=None,
-            trust_tier=trust_tier,
-            tags=tags or [],
-            promoted_to_okf=False,
-            okf_concept_ref=None,
-            source_doc_id=uuid.UUID(source_doc_id) if source_doc_id else None,
-            created_at=now,
-            last_seen=now,
-        )
-        db.add(row)
-        created.append(row)
-
-    # Second pass: link parent_chunk_id — the first chunk of each section
-    # becomes the parent for subsequent chunks in that section.
-    section_parents: dict[str, uuid.UUID] = {}
-    for row, rchunk in zip(created, raw_chunks):
-        if rchunk.section not in section_parents:
-            section_parents[rchunk.section] = row.id
-            # A chunk can be its own parent if it's the only one in the section.
-            row.parent_chunk_id = row.id
-        else:
-            row.parent_chunk_id = section_parents[rchunk.section]
+    created = _build_chunk_rows(
+        db, raw_chunks, embeddings, embedder,
+        chash=chash, title=title, source_type=source_type, source_url=source_url,
+        authors=authors, publish_date=publish_date, trust_tier=trust_tier,
+        tags=tags, source_doc_id=source_doc_id,
+        supersedes_id=dedupe.supersedes_id, now=now,
+    )
+    _link_section_parents(created, raw_chunks)
 
     # Mark ALL chunks of the old version as superseded (spec §2.3: never
     # silently overwrite — link versions so old chunks can be suppressed).
-    if supersedes_id is not None:
-        old_hash = near_dup_chunk.content_hash
+    if dedupe.supersedes_id is not None and dedupe.near_dup is not None:
         await db.execute(
             update(RagChunk)
-            .where(RagChunk.content_hash == old_hash)
+            .where(RagChunk.content_hash == dedupe.near_dup.content_hash)
             .where(RagChunk.superseded_by.is_(None))
             .values(superseded_by=created[0].id)
         )
@@ -218,10 +277,10 @@ async def ingest(
         chunks=len(created),
         hash=chash[:12],
         trust=trust_tier,
-        superseded=bool(supersedes_id),
+        superseded=bool(dedupe.supersedes_id),
     )
     return {
-        "status": "superseded" if supersedes_id else "ingested",
+        "status": "superseded" if dedupe.supersedes_id else "ingested",
         "chunks": len(created),
         "content_hash": chash,
         "trust_tier": trust_tier,

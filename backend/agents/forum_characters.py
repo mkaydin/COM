@@ -172,6 +172,131 @@ def _render_thread(posts: list[dict], limit: int = 12) -> str:
     return "\n\n".join(lines)
 
 
+def _instruction_for(mode: str, posts: list[dict], mine: list[dict]) -> str:
+    """What this character is being asked to do in this stage.
+
+    Each mode asks a different question, and conflating them is what made
+    "final answers" impossible: an exchange reply answers *someone else*, while
+    a revision restates *your own* position.
+    """
+    if mode == "statement":
+        return (
+            "This is the opening of a new topic. State your position on the question "
+            "in your own voice, following your rules. Set stance to \"propose\"."
+        )
+
+    if mode == "revision":
+        # The revision sees the whole discussion, not a truncated window: the
+        # point of the pass is to answer everything that was raised.
+        thread = _render_thread(posts, limit=40)
+        opening = next(
+            (p for p in mine if p.get("kind") == "statement"),
+            mine[0] if mine else None,
+        )
+        return (
+            "This is the REVISION pass. The discussion is over. Write your FINAL "
+            "answer to the topic question.\n\n"
+            f"THE DISCUSSION:\n{thread or '(no posts yet)'}\n\n"
+            + (
+                f"YOUR OPENING ANSWER:\n{(opening.get('body') or '').strip()}\n\n"
+                if opening
+                else ""
+            )
+            + "Decide for yourself whether your opening still holds. If the "
+            "discussion changed your position, answer differently and say what "
+            "changed it. If it did not, restate it more precisely. Write a position "
+            "the Moderator can publish as your final answer — do not comment on other "
+            "characters in general terms. Set stance to \"propose\"."
+        )
+
+    thread = _render_thread(posts)
+    return (
+        "The thread so far:\n\n"
+        f"{thread or '(no posts yet)'}\n\n"
+        "Respond to the specific claim you are answering — not to the topic in "
+        "general. Pick the post number you are replying to and put it in `reply_to`.\n"
+        + (
+            "You have already spoken. Advance the conversation; do not repeat yourself.\n"
+            f"Your earlier posts:\n{_render_thread(mine, limit=3)}"
+            if mine
+            else ""
+        )
+    )
+
+
+def _statement_messages(character, query: str, context: str, instruction: str) -> list[dict]:
+    return [
+        {"role": "system", "content": character.system_prompt},
+        {
+            "role": "user",
+            "content": (
+                f"TOPIC QUESTION: {query}\n\n"
+                + (f"YOUR KNOWLEDGE SOURCES:\n{context}\n\n" if context else "")
+                + f"{instruction}"
+            ),
+        },
+    ]
+
+
+def _failed_statement(key: str, error: Exception) -> dict:
+    """A provider-level failure, reported rather than posted.
+
+    A missing key or unreachable endpoint hits every character in every round.
+    Writing a post per failure would bury the thread in identical apologies, so
+    `ok=False` means the caller skips the post and the condition is surfaced
+    once, in the synthesis.
+    """
+    return {
+        "author": key,
+        "stance": "propose",
+        "body": "",
+        "confidence": 0.0,
+        "claims": [],
+        "citations": [],
+        "extra": {"error": str(error)[:200]},
+        "ok": False,
+    }
+
+
+def _normalise_statement(statement, character, mode: str, key: str) -> dict:
+    """Coerce the model's output into the post shape the forum stores."""
+    conf = statement.confidence
+    if conf > 1.5:
+        # Some models answer on a 0-100 scale.
+        conf = conf / 100.0
+
+    stance = (statement.stance or "propose").strip().lower()
+    if stance not in character.stances:
+        # The model invented a stance this character does not take; fall back
+        # to a meaningful one rather than storing something meaningless.
+        # Statements and revisions both mean "here is my position"; only an
+        # exchange reply falls back to the character's characteristic stance.
+        stance = "propose" if mode in ("statement", "revision") else character.stances[0]
+
+    return {
+        "author": key,
+        "stance": stance,
+        "body": statement.verdict.strip(),
+        "confidence": max(0.0, min(1.0, conf)),
+        "claims": [c.model_dump() for c in statement.claims],
+        "citations": [c.model_dump() for c in statement.citations],
+        "reply_to_seq": statement.reply_to or None,
+        "extra": {
+            "analogies": [a.model_dump() for a in statement.analogies],
+            "causal_chains": [c.model_dump() for c in statement.causal_chains],
+            "hidden_links": [h.model_dump() for h in statement.hidden_links],
+            "ethical_dimensions": statement.ethical_dimensions,
+            "prior_conclusions": [p.model_dump() for p in statement.prior_conclusions],
+            "uncertainties": statement.uncertainties,
+            "gaps": statement.gaps,
+            "novelty": statement.novelty,
+            "speculation_warning": statement.speculation_warning,
+            "insufficient_data": statement.insufficient_data,
+        },
+        "ok": True,
+    }
+
+
 async def run_character(
     key: str,
     query: str,
@@ -198,61 +323,9 @@ async def run_character(
     mine = [p for p in posts if p.get("author") == key]
 
     context = await gather_context(character, query, session_id)
-
-    if mode == "statement":
-        instruction = (
-            "This is the opening of a new topic. State your position on the question "
-            "in your own voice, following your rules. Set stance to \"propose\"."
-        )
-    elif mode == "revision":
-        # The revision sees the whole discussion, not a truncated window: the
-        # point of the pass is to answer everything that was raised.
-        thread = _render_thread(posts, limit=40)
-        opening = next(
-            (p for p in mine if p.get("kind") == "statement"),
-            mine[0] if mine else None,
-        )
-        instruction = (
-            "This is the REVISION pass. The discussion is over. Write your FINAL "
-            "answer to the topic question.\n\n"
-            f"THE DISCUSSION:\n{thread or '(no posts yet)'}\n\n"
-            + (
-                f"YOUR OPENING ANSWER:\n{(opening.get('body') or '').strip()}\n\n"
-                if opening
-                else ""
-            )
-            + "Decide for yourself whether your opening still holds. If the "
-            "discussion changed your position, answer differently and say what "
-            "changed it. If it did not, restate it more precisely. Write a position "
-            "the Moderator can publish as your final answer — do not comment on other "
-            "characters in general terms. Set stance to \"propose\"."
-        )
-    else:
-        thread = _render_thread(posts)
-        instruction = (
-            "The thread so far:\n\n"
-            f"{thread or '(no posts yet)'}\n\n"
-            "Respond to the specific claim you are answering — not to the topic in "
-            "general. Pick the post number you are replying to and put it in `reply_to`.\n"
-            + (
-                "You have already spoken. Advance the conversation; do not repeat yourself.\n"
-                f"Your earlier posts:\n{_render_thread(mine, limit=3)}"
-                if mine
-                else ""
-            )
-        )
-
-    messages = [
-        {"role": "system", "content": character.system_prompt},
-        {
-            "role": "user",
-            "content": (
-                f"TOPIC QUESTION: {query}\n\n"
-                + (f"YOUR KNOWLEDGE SOURCES:\n{context}\n\n" if context else "")
-                + f"{instruction}"
-            ),
-        },
-    ]
+    messages = _statement_messages(
+        character, query, context, _instruction_for(mode, posts, mine)
+    )
 
     try:
         response = await llm_complete(
@@ -261,63 +334,12 @@ async def run_character(
             temperature=character.temperature,
             max_tokens=min(character.max_tokens, MAX_TOKENS_CAP),
         )
-        raw = response.content
-        data = extract_json(raw)
+        data = extract_json(response.content)
         if not data:
             raise ValueError("no parseable JSON in character output")
         statement = registry.CharacterStatement(**data)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - surfaced by the caller, not posted
         logger.error("forum_character_failed", character=key, error=str(e)[:160])
-        # A provider-level failure (no API key, unreachable endpoint, rate
-        # limit) hits every character in every round. Writing a post per
-        # failure would bury the thread in identical apologies, so `ok=False`
-        # means the caller skips the post entirely and the condition is
-        # surfaced once, in the synthesis.
-        return {
-            "author": key,
-            "stance": "propose",
-            "body": "",
-            "confidence": 0.0,
-            "claims": [],
-            "citations": [],
-            "extra": {"error": str(e)[:200]},
-            "ok": False,
-        }
+        return _failed_statement(key, e)
 
-    conf = statement.confidence
-    if conf > 1.5:
-        conf = conf / 100.0
-
-    stance = (statement.stance or "propose").strip().lower()
-    if stance not in character.stances:
-        # The model invented a stance this character does not take; fall back
-        # to a meaningful one rather than storing something meaningless.
-        # Statements and revisions both mean "here is my position"; only an
-        # exchange reply falls back to the character's characteristic stance.
-        stance = "propose" if mode in ("statement", "revision") else character.stances[0]
-
-    claims = [c.model_dump() for c in statement.claims]
-    citations = [c.model_dump() for c in statement.citations]
-
-    return {
-        "author": key,
-        "stance": stance,
-        "body": statement.verdict.strip(),
-        "confidence": max(0.0, min(1.0, conf)),
-        "claims": claims,
-        "citations": citations,
-        "reply_to_seq": statement.reply_to or None,
-        "extra": {
-            "analogies": [a.model_dump() for a in statement.analogies],
-            "causal_chains": [c.model_dump() for c in statement.causal_chains],
-            "hidden_links": [h.model_dump() for h in statement.hidden_links],
-            "ethical_dimensions": statement.ethical_dimensions,
-            "prior_conclusions": [p.model_dump() for p in statement.prior_conclusions],
-            "uncertainties": statement.uncertainties,
-            "gaps": statement.gaps,
-            "novelty": statement.novelty,
-            "speculation_warning": statement.speculation_warning,
-            "insufficient_data": statement.insufficient_data,
-        },
-        "ok": True,
-    }
+    return _normalise_statement(statement, character, mode, key)
