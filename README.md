@@ -197,12 +197,24 @@ schema with no migration. `POST /api/llm/embedding/test` confirms the width.
 > fixed-width model that cannot be (`bge-m3`, `nv-embed`) will not fit.
 > **Changing the embedding model invalidates every stored vector** — the new
 > model lives in a different vector space, so stored chunks must be re-embedded.
-> There is no re-embed command yet.
+> Every chunk records which embedder made it (`rag_chunks.embedding_model`), and
+> `/api/rag/stats` reports how many no longer match. Rebuild them with:
+>
+> ```bash
+> python backend/tools/reembed.py --status   # what is in the store
+> python backend/tools/reembed.py            # rebuild the stale ones
+> ```
+>
+> A mismatch is not an error — the vectors are still valid, just not comparable
+> with the active model. Nothing detects it by comparing distances; that is why
+> the provenance column exists.
 
 > The free catalogue turns over. `ling-3.1-flash-free` and
-> `step-5-preview-free` rotated out of Zen's free tier while still being the
-> recorded defaults, which left the Analyst and Historian unable to answer;
-> they are now `glm-5.3-flash-free` and `deepseek-v4.1-flash-free`.
+> `step-5-preview-free` rotated out first, then `longcat-2.5-preview-free` — the
+> Oracle's default — while still being the recorded defaults. Health now
+> compares every role's model against the live catalogue, so a delisted model
+> reports `degraded` with `missing_models` naming the affected roles instead of
+> silently producing nothing.
 > `GET /api/llm/discovery` is the authority on what exists — `llm/catalogue.py`
 > is only the curated snapshot.
 

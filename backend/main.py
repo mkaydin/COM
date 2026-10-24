@@ -161,7 +161,10 @@ async def health():
         "provider": llm.get("provider"),
         "transport": llm.get("transport"),
         "llm_ok": llm.get("ok"),
-        "hint": llm.get("hint"),
+        # A delisted model is the failure that reads as healthy: the key is
+        # fine, the provider answers, and the character produces nothing.
+        "missing_models": llm.get("missing_models", []),
+        "hint": llm.get("hint") or llm.get("model_hint"),
         "roles": llm.get("roles", []),
         "forum_enabled": settings.forum_enabled,
         "version": "2.0.0",

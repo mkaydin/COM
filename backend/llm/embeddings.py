@@ -136,6 +136,18 @@ def current() -> dict:
     }
 
 
+def identity() -> str:
+    """A stable `backend:model` label for stored vectors.
+
+    Distinct from `current()`, which describes the *active selection* and can
+    change at any moment. This string is written into every chunk at ingestion
+    so that a later mismatch is detectable instead of silent — two models in one
+    index produce vectors that are not comparable, and cosine distance between
+    them is meaningless rather than merely imprecise.
+    """
+    return f"{configured_backend()}:{configured_model()}"
+
+
 def check_compatible(model: str) -> bool:
     """Can this model produce vectors the existing stores can hold?
 

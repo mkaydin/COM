@@ -130,9 +130,31 @@ blocking Neo4j call on the event loop · **32%/92% silent embedding truncation**
 
 ## 🟡 Quality
 
-- [ ] **Q1. No re-embed command.** Changing the embedding model invalidates
-  every stored vector and there is no way to rebuild them.
-  **Do this before `rag_chunks` has data** — afterwards it is a second pass.
+- [x] **Q1. No re-embed command, and no record of which model made a vector.**
+  Changing the embedding model did not invalidate stored vectors — it made them
+  *incomparable*. Cosine distance between vectors from two models is
+  meaningless rather than imprecise, so retrieval degraded silently and nothing
+  could even detect it.
+
+  `rag_chunks.embedding_model` now records `backend:model` for every chunk,
+  stamped at ingestion. Existing rows were left NULL rather than guessed at:
+  the vectors may predate the current selection, and stamping them with today's
+  model would be a lie. `/api/rag/stats` reports the distribution and a `stale`
+  count with a hint naming the command.
+
+  `backend/tools/reembed.py` rebuilds the stale ones:
+
+  ```
+  --status     what is in the store, by model
+  --dry-run    what would be rebuilt
+  (default)    rebuild chunks whose model differs or is unknown
+  --all        rebuild everything (for a tag whose weights changed)
+  ```
+
+  Verified on the live store: 22 chunks of unknown provenance → re-embedded in
+  3.3s → 0 stale. A simulated model change reports all 22 as stale again.
+  The command refuses to write if the embedder returns the wrong width rather
+  than letting the column reject it halfway through a batch.
 
 - [ ] **Q2. `api/forum.py`, `api/forum_ws.py` and 10 other routers have zero
   unit coverage.** This is why four defects shipped together.
@@ -168,8 +190,7 @@ blocking Neo4j call on the event loop · **32%/92% silent embedding truncation**
 - [ ] **Q5. No reranker stage.** Every source consulted agreed a cross-encoder
   reranker lifts retrieval more than swapping embedders does.
 
-- [ ] **Q6. Free-tier guidance rots.** *Catalogue re-verified; detection still
-  missing.*
+- [x] **Q6. Free-tier guidance rots.**
 
   Re-checked against the live catalogue on 2026-10-22 and the rot was worse
   than recorded: `longcat-2.5-preview-free` (the **Oracle** default),
@@ -183,12 +204,23 @@ blocking Neo4j call on the event loop · **32%/92% silent embedding truncation**
   is listed as free but is not a chat model and fails, and `flint-40b-free`
   answers correctly but took **82s**, so neither is a default.
 
-  Still open: nothing *detects* this at runtime. Health verifies an Ollama model
-  is installed and that the CLI binary exists, but for Zen it only checks that
-  an API key is set. A role pointed at a delisted model reports healthy and then
-  produces nothing. The discovery layer already lists live models, so the check
-  is reachable — compare each role's model against it and report
-  `model_present: false` rather than `ok: true`.
+  **Detection is now in place.** `llm.health` compares every role's model
+  against the provider's live catalogue (`discovery.live_catalogue`, cached for
+  5 minutes because it spawns `opencode models`) and reports `model_present` per
+  role, `missing_models` overall, and a hint naming what to do. A delisted model
+  now flips `/api/health` to `degraded` instead of reading as healthy.
+
+  `live_catalogue` returns `None` — not an empty set — when the listing itself
+  is unavailable, so a missing CLI does not mark every role broken. That
+  distinction is the whole reason the check is safe to run from health.
+
+  Verified live: pinning the Oracle to `longcat-2.5-preview-free` produced
+  `status: degraded`, `llm_ok: false`, `missing_models: ["ORACLE"]` and the
+  hint; restoring returned it to `ok`.
+
+  Found while wiring this: the final `detail["ok"] = ok` in `health()` dropped
+  `unhealthy`, so a role whose own provider had failed still reported the whole
+  system healthy. That is fixed and pinned by a regression test.
 
 - Free tier is **CLI-only**: `POST /v1/chat/completions` for a `-free` model
   returns `403 FreeTierError — "can only be used from within OpenCode"`, and a

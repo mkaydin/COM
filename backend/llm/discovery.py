@@ -201,6 +201,55 @@ async def list_ollama_models() -> dict:
 # ======================================================================================
 
 
+#: How long a live catalogue is reused. `/api/health` is polled by the UI and
+#: `opencode models` spawns a process, so fetching on every request would be
+#: both slow and noisy.
+CATALOGUE_TTL = 300.0
+_catalogue_cache: dict[str, tuple[float, set[str]]] = {}
+
+
+async def live_catalogue(
+    provider_id: str, *, max_age: float = CATALOGUE_TTL
+) -> Optional[set[str]]:
+    """Bare model ids this provider currently offers, or None if unknowable.
+
+    Used by `llm.health` to notice that a configured model has been delisted.
+    Returns None rather than an empty set when the listing is unavailable:
+    "I could not check" and "nothing is offered" are different claims, and
+    conflating them would mark every role broken whenever the CLI is missing.
+    """
+    import time
+
+    pid = (provider_id or "").strip().lower()
+    cached = _catalogue_cache.get(pid)
+    if cached and (time.monotonic() - cached[0]) < max_age:
+        return cached[1]
+
+    if pid == "ollama":
+        res = await list_ollama_models()
+        if not res.get("reachable"):
+            return None
+        ids = {m["id"] for m in res.get("models", []) if m.get("id")}
+    elif pid in ("opencode", "opencode-cli", "opencode-go"):
+        res = await list_cli_models()
+        if not res.get("reachable"):
+            return None
+        # The CLI lists every provider it knows about, prefixed. Only the
+        # entries for *this* provider are relevant, and the role stores the
+        # bare tag, so the prefix has to come off.
+        prefix = "opencode-go/" if pid == "opencode-go" else "opencode/"
+        ids = {
+            mid[len(prefix):]
+            for mid in res.get("models", [])
+            if mid.startswith(prefix)
+        }
+    else:
+        return None
+
+    _catalogue_cache[pid] = (time.monotonic(), ids)
+    return ids
+
+
 async def discover(provider_id: Optional[str] = None) -> dict:
     """Everything a model picker needs, for one provider or all of them.
 

@@ -34,12 +34,40 @@ async def rag_stats(db: AsyncSession = Depends(get_db)):
         select(func.count(PromotionCandidate.id)).where(PromotionCandidate.status == "pending")
     )).scalar() or 0
 
+    # Which embedder produced the stored vectors. A chunk embedded by a
+    # different model is not comparable with the active one: cosine distance
+    # between the two is meaningless, and nothing else in the row reveals it.
+    from llm import embeddings
+
+    active = embeddings.identity()
+    model_rows = (await db.execute(
+        select(RagChunk.embedding_model, func.count(RagChunk.id))
+        .where(RagChunk.embedding.isnot(None))
+        .group_by(RagChunk.embedding_model)
+    )).all()
+    by_model = {(row[0] or "(unknown)"): row[1] for row in model_rows}
+    stale = sum(n for model, n in by_model.items() if model != active)
+
     return {
         "total_chunks": total,
         "with_embeddings": with_emb,
         "promoted_to_okf": promoted,
         "pending_promotions": pending,
         "trust_distribution": trust_dist,
+        "embedding": {
+            "active": active,
+            "by_model": by_model,
+            "stale": stale,
+            "hint": (
+                None
+                if stale == 0
+                else (
+                    f"{stale} chunk(s) were embedded by a different model than "
+                    f"{active}. Retrieval compares vectors that are not "
+                    "comparable. Run: python backend/tools/reembed.py"
+                )
+            ),
+        },
     }
 
 

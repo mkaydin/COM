@@ -142,6 +142,13 @@ async def ingest(
     texts_to_embed = [c.text for c in raw_chunks]
     embeddings = await asyncio.to_thread(_embed, texts_to_embed)
 
+    # Stamp which embedder produced these vectors. Recorded per chunk so that a
+    # later change to EMBEDDING_MODEL is detectable rather than silent: vectors
+    # from two models are not comparable, and nothing else in the row says so.
+    from llm.embeddings import identity as _embedding_identity
+
+    embedder = _embedding_identity() if embeddings else None
+
     # --- Resolve trust tier ---
     if trust_tier is None:
         trust_tier = DEFAULT_TRUST_BY_SOURCE.get(source_type, "web_secondary")
@@ -157,6 +164,7 @@ async def ingest(
             id=uuid.uuid4(),
             chunk_text=rchunk.text,
             embedding=emb,
+            embedding_model=embedder if emb is not None else None,
             section=rchunk.section,
             chunk_index=i,
             parent_section_text=rchunk.parent_section_text,

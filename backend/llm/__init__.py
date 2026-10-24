@@ -186,6 +186,18 @@ async def list_models(provider_id: Optional[str] = None) -> dict:
     return out
 
 
+def _bare_model(model: str) -> str:
+    """Strip a routing prefix so a role's model compares against the catalogue.
+
+    Roles store the bare tag (`deepseek-v4.1-flash`), while `opencode models`
+    lists `opencode/deepseek-v4.1-flash`, and an override may store either.
+    """
+    for prefix in ("openai/", "opencode-go/", "opencode/", "ollama/"):
+        if model.startswith(prefix):
+            return model[len(prefix):]
+    return model
+
+
 async def health() -> dict:
     """Provider health for `/api/health`."""
     from config import get_settings
@@ -208,13 +220,50 @@ async def health() -> dict:
     # pinned to a dead Ollama should not be masked by five working ones.
     unhealthy = [r["role"] for r in roles_map if r.get("provider_error")]
 
+    # A model the provider no longer offers reports a perfectly healthy key and
+    # then produces nothing. That is exactly how the Oracle sat broken twice:
+    # nothing ever compared the configured id against the live catalogue.
+    missing_models: list[str] = []
+    try:
+        from llm import discovery
+
+        catalogues: dict[str, set[str]] = {}
+        for pid in {r.get("provider") for r in roles_map if r.get("provider")}:
+            live = await discovery.live_catalogue(pid)
+            if live is not None:
+                catalogues[pid] = live
+
+        for role in roles_map:
+            live = catalogues.get(role.get("provider"))
+            if live is None:
+                # "Could not check" is not "missing" — an unreachable listing
+                # service must not mark every role broken.
+                role["model_present"] = None
+                continue
+            present = _bare_model(role.get("model") or "") in live
+            role["model_present"] = present
+            if not present:
+                missing_models.append(role["role"])
+    except Exception as e:  # noqa: BLE001 - a failed check is not a dead provider
+        logger.warning("llm_catalogue_check_failed", error=str(e)[:160])
+
     ok = bool(provider.api_key) or not provider.requires_key
     detail = {
-        "ok": ok and not unhealthy,
+        "ok": ok and not unhealthy and not missing_models,
         "provider": provider.id,
         "transport": provider.transport or "litellm",
         "roles": roles_map,
         "unhealthy_roles": unhealthy,
+        "missing_models": missing_models,
+        "model_hint": (
+            None
+            if not missing_models
+            else (
+                f"These roles point at models the provider no longer offers: "
+                f"{', '.join(missing_models)}. Pick a current model in "
+                "/models.html or run /api/llm/discovery."
+            )
+        ),
     }
 
     if provider.transport == "cli_provider":
@@ -255,6 +304,10 @@ async def health() -> dict:
     else:
         detail["hint"] = None
 
+    # Re-apply the role-level conditions. This assignment used to be a bare
+    # `ok`, which silently dropped `unhealthy` — a role whose own provider had
+    # failed still reported the whole system healthy.
+    ok = ok and not unhealthy and not missing_models
     detail["ok"] = ok
     # `ok` means "configured", not "proven to work". A key can be present and
     # still unable to serve a single completion — Zen's free tier is locked to

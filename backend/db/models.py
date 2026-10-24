@@ -136,6 +136,14 @@ class RagChunk(Base):
     chunk_text = Column(Text, nullable=False)
     embedding = Column(Vector(384), nullable=True)
 
+    #: Which embedder produced `embedding`, as `backend:model`.
+    #:
+    #: Without this, changing `EMBEDDING_MODEL` silently mixes vector spaces:
+    #: old chunks stay in the index, nothing errors, and retrieval quietly gets
+    #: worse. NULL means the row predates this column, so the model is unknown —
+    #: `backend/tools/reembed.py` is how that is resolved.
+    embedding_model = Column(String(255), nullable=True)
+
     # Structure-aware chunking metadata
     section = Column(String(512), nullable=True)
     chunk_index = Column(Integer, nullable=False, default=0)
